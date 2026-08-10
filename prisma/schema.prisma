@@ -1,0 +1,225 @@
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  OWNER
+  STUDENT
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+  MOVED_OUT
+}
+
+enum InvoiceStatus {
+  DUE
+  PROCESSING
+  PAID
+  WAIVED
+}
+
+enum PaymentAttemptStatus {
+  CREATED
+  VERIFIED
+  CAPTURED
+  FAILED
+}
+
+enum PaymentSource {
+  RAZORPAY
+  MANUAL
+}
+
+enum PaymentMethod {
+  UPI
+  CARD
+  NETBANKING
+  WALLET
+  CASH
+  BANK_TRANSFER
+  OTHER
+}
+
+model User {
+  id                 String     @id @default(cuid())
+  email              String     @unique
+  passwordHash       String
+  fullName           String
+  role               UserRole
+  status             UserStatus @default(ACTIVE)
+  mustChangePassword Boolean    @default(false)
+  tokenVersion       Int        @default(0)
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+
+  ownedProperties Property[] @relation("PropertyOwner")
+  studentProfile  Student?
+  auditLogs       AuditLog[] @relation("AuditActor")
+}
+
+model Property {
+  id        String   @id @default(cuid())
+  name      String
+  currency  String   @default("INR")
+  timezone  String   @default("Asia/Kolkata")
+  ownerId   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  owner      User          @relation("PropertyOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  rooms      Room[]
+  students   Student[]
+  invoices   RentInvoice[]
+  payments   Payment[]
+  auditLogs  AuditLog[]
+
+  @@index([ownerId])
+}
+
+model Room {
+  id         String   @id @default(cuid())
+  propertyId String
+  number     String
+  capacity   Int
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  property Property  @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  students Student[]
+
+  @@unique([propertyId, number])
+  @@index([propertyId, active])
+}
+
+model Student {
+  id                    String        @id @default(cuid())
+  propertyId            String
+  userId                String        @unique
+  roomId                String?
+  mobile                String
+  bedLabel              String?
+  joiningDate           DateTime
+  monthlyRentPaise      Int
+  securityDepositPaise  Int           @default(0)
+  rentDueDay            Int           @default(5)
+  status                StudentStatus @default(ACTIVE)
+  notes                 String?
+  leftAt                DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  property        Property         @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room            Room?            @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  invoices        RentInvoice[]
+  paymentAttempts PaymentAttempt[]
+  payments        Payment[]
+
+  @@unique([propertyId, mobile])
+  @@index([propertyId, status])
+  @@index([roomId])
+}
+
+model RentInvoice {
+  id                    String        @id @default(cuid())
+  propertyId            String
+  studentId             String
+  year                   Int
+  month                  Int
+  dueDate                DateTime
+  rentPaise              Int
+  electricityPaise       Int           @default(0)
+  lateFeePaise           Int           @default(0)
+  otherChargesPaise      Int           @default(0)
+  discountPaise          Int           @default(0)
+  totalPaise             Int
+  paidPaise              Int           @default(0)
+  status                 InvoiceStatus @default(DUE)
+  notes                  String?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+
+  property        Property         @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  student         Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  paymentAttempts PaymentAttempt[]
+  payments        Payment[]
+
+  @@unique([studentId, year, month])
+  @@index([propertyId, year, month])
+  @@index([propertyId, status])
+}
+
+model PaymentAttempt {
+  id                  String               @id @default(cuid())
+  invoiceId           String
+  studentId           String
+  provider            String               @default("RAZORPAY")
+  providerOrderId     String               @unique
+  providerPaymentId   String?              @unique
+  amountPaise         Int
+  status              PaymentAttemptStatus @default(CREATED)
+  signatureVerifiedAt DateTime?
+  failureCode         String?
+  failureDescription  String?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
+  invoice RentInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  student Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, createdAt])
+}
+
+model Payment {
+  id                String        @id @default(cuid())
+  propertyId        String
+  studentId         String
+  invoiceId         String
+  amountPaise       Int
+  source            PaymentSource
+  method            PaymentMethod?
+  providerOrderId   String?
+  providerPaymentId String?       @unique
+  receiptNumber     String        @unique
+  paidAt            DateTime
+  metadata          Json?
+  createdAt         DateTime      @default(now())
+
+  property Property    @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  student  Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  invoice  RentInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([propertyId, paidAt])
+  @@index([studentId, paidAt])
+  @@index([invoiceId])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  propertyId  String
+  actorUserId String?
+  action      String
+  entityType  String
+  entityId    String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  actor    User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([propertyId, createdAt])
+}
