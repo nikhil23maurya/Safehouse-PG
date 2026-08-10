@@ -68,6 +68,8 @@ jobs:
           {
             echo "SafeHouse Android build"
             echo "commit=${GITHUB_SHA}"
+            echo "run_id=${GITHUB_RUN_ID}"
+            echo "run_attempt=${GITHUB_RUN_ATTEMPT}"
             echo "build_exit_code=${CODE}"
             echo "utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo
