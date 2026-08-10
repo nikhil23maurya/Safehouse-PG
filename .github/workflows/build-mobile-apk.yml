@@ -47,36 +47,55 @@ jobs:
           gradle-version: '8.9'
 
       - name: Build installable APK
+        id: build
         working-directory: mobile
-        run: gradle :app:assembleDebug --stacktrace
-
-      - name: Rename APK
-        run: cp mobile/app/build/outputs/apk/debug/app-debug.apk SafeHouse-Final-Live.apk
-
-      - name: APK metadata
+        shell: bash
         run: |
-          ls -lh SafeHouse-Final-Live.apk
-          sha256sum SafeHouse-Final-Live.apk
+          set +e
+          gradle :app:assembleDebug --stacktrace > ../android-build.log 2>&1
+          CODE=$?
+          echo "exit_code=$CODE" >> "$GITHUB_OUTPUT"
+          tail -n 250 ../android-build.log
+          exit 0
 
-      - name: Publish APK into repository
+      - name: Publish result and diagnostics
+        if: always()
         shell: bash
         run: |
           mkdir -p releases
-          cp SafeHouse-Final-Live.apk releases/SafeHouse-Final-Live.apk
+          CODE="${{ steps.build.outputs.exit_code }}"
+          if [ -z "$CODE" ]; then CODE="not-run"; fi
+          {
+            echo "SafeHouse Android build"
+            echo "commit=${GITHUB_SHA}"
+            echo "build_exit_code=${CODE}"
+            echo "utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo
+            if [ -f android-build.log ]; then tail -n 250 android-build.log; else echo "android-build.log not created"; fi
+          } > releases/android-build-status.txt
+
+          if [ "$CODE" = "0" ] && [ -f mobile/app/build/outputs/apk/debug/app-debug.apk ]; then
+            cp mobile/app/build/outputs/apk/debug/app-debug.apk releases/SafeHouse-Final-Live.apk
+            sha256sum releases/SafeHouse-Final-Live.apk > releases/SafeHouse-Final-Live.apk.sha256
+          fi
+
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add releases/SafeHouse-Final-Live.apk
-          if git diff --cached --quiet; then
-            echo "APK is unchanged; nothing to commit."
-          else
-            git commit -m "Build SafeHouse final live APK"
+          git add releases/
+          if ! git diff --cached --quiet; then
+            git commit -m "SafeHouse Android build result"
             git push origin HEAD:main
           fi
 
       - name: Upload APK artifact
+        if: steps.build.outputs.exit_code == '0'
         uses: actions/upload-artifact@v4
         with:
           name: SafeHouse-Final-Live-APK
-          path: SafeHouse-Final-Live.apk
+          path: releases/SafeHouse-Final-Live.apk
           if-no-files-found: error
           retention-days: 14
+
+      - name: Fail workflow when Android build fails
+        if: steps.build.outputs.exit_code != '0'
+        run: exit 1
