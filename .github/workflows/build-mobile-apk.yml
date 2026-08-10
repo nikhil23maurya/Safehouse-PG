@@ -9,7 +9,7 @@ on:
       - '.github/workflows/build-mobile-apk.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-apk:
@@ -57,6 +57,21 @@ jobs:
         run: |
           ls -lh SafeHouse-Final-Live.apk
           sha256sum SafeHouse-Final-Live.apk
+
+      - name: Publish APK into repository
+        shell: bash
+        run: |
+          mkdir -p releases
+          cp SafeHouse-Final-Live.apk releases/SafeHouse-Final-Live.apk
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add releases/SafeHouse-Final-Live.apk
+          if git diff --cached --quiet; then
+            echo "APK is unchanged; nothing to commit."
+          else
+            git commit -m "Build SafeHouse final live APK"
+            git push origin HEAD:main
+          fi
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
