@@ -1,0 +1,67 @@
+name: Build SafeHouse Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile-build/**'
+      - '.github/workflows/build-mobile-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Reconstruct mobile source
+        shell: bash
+        run: |
+          cat mobile-build/part-*.b64 > /tmp/mobile-source.b64
+          base64 -d /tmp/mobile-source.b64 > /tmp/mobile-source.tar.gz
+          tar -xzf /tmp/mobile-source.tar.gz
+          test -f mobile/app/src/main/assets/index.html
+          test -f mobile/app/src/main/java/com/safehouse/pg/MainActivity.java
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build installable APK
+        working-directory: mobile
+        run: gradle :app:assembleDebug --stacktrace
+
+      - name: Rename APK
+        run: cp mobile/app/build/outputs/apk/debug/app-debug.apk SafeHouse-Final-Live.apk
+
+      - name: APK metadata
+        run: |
+          ls -lh SafeHouse-Final-Live.apk
+          sha256sum SafeHouse-Final-Live.apk
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SafeHouse-Final-Live-APK
+          path: SafeHouse-Final-Live.apk
+          if-no-files-found: error
+          retention-days: 14
