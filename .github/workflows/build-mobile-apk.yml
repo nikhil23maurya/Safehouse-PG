@@ -29,6 +29,11 @@ jobs:
           test -f mobile/app/src/main/assets/index.html
           test -f mobile/app/src/main/java/com/safehouse/pg/MainActivity.java
 
+      - name: Enable AndroidX
+        shell: bash
+        run: |
+          printf 'android.useAndroidX=true\nandroid.enableJetifier=true\n' > mobile/gradle.properties
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
