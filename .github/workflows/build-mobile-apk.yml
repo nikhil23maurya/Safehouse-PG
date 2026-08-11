@@ -29,6 +29,27 @@ jobs:
           test -f mobile/app/src/main/assets/index.html
           test -f mobile/app/src/main/java/com/safehouse/pg/MainActivity.java
 
+      - name: Fix and verify SafeHouse startup
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('mobile/app/src/main/assets/index.html')
+          source = path.read_text(encoding='utf-8')
+          if 'async function boot()' not in source:
+              raise SystemExit('SafeHouse boot() function is missing')
+          if '\nboot();\n</script>' not in source:
+              marker = source.rfind('</script>')
+              if marker < 0:
+                  raise SystemExit('Closing script tag not found')
+              source = source[:marker] + '\nboot();\n' + source[marker:]
+              path.write_text(source, encoding='utf-8')
+          fixed = path.read_text(encoding='utf-8')
+          if '\nboot();\n</script>' not in fixed:
+              raise SystemExit('SafeHouse boot invocation could not be installed')
+          print('SafeHouse startup boot verified')
+          PY
+
       - name: Enable AndroidX
         shell: bash
         run: |
