@@ -7,6 +7,10 @@ on:
     paths:
       - 'mobile-v2-build/**'
       - 'scripts/patch-mobile-performance.mjs'
+      - 'scripts/patch-mobile-financial-context.mjs'
+      - 'src/**'
+      - 'prisma/**'
+      - 'package.json'
       - '.github/workflows/build-mobile-apk.yml'
 
 permissions:
@@ -76,6 +80,20 @@ jobs:
         run: |
           node scripts/patch-mobile-performance.mjs
           grep -q 'SAFEHOUSE_PERF_V1' mobile/app/src/main/assets/index.html
+
+      - name: Apply strict property and month financial UI
+        shell: bash
+        run: |
+          node scripts/patch-mobile-financial-context.mjs
+          grep -q 'SAFEHOUSE_FINANCIAL_UI_V2' mobile/app/src/main/assets/index.html
+          python - <<'PY'
+          from pathlib import Path
+          source = Path('mobile/app/src/main/assets/index.html').read_text(encoding='utf-8')
+          a = source.index('<script>') + len('<script>')
+          b = source.rindex('</script>')
+          Path('/tmp/safehouse-mobile.js').write_text(source[a:b], encoding='utf-8')
+          PY
+          node --check /tmp/safehouse-mobile.js
 
       - name: Enable AndroidX
         shell: bash

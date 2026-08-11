@@ -1,0 +1,83 @@
+name: Validate SafeHouse Financial Context
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - financial-context-hardening-v1
+    paths:
+      - 'src/**'
+      - 'prisma/**'
+      - 'scripts/**'
+      - 'package.json'
+      - '.github/workflows/validate-financial-context.yml'
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  # Prisma generate only needs a syntactically valid URL during CI; this workflow never connects to it.
+  DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/safehouse_ci
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Install backend dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Build backend with production patches
+        run: npm run build
+
+      - name: Verify financial contract
+        run: node scripts/verify-financial-contract.mjs
+
+      - name: Reconstruct SafeHouse mobile source
+        shell: bash
+        run: |
+          cat mobile-v2-build/part-*.b64 > /tmp/mobile-source.b64
+          base64 -d /tmp/mobile-source.b64 > /tmp/mobile-source.tar.gz
+          tar -xzf /tmp/mobile-source.tar.gz
+          test -f mobile/app/src/main/assets/index.html
+
+      - name: Apply existing performance patch
+        run: node scripts/patch-mobile-performance.mjs
+
+      - name: Apply financial context mobile patch
+        run: node scripts/patch-mobile-financial-context.mjs
+
+      - name: Validate mobile JavaScript and financial markers
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s = Path('mobile/app/src/main/assets/index.html').read_text(encoding='utf-8')
+          a = s.index('<script>') + len('<script>')
+          b = s.rindex('</script>')
+          Path('/tmp/safehouse-mobile.js').write_text(s[a:b], encoding='utf-8')
+          required = [
+              'SAFEHOUSE_FINANCIAL_UI_V2',
+              'function ownerContextKey()',
+              'contextQuery()',
+              'periodInvoice',
+              '/api/owner/payments?',
+              'appliedToSelectedInvoice'
+          ]
+          missing = [x for x in required if x not in s]
+          if missing:
+              raise SystemExit('Missing mobile financial markers: ' + ', '.join(missing))
+          print('Mobile financial markers verified')
+          PY
+          node --check /tmp/safehouse-mobile.js
