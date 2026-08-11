@@ -1,0 +1,2 @@
+SafeHouse Android safe-area rebuild trigger.
+Commit purpose: rebuild APK after global status-bar inset fix.
