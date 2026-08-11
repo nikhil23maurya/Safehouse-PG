@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'mobile-v2-build/**'
+      - 'scripts/patch-mobile-performance.mjs'
       - '.github/workflows/build-mobile-apk.yml'
 
 permissions:
@@ -69,6 +70,12 @@ jobs:
               raise SystemExit('SafeHouse Android top inset fix could not be installed')
           print('SafeHouse startup and Android top safe-area verified')
           PY
+
+      - name: Optimize Android navigation performance
+        shell: bash
+        run: |
+          node scripts/patch-mobile-performance.mjs
+          grep -q 'SAFEHOUSE_PERF_V1' mobile/app/src/main/assets/index.html
 
       - name: Enable AndroidX
         shell: bash
