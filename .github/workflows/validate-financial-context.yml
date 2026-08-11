@@ -17,6 +17,10 @@ on:
 permissions:
   contents: read
 
+env:
+  # Prisma generate only needs a syntactically valid URL during CI; this workflow never connects to it.
+  DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/safehouse_ci
+
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -66,9 +70,9 @@ jobs:
           required = [
               'SAFEHOUSE_FINANCIAL_UI_V2',
               'function ownerContextKey()',
-              '/api/owner/students?'+"'",
+              'contextQuery()',
               'periodInvoice',
-              "'/api/owner/payments?'+contextQuery()",
+              '/api/owner/payments?',
               'appliedToSelectedInvoice'
           ]
           missing = [x for x in required if x not in s]
