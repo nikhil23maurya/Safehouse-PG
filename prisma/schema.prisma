@@ -79,12 +79,13 @@ model Property {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  owner      User          @relation("PropertyOwner", fields: [ownerId], references: [id], onDelete: Restrict)
-  rooms      Room[]
-  students   Student[]
-  invoices   RentInvoice[]
-  payments   Payment[]
-  auditLogs  AuditLog[]
+  owner         User           @relation("PropertyOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+  rooms         Room[]
+  students      Student[]
+  invoices      RentInvoice[]
+  payments      Payment[]
+  auditLogs     AuditLog[]
+  rentRevisions RentRevision[]
 
   @@index([ownerId])
 }
@@ -106,21 +107,21 @@ model Room {
 }
 
 model Student {
-  id                    String        @id @default(cuid())
-  propertyId            String
-  userId                String        @unique
-  roomId                String?
-  mobile                String
-  bedLabel              String?
-  joiningDate           DateTime
-  monthlyRentPaise      Int
-  securityDepositPaise  Int           @default(0)
-  rentDueDay            Int           @default(5)
-  status                StudentStatus @default(ACTIVE)
-  notes                 String?
-  leftAt                DateTime?
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
+  id                   String        @id @default(cuid())
+  propertyId           String
+  userId               String        @unique
+  roomId               String?
+  mobile               String
+  bedLabel             String?
+  joiningDate          DateTime
+  monthlyRentPaise     Int
+  securityDepositPaise Int           @default(0)
+  rentDueDay           Int           @default(5)
+  status               StudentStatus @default(ACTIVE)
+  notes                String?
+  leftAt               DateTime?
+  createdAt            DateTime      @default(now())
+  updatedAt            DateTime      @updatedAt
 
   property        Property         @relation(fields: [propertyId], references: [id], onDelete: Cascade)
   user            User             @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -128,10 +129,30 @@ model Student {
   invoices        RentInvoice[]
   paymentAttempts PaymentAttempt[]
   payments        Payment[]
+  rentRevisions   RentRevision[]
 
   @@unique([propertyId, mobile])
   @@index([propertyId, status])
   @@index([roomId])
+}
+
+model RentRevision {
+  id             String   @id @default(cuid())
+  propertyId     String
+  studentId      String
+  amountPaise    Int
+  effectiveYear  Int
+  effectiveMonth Int
+  reason         String?
+  createdByUserId String?
+  createdAt      DateTime @default(now())
+
+  property Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  student  Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, effectiveYear, effectiveMonth])
+  @@index([propertyId, effectiveYear, effectiveMonth])
+  @@index([studentId, effectiveYear, effectiveMonth])
 }
 
 model RentInvoice {
