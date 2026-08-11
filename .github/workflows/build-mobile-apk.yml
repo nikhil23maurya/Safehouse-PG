@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'mobile-build/**'
+      - 'mobile-v2-build/**'
       - '.github/workflows/build-mobile-apk.yml'
 
 permissions:
@@ -20,10 +20,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Reconstruct mobile source
+      - name: Reconstruct SafeHouse 2 mobile source
         shell: bash
         run: |
-          cat mobile-build/part-*.b64 > /tmp/mobile-source.b64
+          cat mobile-v2-build/part-*.b64 > /tmp/mobile-source.b64
           base64 -d /tmp/mobile-source.b64 > /tmp/mobile-source.tar.gz
           tar -xzf /tmp/mobile-source.tar.gz
           test -f mobile/app/src/main/assets/index.html
@@ -85,7 +85,7 @@ jobs:
           CODE="${{ steps.build.outputs.exit_code }}"
           if [ -z "$CODE" ]; then CODE="not-run"; fi
           {
-            echo "SafeHouse Android build"
+            echo "SafeHouse 2 Android build"
             echo "commit=${GITHUB_SHA}"
             echo "run_id=${GITHUB_RUN_ID}"
             echo "run_attempt=${GITHUB_RUN_ATTEMPT}"
@@ -104,7 +104,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add releases/
           if ! git diff --cached --quiet; then
-            git commit -m "SafeHouse Android build result"
+            git commit -m "SafeHouse 2 Android build result"
             git push origin HEAD:main
           fi
 
