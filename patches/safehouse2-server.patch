@@ -1,0 +1,293 @@
+--- a/src/server.ts
++++ b/src/server.ts
+@@ -173,8 +173,56 @@
+ const owner = express.Router();
+ owner.use(requireAuth, requireRole("OWNER" as any));
+ 
++owner.get("/properties", async (req, res) => {
++  const properties = await prisma.property.findMany({
++    where: { ownerId: req.authUser!.id },
++    orderBy: { createdAt: "asc" },
++    include: {
++      _count: { select: { students: { where: { status: "ACTIVE" } }, rooms: { where: { active: true } } } }
++    }
++  });
++  res.json({ properties: properties.map((p) => ({
++    id: p.id, name: p.name, currency: p.currency, timezone: p.timezone,
++    activeStudents: p._count.students, activeRooms: p._count.rooms
++  })) });
++});
++
++owner.post("/properties", async (req, res) => {
++  const input = z.object({
++    name: z.string().trim().min(2).max(120),
++    timezone: z.string().trim().min(3).max(80).default("Asia/Kolkata")
++  }).parse(req.body);
++  try { new Intl.DateTimeFormat("en-US", { timeZone: input.timezone }).format(new Date()); }
++  catch { throw new AppError(400, "INVALID_TIMEZONE", "Invalid IANA timezone"); }
++  const property = await prisma.property.create({ data: { ownerId: req.authUser!.id, name: input.name, timezone: input.timezone } });
++  await prisma.auditLog.create({ data: { propertyId: property.id, actorUserId: req.authUser!.id, action: "PROPERTY_CREATED", entityType: "Property", entityId: property.id } });
++  res.status(201).json({ property: { id: property.id, name: property.name, currency: property.currency, timezone: property.timezone } });
++});
++
++owner.get("/portfolio", async (req, res) => {
++  const properties = await prisma.property.findMany({ where: { ownerId: req.authUser!.id }, orderBy: { createdAt: "asc" } });
++  const rows = await Promise.all(properties.map(async (property) => {
++    const { year, month } = requestedPeriod(req, property.timezone);
++    await ensureInvoices(property.id, year, month);
++    const [students, rooms, invoices] = await Promise.all([
++      prisma.student.count({ where: { propertyId: property.id, status: "ACTIVE" } }),
++      prisma.room.findMany({ where: { propertyId: property.id, active: true }, select: { capacity: true } }),
++      prisma.rentInvoice.findMany({ where: { propertyId: property.id, year, month }, select: { totalPaise: true, paidPaise: true } })
++    ]);
++    const totalBeds = rooms.reduce((sum, room) => sum + room.capacity, 0);
++    return {
++      property: { id: property.id, name: property.name, currency: property.currency, timezone: property.timezone },
++      period: { year, month },
++      activeStudents: students, totalBeds,
++      expectedPaise: invoices.reduce((sum, invoice) => sum + invoice.totalPaise, 0),
++      collectedPaise: invoices.reduce((sum, invoice) => sum + invoice.paidPaise, 0)
++    };
++  }));
++  res.json({ properties: rows });
++});
++
+ owner.get("/dashboard", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   const { year, month } = requestedPeriod(req, property.timezone);
+   await ensureInvoices(property.id, year, month);
+   const [students, rooms, invoices, recentPayments] = await Promise.all([
+@@ -215,12 +263,12 @@
+ });
+ 
+ owner.get("/property", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   res.json({ property: { id: property.id, name: property.name, currency: property.currency, timezone: property.timezone } });
+ });
+ 
+ owner.patch("/property", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   const input = z.object({ name: z.string().trim().min(2).max(120).optional(), timezone: z.string().trim().min(3).max(80).optional() }).parse(req.body);
+   if (input.timezone) {
+     try { new Intl.DateTimeFormat("en-US", { timeZone: input.timezone }).format(new Date()); }
+@@ -231,7 +279,7 @@
+ });
+ 
+ owner.get("/students", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   const q = String(req.query.q || "").trim();
+   const status = String(req.query.status || "ALL").toUpperCase();
+   await ensureInvoices(property.id);
+@@ -266,7 +314,7 @@
+ });
+ 
+ owner.get("/students/:id", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   const student = await prisma.student.findFirst({
+     where: { id: req.params.id, propertyId: property.id },
+     include: {
+@@ -294,7 +342,7 @@
+ });
+ 
+ owner.post("/students", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   const input = studentCreateSchema.parse(req.body);
+   const email = normalizeEmail(input.email);
+   const mobile = normalizeIndianMobile(input.mobile);
+@@ -346,11 +394,16 @@
+ });
+ 
+ owner.patch("/students/:id", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   const input = studentUpdateSchema.parse(req.body);
+   const current = await prisma.student.findFirst({ where: { id: req.params.id, propertyId: property.id }, include: { user: true } });
+   assert(current, 404, "STUDENT_NOT_FOUND", "Student not found");
+   if (input.roomId && input.roomId !== current.roomId) await assertRoomHasCapacity(property.id, input.roomId);
++
++  const period = datePartsInTimeZone(property.timezone);
++  const requestedRentPaise = input.monthlyRent !== undefined ? rupeesToPaise(input.monthlyRent) : undefined;
++  let rentChange: { appliedToCurrentInvoice: boolean; effectiveYear: number; effectiveMonth: number; reason: string } | null = null;
++
+   const student = await prisma.$transaction(async (tx) => {
+     if (input.fullName || input.email || input.status) {
+       await tx.user.update({
+@@ -362,13 +415,43 @@
+         }
+       });
+     }
++
++    if (requestedRentPaise !== undefined && requestedRentPaise !== current.monthlyRentPaise) {
++      const currentInvoice = await tx.rentInvoice.findUnique({
++        where: { studentId_year_month: { studentId: current.id, year: period.year, month: period.month } }
++      });
++      const openAttempt = currentInvoice ? await tx.paymentAttempt.findFirst({
++        where: { invoiceId: currentInvoice.id, status: { in: ["CREATED", "VERIFIED"] } }, select: { id: true }
++      }) : null;
++      const canUpdateCurrent = !!currentInvoice && currentInvoice.status === "DUE" && currentInvoice.paidPaise === 0 && !openAttempt;
++      if (canUpdateCurrent && currentInvoice) {
++        const totalPaise = invoiceTotal({
++          rentPaise: requestedRentPaise,
++          electricityPaise: currentInvoice.electricityPaise,
++          lateFeePaise: currentInvoice.lateFeePaise,
++          otherChargesPaise: currentInvoice.otherChargesPaise,
++          discountPaise: currentInvoice.discountPaise
++        });
++        await tx.rentInvoice.update({ where: { id: currentInvoice.id }, data: { rentPaise: requestedRentPaise, totalPaise } });
++        rentChange = { appliedToCurrentInvoice: true, effectiveYear: period.year, effectiveMonth: period.month, reason: "CURRENT_INVOICE_UNPAID" };
++      } else {
++        const next = new Date(Date.UTC(period.year, period.month, 1));
++        rentChange = {
++          appliedToCurrentInvoice: false,
++          effectiveYear: next.getUTCFullYear(),
++          effectiveMonth: next.getUTCMonth() + 1,
++          reason: !currentInvoice ? "CURRENT_INVOICE_NOT_FOUND" : currentInvoice.status === "PAID" ? "CURRENT_INVOICE_PAID" : currentInvoice.paidPaise > 0 ? "CURRENT_INVOICE_PARTIALLY_PAID" : openAttempt ? "PAYMENT_IN_PROGRESS" : "CURRENT_INVOICE_LOCKED"
++        };
++      }
++    }
++
+     const updated = await tx.student.update({
+       where: { id: current.id },
+       data: {
+         ...(input.mobile ? { mobile: normalizeIndianMobile(input.mobile) } : {}),
+         ...(input.roomId !== undefined ? { roomId: input.roomId } : {}),
+         ...(input.bedLabel !== undefined ? { bedLabel: input.bedLabel } : {}),
+-        ...(input.monthlyRent !== undefined ? { monthlyRentPaise: rupeesToPaise(input.monthlyRent) } : {}),
++        ...(requestedRentPaise !== undefined ? { monthlyRentPaise: requestedRentPaise } : {}),
+         ...(input.securityDeposit !== undefined ? { securityDepositPaise: rupeesToPaise(input.securityDeposit) } : {}),
+         ...(input.rentDueDay !== undefined ? { rentDueDay: input.rentDueDay } : {}),
+         ...(input.status ? { status: input.status, leftAt: input.status === "MOVED_OUT" ? new Date() : null } : {}),
+@@ -376,14 +459,19 @@
+       },
+       include: { user: true, room: true, invoices: { take: 1, orderBy: [{ year: "desc" }, { month: "desc" }] } }
+     });
+-    await tx.auditLog.create({ data: { propertyId: property.id, actorUserId: req.authUser!.id, action: "STUDENT_UPDATED", entityType: "Student", entityId: current.id, metadata: input as any } });
++    await tx.auditLog.create({
++      data: {
++        propertyId: property.id, actorUserId: req.authUser!.id, action: "STUDENT_UPDATED", entityType: "Student", entityId: current.id,
++        metadata: { ...input, ...(rentChange ? { rentChange } : {}) } as any
++      }
++    });
+     return updated;
+   });
+-  res.json({ student: studentDto(student) });
++  res.json({ student: studentDto(student), rentChange });
+ });
+ 
+ owner.post("/students/:id/reset-password", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   const { tempPassword } = z.object({ tempPassword: z.string().min(8).max(128) }).parse(req.body);
+   const student = await prisma.student.findFirst({ where: { id: req.params.id, propertyId: property.id } });
+   assert(student, 404, "STUDENT_NOT_FOUND", "Student not found");
+@@ -392,7 +480,7 @@
+ });
+ 
+ owner.get("/rooms", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   const rooms = await prisma.room.findMany({
+     where: { propertyId: property.id, active: true },
+     include: { students: { where: { status: "ACTIVE" }, select: { id: true } } },
+@@ -402,7 +490,7 @@
+ });
+ 
+ owner.post("/rooms", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   const input = z.object({ number: z.string().trim().min(1).max(30), capacity: z.number().int().min(1).max(50) }).parse(req.body);
+   try {
+     const room = await prisma.room.create({ data: { propertyId: property.id, number: input.number, capacity: input.capacity } });
+@@ -414,7 +502,7 @@
+ });
+ 
+ owner.patch("/rooms/:id", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   const input = z.object({ number: z.string().trim().min(1).max(30).optional(), capacity: z.number().int().min(1).max(50).optional(), active: z.boolean().optional() }).parse(req.body);
+   const room = await prisma.room.findFirst({ where: { id: req.params.id, propertyId: property.id }, include: { students: { where: { status: "ACTIVE" } } } });
+   assert(room, 404, "ROOM_NOT_FOUND", "Room not found");
+@@ -424,7 +512,7 @@
+ });
+ 
+ owner.get("/dues", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   const { year, month } = requestedPeriod(req, property.timezone);
+   await ensureInvoices(property.id, year, month);
+   const dues = await duesForProperty(property.id, year, month, 1000);
+@@ -432,14 +520,14 @@
+ });
+ 
+ owner.post("/rents/generate", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   const input = z.object({ year: z.number().int().min(2020).max(2100).optional(), month: z.number().int().min(1).max(12).optional() }).parse(req.body || {});
+   await ensureInvoices(property.id, input.year, input.month);
+   res.json({ ok: true });
+ });
+ 
+ owner.patch("/invoices/:id", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   const input = z.object({ electricity: z.number().min(0).optional(), lateFee: z.number().min(0).optional(), otherCharges: z.number().min(0).optional(), discount: z.number().min(0).optional(), notes: z.string().max(1000).nullable().optional() }).parse(req.body);
+   const invoice = await prisma.rentInvoice.findFirst({ where: { id: req.params.id, propertyId: property.id } });
+   assert(invoice, 404, "INVOICE_NOT_FOUND", "Invoice not found");
+@@ -460,7 +548,7 @@
+ });
+ 
+ owner.post("/invoices/:id/manual-payment", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   const input = z.object({ amount: z.number().positive().optional(), method: z.enum(["CASH", "BANK_TRANSFER", "OTHER"]).default("CASH") }).parse(req.body || {});
+   const invoice = await prisma.rentInvoice.findFirst({ where: { id: req.params.id, propertyId: property.id } });
+   assert(invoice, 404, "INVOICE_NOT_FOUND", "Invoice not found");
+@@ -483,13 +571,13 @@
+ });
+ 
+ owner.get("/payments", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   const payments = await prisma.payment.findMany({ where: { propertyId: property.id }, orderBy: { paidAt: "desc" }, take: 200, include: { student: { include: { user: true, room: true } }, invoice: true } });
+   res.json({ payments: payments.map(paymentDto) });
+ });
+ 
+ owner.get("/payments/:id/receipt.pdf", async (req, res) => {
+-  const property = await ownerPropertyOrThrow(req.authUser!.id);
++  const property = await ownerPropertyOrThrow(req.authUser!.id, req);
+   const payment = await prisma.payment.findFirst({
+     where: { id: req.params.id, propertyId: property.id },
+     include: { property: true, invoice: true, student: { include: { user: true, room: true } } }
+@@ -621,16 +709,21 @@
+ 
+ async function getUserContext(userId: string, role: string) {
+   if (role === "OWNER") {
+-    const property = await getOwnerProperty(userId);
+-    return { property: property ? { id: property.id, name: property.name, currency: property.currency, timezone: property.timezone } : null };
++    const properties = await prisma.property.findMany({ where: { ownerId: userId }, orderBy: { createdAt: "asc" } });
++    const property = properties[0] || null;
++    const dto = (p: any) => ({ id: p.id, name: p.name, currency: p.currency, timezone: p.timezone });
++    return { property: property ? dto(property) : null, properties: properties.map(dto) };
+   }
+   const profile = await getStudentProfile(userId);
+   return { student: profile ? studentProfileDto(profile) : null, property: profile ? { id: profile.property.id, name: profile.property.name, currency: profile.property.currency, timezone: profile.property.timezone } : null };
+ }
+ 
+-async function ownerPropertyOrThrow(ownerId: string) {
+-  const property = await getOwnerProperty(ownerId);
+-  assert(property, 404, "PROPERTY_NOT_FOUND", "Owner property is not configured");
++async function ownerPropertyOrThrow(ownerId: string, req?: Request) {
++  const requestedId = req?.header("x-property-id") || (req?.query.propertyId ? String(req.query.propertyId) : "");
++  const property = requestedId
++    ? await prisma.property.findFirst({ where: { id: requestedId, ownerId } })
++    : await getOwnerProperty(ownerId);
++  assert(property, 404, "PROPERTY_NOT_FOUND", requestedId ? "Property not found or access denied" : "Owner property is not configured");
+   return property;
+ }
+ 
