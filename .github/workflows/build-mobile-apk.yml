@@ -37,8 +37,6 @@ jobs:
           path = Path('mobile/app/src/main/assets/index.html')
           source = path.read_text(encoding='utf-8')
 
-          # The bundled SafeHouse 2 source contains boot(), but older generated
-          # bundles did not invoke it. Keep this repair idempotent.
           if 'async function boot()' not in source:
               raise SystemExit('SafeHouse boot() function is missing')
           if '\nboot();\n</script>' not in source:
@@ -47,39 +45,20 @@ jobs:
                   raise SystemExit('Closing script tag not found')
               source = source[:marker] + '\nboot();\n' + source[marker:]
 
-          # Android WebView can report env(safe-area-inset-top) as zero even
-          # when the app is drawing edge-to-edge under the status bar. Install
-          # one final CSS override after all design CSS so every top bar and
-          # full-screen auth/payment state clears both normal status bars and
-          # taller display cutouts.
           safe_area_marker = 'SAFEHOUSE_ANDROID_TOP_INSET_FIX_V1'
           if safe_area_marker not in source:
               style_end = source.find('</style>')
               if style_end < 0:
                   raise SystemExit('Closing style tag not found')
-              safe_css = r'''
-/* SAFEHOUSE_ANDROID_TOP_INSET_FIX_V1
-   Keep app chrome below Android status bar / display cutout on every screen. */
-:root{--safe-top:max(env(safe-area-inset-top),28px)}
-.topbar{
-  height:calc(62px + var(--safe-top))!important;
-  padding:var(--safe-top) 16px 0!important;
-  align-items:center!important;
-}
-.login-page{
-  padding-top:var(--safe-top)!important;
-}
-.role-page{
-  padding-top:calc(24px + var(--safe-top))!important;
-}
-.payment-state{
-  min-height:100vh!important;
-  padding-top:calc(28px + var(--safe-top))!important;
-}
-@media(min-width:700px){
-  .role-page{padding-top:calc(32px + var(--safe-top))!important}
-}
-'''
+              safe_css = '\n'.join([
+                  '/* SAFEHOUSE_ANDROID_TOP_INSET_FIX_V1 */',
+                  ':root{--safe-top:max(env(safe-area-inset-top),28px)}',
+                  '.topbar{height:calc(62px + var(--safe-top))!important;padding:var(--safe-top) 16px 0!important;align-items:center!important}',
+                  '.login-page{padding-top:var(--safe-top)!important}',
+                  '.role-page{padding-top:calc(24px + var(--safe-top))!important}',
+                  '.payment-state{min-height:100vh!important;padding-top:calc(28px + var(--safe-top))!important}',
+                  '@media(min-width:700px){.role-page{padding-top:calc(32px + var(--safe-top))!important}}',
+              ])
               source = source[:style_end] + safe_css + '\n' + source[style_end:]
 
           path.write_text(source, encoding='utf-8')
