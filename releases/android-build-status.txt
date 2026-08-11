@@ -1,9 +1,9 @@
 SafeHouse 2 Android build
-commit=f106606e2d99729c30a4608eb7df47402126cd62
-run_id=31508196435
+commit=29f17ea6f811aa6211c5efa660b2429ebb1e685e
+run_id=31519006745
 run_attempt=1
 build_exit_code=0
-utc=2026-08-11T15:40:26Z
+utc=2026-08-11T17:44:20Z
 
 Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:preBuild UP-TO-DATE
@@ -29,12 +29,12 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:compileDebugShaders NO-SOURCE
 > Task :app:generateDebugAssets UP-TO-DATE
 > Task :app:mergeDebugAssets
-> Task :app:processDebugJavaRes NO-SOURCE
-> Task :app:compressDebugAssets
 > Task :app:processDebugManifestForPackage
+> Task :app:compressDebugAssets
+> Task :app:processDebugJavaRes NO-SOURCE
 > Task :app:checkDebugDuplicateClasses
-> Task :app:mergeDebugJavaResource
 > Task :app:processDebugResources
+> Task :app:mergeDebugJavaResource
 > Task :app:desugarDebugFileDependencies
 
 > Task :app:compileDebugJavaWithJavac
@@ -54,7 +54,7 @@ Note: Recompile with -Xlint:deprecation for details.
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1786462805053.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1786470243666.json
 
-BUILD SUCCESSFUL in 26s
+BUILD SUCCESSFUL in 20s
 31 actionable tasks: 31 executed
