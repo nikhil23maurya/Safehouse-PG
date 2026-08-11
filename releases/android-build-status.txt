@@ -1,9 +1,9 @@
 SafeHouse 2 Android build
-commit=516cd2f58832a0f339b258e3b5682ade11f3611a
-run_id=31501737988
+commit=00f070ecf94bbbe00fc25b1c512c6fd9af669d06
+run_id=31503531582
 run_attempt=1
 build_exit_code=0
-utc=2026-08-11T14:30:03Z
+utc=2026-08-11T14:49:04Z
 
 Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:preBuild UP-TO-DATE
@@ -32,15 +32,15 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:processDebugManifestForPackage
 > Task :app:compressDebugAssets
 > Task :app:processDebugJavaRes NO-SOURCE
+> Task :app:checkDebugDuplicateClasses
 > Task :app:processDebugResources
 > Task :app:mergeDebugJavaResource
+> Task :app:desugarDebugFileDependencies
 
 > Task :app:compileDebugJavaWithJavac
 Note: /home/runner/work/Safehouse-PG/Safehouse-PG/mobile/app/src/main/java/com/safehouse/pg/MainActivity.java uses or overrides a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
 
-> Task :app:checkDebugDuplicateClasses
-> Task :app:desugarDebugFileDependencies
 > Task :app:mergeLibDexDebug
 > Task :app:dexBuilderDebug
 > Task :app:mergeDebugJniLibFolders
@@ -54,7 +54,7 @@ Note: Recompile with -Xlint:deprecation for details.
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1786458563451.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1786459729057.json
 
-BUILD SUCCESSFUL in 43s
+BUILD SUCCESSFUL in 18s
 31 actionable tasks: 31 executed
