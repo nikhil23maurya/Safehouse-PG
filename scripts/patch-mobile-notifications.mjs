@@ -28,9 +28,10 @@ regex(/async function logout\(\)\{[^\n]+\}/, `async function logout(){try{await 
 
 const runtimeFile = new URL('./mobile-notifications-runtime.js', import.meta.url);
 const js = fs.readFileSync(runtimeFile, 'utf8');
-const bootIndex = s.lastIndexOf('\nboot();\n</script>');
-if (bootIndex < 0) throw new Error('Notification UI patch failed: boot marker');
-s = s.slice(0, bootIndex) + '\n' + js + '\n' + s.slice(bootIndex);
+let insertionIndex = s.lastIndexOf('\nboot();\n</script>');
+if (insertionIndex < 0) insertionIndex = s.lastIndexOf('</script>');
+if (insertionIndex < 0) throw new Error('Notification UI patch failed: script marker');
+s = s.slice(0, insertionIndex) + '\n' + js + '\n' + s.slice(insertionIndex);
 
 fs.writeFileSync(file, s);
 console.log('SafeHouse notifications UI applied.');
