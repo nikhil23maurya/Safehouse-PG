@@ -15,19 +15,20 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "prebuild": "node scripts/apply-safehouse2-patch.mjs && node scripts/apply-financial-hardening.mjs && node scripts/finalize-financial-source.mjs && node scripts/apply-runtime-stability.mjs"
+    "prebuild": "node scripts/apply-safehouse2-patch.mjs && node scripts/apply-financial-hardening.mjs && node scripts/finalize-financial-source.mjs && node scripts/apply-runtime-stability.mjs && node scripts/apply-notifications-schema.mjs && node scripts/apply-notifications-backend.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.0.0",
     "@prisma/client": "^7.0.0",
     "cors": "^2.8.6",
+    "dotenv": "^17.0.0",
     "express": "^5.1.0",
     "express-rate-limit": "^8.0.0",
+    "firebase-admin": "^14.2.0",
     "helmet": "^8.0.0",
     "pdfkit": "^0.17.0",
     "pg": "^8.16.0",
-    "zod": "^4.0.0",
-    "dotenv": "^17.0.0"
+    "zod": "^4.0.0"
   },
   "devDependencies": {
     "@types/cors": "^2.8.19",
