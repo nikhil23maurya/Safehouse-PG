@@ -3,14 +3,19 @@ name: Build SafeHouse Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, notifications-v1-inprocess]
     paths:
       - 'mobile-v2-build/**'
       - 'scripts/patch-mobile-performance.mjs'
       - 'scripts/patch-mobile-financial-context.mjs'
       - 'scripts/patch-mobile-stability.mjs'
+      - 'scripts/patch-mobile-notifications.mjs'
+      - 'scripts/mobile-notifications-runtime.js'
+      - 'scripts/patch-android-notifications.mjs'
+      - 'scripts/notification-android/**'
       - 'scripts/verify-mobile-runtime.mjs'
       - 'scripts/apply-runtime-stability.mjs'
+      - 'scripts/apply-notifications-*.mjs'
       - 'src/**'
       - 'prisma/**'
       - 'package.json'
@@ -44,7 +49,6 @@ jobs:
           from pathlib import Path
           path = Path('mobile/app/src/main/assets/index.html')
           source = path.read_text(encoding='utf-8')
-
           if 'async function boot()' not in source:
               raise SystemExit('SafeHouse boot() function is missing')
           if '\nboot();\n</script>' not in source:
@@ -52,7 +56,6 @@ jobs:
               if marker < 0:
                   raise SystemExit('Closing script tag not found')
               source = source[:marker] + '\nboot();\n' + source[marker:]
-
           safe_area_marker = 'SAFEHOUSE_ANDROID_TOP_INSET_FIX_V1'
           if safe_area_marker not in source:
               style_end = source.find('</style>')
@@ -68,33 +71,37 @@ jobs:
                   '@media(min-width:700px){.role-page{padding-top:calc(32px + var(--safe-top))!important}}',
               ])
               source = source[:style_end] + safe_css + '\n' + source[style_end:]
-
           path.write_text(source, encoding='utf-8')
           fixed = path.read_text(encoding='utf-8')
-          if '\nboot();\n</script>' not in fixed:
-              raise SystemExit('SafeHouse boot invocation could not be installed')
-          if safe_area_marker not in fixed:
-              raise SystemExit('SafeHouse Android top inset fix could not be installed')
-          print('SafeHouse startup and Android top safe-area verified')
+          if '\nboot();\n</script>' not in fixed or safe_area_marker not in fixed:
+              raise SystemExit('SafeHouse startup/safe-area verification failed')
           PY
 
       - name: Optimize Android navigation performance
-        shell: bash
         run: |
           node scripts/patch-mobile-performance.mjs
           grep -q 'SAFEHOUSE_PERF_V1' mobile/app/src/main/assets/index.html
 
       - name: Apply strict property and month financial UI
-        shell: bash
         run: |
           node scripts/patch-mobile-financial-context.mjs
           grep -q 'SAFEHOUSE_FINANCIAL_UI_V2' mobile/app/src/main/assets/index.html
 
       - name: Apply mobile runtime stability fixes
-        shell: bash
         run: |
           node scripts/patch-mobile-stability.mjs
           node scripts/verify-mobile-runtime.mjs
+
+      - name: Add SafeHouse push notifications
+        shell: bash
+        run: |
+          node scripts/patch-mobile-notifications.mjs
+          node scripts/patch-android-notifications.mjs
+          grep -q 'SAFEHOUSE_NOTIFICATIONS_UI_V1' mobile/app/src/main/assets/index.html
+          grep -q 'firebase_messaging_installation_id_enabled' mobile/app/src/main/AndroidManifest.xml
+          grep -q 'configureNotifications' mobile/app/src/main/java/com/safehouse/pg/MainActivity.java
+          grep -q 'onRegistered' mobile/app/src/main/java/com/safehouse/pg/SafeHouseFirebaseService.java
+          grep -q 'firebase-messaging' mobile/app/build.gradle
           python - <<'PY'
           from pathlib import Path
           source = Path('mobile/app/src/main/assets/index.html').read_text(encoding='utf-8')
@@ -105,9 +112,7 @@ jobs:
           node --check /tmp/safehouse-mobile.js
 
       - name: Enable AndroidX
-        shell: bash
-        run: |
-          printf 'android.useAndroidX=true\nandroid.enableJetifier=true\n' > mobile/gradle.properties
+        run: printf 'android.useAndroidX=true\nandroid.enableJetifier=true\n' > mobile/gradle.properties
 
       - name: Align Kotlin dependencies
         shell: bash
@@ -169,18 +174,18 @@ jobs:
             echo
             if [ -f android-build.log ]; then tail -n 250 android-build.log; else echo "android-build.log not created"; fi
           } > releases/android-build-status.txt
-
           if [ "$CODE" = "0" ] && [ -f mobile/app/build/outputs/apk/debug/app-debug.apk ]; then
             cp mobile/app/build/outputs/apk/debug/app-debug.apk releases/SafeHouse-Final-Live.apk
             sha256sum releases/SafeHouse-Final-Live.apk > releases/SafeHouse-Final-Live.apk.sha256
           fi
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add releases/
-          if ! git diff --cached --quiet; then
-            git commit -m "SafeHouse 2 Android build result"
-            git push origin HEAD:main
+          if [ "${GITHUB_REF_NAME}" = "main" ]; then
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add releases/
+            if ! git diff --cached --quiet; then
+              git commit -m "SafeHouse 2 Android build result"
+              git push origin HEAD:main
+            fi
           fi
 
       - name: Upload APK artifact
