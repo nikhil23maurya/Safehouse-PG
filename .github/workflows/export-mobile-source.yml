@@ -1,0 +1,37 @@
+name: Export reconstructed mobile source
+
+on:
+  push:
+    branches: [notifications-v1-inprocess]
+    paths:
+      - '.github/workflows/export-mobile-source.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reconstruct mobile source
+        shell: bash
+        run: |
+          cat mobile-v2-build/part-*.b64 > /tmp/mobile-source.b64
+          base64 -d /tmp/mobile-source.b64 > /tmp/mobile-source.tar.gz
+          tar -xzf /tmp/mobile-source.tar.gz
+          test -f mobile/app/src/main/java/com/safehouse/pg/MainActivity.java
+          test -f mobile/app/build.gradle
+          test -f mobile/app/src/main/AndroidManifest.xml
+      - name: Upload source snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: safehouse-mobile-source-snapshot
+          path: |
+            mobile/app/src/main/java/com/safehouse/pg/MainActivity.java
+            mobile/app/build.gradle
+            mobile/app/src/main/AndroidManifest.xml
+            mobile/build.gradle
+            mobile/settings.gradle
+          retention-days: 1
