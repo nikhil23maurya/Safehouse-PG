@@ -74,7 +74,7 @@ exact(
 // Return the exact invalid field instead of an opaque "Invalid request".
 exact(
   `app.use((_req, _res, next) => next(new AppError(404, "NOT_FOUND", "Route not found")));\napp.use((error: any, _req: Request, res: Response, _next: NextFunction) => {\n  if (error instanceof z.ZodError) return res.status(400).json({ error: { code: "VALIDATION_ERROR", message: "Invalid request", details: error.flatten() } });`,
-  `app.use((_req, _res, next) => next(new AppError(404, "NOT_FOUND", "Route not found")));\napp.use((error: any, _req: Request, res: Response, _next: NextFunction) => {\n  if (error instanceof z.ZodError) {\n    const details = error.flatten();\n    const fields = details.fieldErrors as Record<string, string[] | undefined>;\n    const first = Object.entries(fields).find(([, messages]) => !!messages?.length);\n    const message = first?.[1]?.[0] ? `${first[0]}: ${first[1][0]}` : (details.formErrors[0] || "Invalid request");\n    return res.status(400).json({ error: { code: "VALIDATION_ERROR", message, details } });\n  }`,
+  `app.use((_req, _res, next) => next(new AppError(404, "NOT_FOUND", "Route not found")));\napp.use((error: any, _req: Request, res: Response, _next: NextFunction) => {\n  if (error instanceof z.ZodError) {\n    const details = error.flatten();\n    const fields = details.fieldErrors as Record<string, string[] | undefined>;\n    const first = Object.entries(fields).find(([, messages]) => !!messages?.length);\n    const message = first?.[1]?.[0] ? first[0] + ': ' + first[1][0] : (details.formErrors[0] || "Invalid request");\n    return res.status(400).json({ error: { code: "VALIDATION_ERROR", message, details } });\n  }`,
   'validation diagnostics'
 );
 
