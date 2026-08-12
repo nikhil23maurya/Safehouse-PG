@@ -24,14 +24,17 @@ jobs:
           test -f mobile/app/src/main/java/com/safehouse/pg/MainActivity.java
           test -f mobile/app/build.gradle
           test -f mobile/app/src/main/AndroidManifest.xml
+      - name: Materialize production backend source
+        run: npm run prebuild
       - name: Upload source snapshot
         uses: actions/upload-artifact@v4
         with:
-          name: safehouse-mobile-source-snapshot
+          name: safehouse-source-snapshot
           path: |
             mobile/app/src/main/java/com/safehouse/pg/MainActivity.java
             mobile/app/build.gradle
             mobile/app/src/main/AndroidManifest.xml
             mobile/build.gradle
             mobile/settings.gradle
+            src/server.ts
           retention-days: 1
