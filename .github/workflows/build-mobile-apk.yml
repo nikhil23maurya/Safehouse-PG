@@ -8,6 +8,9 @@ on:
       - 'mobile-v2-build/**'
       - 'scripts/patch-mobile-performance.mjs'
       - 'scripts/patch-mobile-financial-context.mjs'
+      - 'scripts/patch-mobile-stability.mjs'
+      - 'scripts/verify-mobile-runtime.mjs'
+      - 'scripts/apply-runtime-stability.mjs'
       - 'src/**'
       - 'prisma/**'
       - 'package.json'
@@ -86,6 +89,12 @@ jobs:
         run: |
           node scripts/patch-mobile-financial-context.mjs
           grep -q 'SAFEHOUSE_FINANCIAL_UI_V2' mobile/app/src/main/assets/index.html
+
+      - name: Apply mobile runtime stability fixes
+        shell: bash
+        run: |
+          node scripts/patch-mobile-stability.mjs
+          node scripts/verify-mobile-runtime.mjs
           python - <<'PY'
           from pathlib import Path
           source = Path('mobile/app/src/main/assets/index.html').read_text(encoding='utf-8')
