@@ -10,7 +10,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "prisma generate && tsc -p tsconfig.json",
     "start": "node dist/server.js",
-    "start:render": "prisma migrate deploy && node dist/server.js",
+    "start:render": "node scripts/repair-prisma-history.mjs && prisma migrate deploy && node dist/server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
@@ -35,7 +35,6 @@
     "@types/express": "^5.0.3",
     "@types/node": "^24.0.0",
     "@types/pdfkit": "^0.17.3",
-    "@types/pg": "^8.15.5",
     "prisma": "^7.0.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0"
