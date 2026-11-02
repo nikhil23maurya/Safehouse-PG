@@ -17,7 +17,7 @@
     if(!x){holder.innerHTML='<div class="sh-pay-loader"><div class="spinner"></div><p>Creating your secure, one-time rent QR…</p></div>';return}
     holder.innerHTML='<div class="sh-pay-qr-card"><div class="sh-pay-qr-frame"><img src="'+esc(x.imageUrl)+'" alt="Invoice-linked UPI payment QR" loading="eager"></div><div class="sh-pay-qr-meta"><strong>'+fmt(x.amountPaise)+'</strong><span>Invoice-linked · Single use</span></div></div>'+
     '<p class="sh-pay-instruction">Scan from another phone, or save the QR and open it from your UPI app gallery. Your rent updates after confirmed payment.</p>'+
-    '<div class="sh-pay-row"><button class="sh-pay-tertiary" data-shpay-save>'+ico('download')+' Save QR</button><button class="sh-pay-tertiary" data-shpay-tab="app">'+ico('wallet')+' Use this phone</button></div>';
+    '<div class="sh-pay-row"><button class="sh-pay-tertiary" data-shpay-save>'+ico('download')+' Save QR</button><button class="sh-pay-tertiary" data-shpay-tab="app" class="sh-pay-tab-app">'+ico('wallet')+' Use this phone</button></div>';
     const image=holder.querySelector('.sh-pay-qr-frame img');
     if(image)image.addEventListener('error',()=>{
       const frame=holder.querySelector('.sh-pay-qr-frame');
@@ -26,12 +26,15 @@
   }
   function renderApps(){
     const holder=modal()?.querySelector('#sh-pay-view');if(!holder)return;
-    const x=current?.qr;
-    if(!x){holder.innerHTML='<div class="sh-pay-loader"><div class="spinner"></div><p>Preparing your secure rent QR…</p></div>';return}
-    holder.innerHTML='<div class="sh-pay-app-intro"><div class="sh-pay-app-badge">'+ico('shield')+'</div><h3>Pay using your UPI app.</h3><p>Save this one-time QR, open your UPI app and choose <strong>Scan from gallery</strong>. Review the payee and amount before authorising.</p></div>'+
-    '<div class="sh-pay-app-actions"><button class="sh-action-primary" data-shpay-save>'+ico('download')+' 1. Save payment QR</button>'+
-    (current?.intentUrl?'<button class="sh-action-primary" data-shpay-intent>Pay directly with UPI</button>':'<button class="sh-pay-tertiary" data-shpay-open>'+ico('wallet')+' 2. Open a UPI app</button>')+'</div>'+
-    '<p class="sh-pay-caveat">Direct prefilled UPI payment is only offered when the payment provider supplies a verified UPI Intent. No personal UPI IDs or untracked transfers are used.</p>';
+    if(!current?.qr){holder.innerHTML='<div class="sh-pay-loader"><div class="spinner"></div><p>Preparing your invoice-linked UPI request…</p></div>';return}
+    const direct=!!window.SafeHouseNative?.openQrInUpiApp;
+    holder.innerHTML='<div class="sh-pay-app-intro"><div class="sh-pay-app-badge">'+ico('shield')+'</div><h3>Pay securely with UPI</h3><p>'+(direct?
+      'Open your UPI app with the amount prefilled. Check the recipient and confirm in your banking app.':
+      'Save the unique QR, then open your UPI app and choose Scan from Gallery. Review the recipient before paying.')+'</p></div>'+
+      '<div class="sh-pay-app-actions">'+(direct?
+        '<button class="sh-action-primary" data-shpay-direct>'+ico('wallet')+' Pay with UPI app</button><button class="sh-pay-tertiary" data-shpay-save>'+ico('download')+' Save QR instead</button>':
+        '<button class="sh-action-primary" data-shpay-save>'+ico('download')+' Save payment QR</button><button class="sh-pay-tertiary" data-shpay-open>'+ico('wallet')+' Open UPI app</button>')+
+      '</div><p class="sh-pay-caveat">Payment is recorded only after confirmation by the payment provider. Do not send money to any manually shared UPI ID.</p>';
   }
   function choose(tab){
     const root=modal();if(!root)return;
@@ -103,12 +106,12 @@
     node.innerHTML='<div class="sh-pay-container" role="dialog" aria-modal="true" aria-label="SafeHouse secure UPI checkout"><div class="sh-pay-handle"></div>'+
     '<div class="sh-pay-header"><div class="sh-pay-wordmark"><span class="sh-pay-mark">'+ico('home')+'</span> SafeHouse<span class="sh-pay-gold">Pay</span></div><button class="sh-pay-x" data-shpay-close aria-label="Close checkout">×</button></div>'+
     '<div class="sh-pay-amount-label">SECURE RENT SETTLEMENT</div><div class="sh-pay-amount">'+fmt(inv.remainingPaise)+'</div><div class="sh-pay-identity">'+esc(monthName(inv.year,inv.month))+' · '+esc(S.property?.name||'Your property')+'</div>'+
-    '<div class="sh-pay-tabs"><button data-shpay-tab="qr" class="active">'+ico('grid')+' Scan QR</button><button data-shpay-tab="app">'+ico('wallet')+' UPI app</button></div>'+
+    '<div class="sh-pay-tabs"><button data-shpay-tab="qr" class="sh-pay-tab-qr">'+ico('grid')+' Scan QR</button><button data-shpay-tab="app">'+ico('wallet')+' UPI app</button></div>'+
     '<div id="sh-pay-view"></div><div class="sh-pay-foot"><div class="sh-pay-dot"></div><span id="sh-pay-status" aria-live="polite">Preparing payment…</span><button id="sh-pay-refresh" data-shpay-retry hidden>Refresh QR</button></div>'+
     '<div class="sh-pay-security">'+ico('shield')+' Secure provider-verified payments. Rent is marked paid only after confirmed capture.</div></div>';
     document.body.appendChild(node);
     document.body.classList.add('sh-pay-open');
-    renderQr();
+    choose(window.SafeHouseNative?.openQrInUpiApp?'app':'qr');
     fetchQr(invoiceId);
     node.addEventListener('click',e=>{
       const b=e.target.closest('button');
@@ -125,6 +128,13 @@
         }
         return;
       }
+      if(b.hasAttribute('data-shpay-direct')){
+        if(current?.qr?.imageUrl && window.SafeHouseNative?.openQrInUpiApp){
+          status('Opening your UPI app. Confirm the amount and recipient.');
+          window.SafeHouseNative.openQrInUpiApp(current.qr.imageUrl,Math.round(Number(current.qr.amountPaise)));
+        }else status('Direct UPI unavailable. Save the QR and scan it in your UPI app.',true);
+        return;
+      }
       if(b.hasAttribute('data-shpay-open')){
         if(window.SafeHouseNative?.openUpiApp)window.SafeHouseNative.openUpiApp();
         else toast('Open your UPI app and select Scan from Gallery.');
@@ -139,5 +149,8 @@
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&modal())dismiss()});
   const originalNavigate=navigate;
   navigate=function(){if(modal())dismiss();return originalNavigate.apply(this,arguments)};
+  window.SafeHouseUpiError=function(message){
+    if(modal()){status(message||'Could not open UPI. Please scan the QR instead.',true);toast(message||'UPI app unavailable','error')}
+  };
   window.__SAFEHOUSE_QR_CHECKOUT_V3=true;
 })();
