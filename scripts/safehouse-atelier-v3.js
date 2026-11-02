@@ -62,7 +62,7 @@
     const ring='<div class="sh-ring"><svg viewBox="0 0 100 100" aria-label="'+pct+' percent collected"><circle class="sh-ring-track" cx="50" cy="50" r="43"/><circle class="sh-ring-value" cx="50" cy="50" r="43" style="--ring-off:'+ringOffset+'"/></svg><span>'+pct+'%</span></div>';
     const property=esc(d.property?.name||S.property?.name||'SafeHouse PG');
     const months='<div class="month-nav" style="margin-top:13px"><button aria-label="Previous month" data-action="period-prev">‹</button><span>'+periodLabel(p)+'</span><button aria-label="Next month" data-action="period-next">›</button></div>';
-    const intro=heading('OVERVIEW','Welcome back, '+name',
+    const intro=heading('OVERVIEW','Welcome back, '+name,
       '<button class="property-switch" data-action="properties"><b>'+property+'</b>'+glyph('down')+'</button>',months);
     const hero='<section class="sh-overview sh-stagger"><div class="sh-overview-label">Collected this month</div><div class="sh-overview-head"><div><div class="sh-overview-amount">'+money(m.totalCollectedPaise)+'</div><div class="sh-overview-sub">of '+money(m.totalExpectedPaise)+' expected</div></div>'+ring+'</div><div class="sh-track"><span style="width:'+pct+'%"></span></div><div class="sh-overview-foot"><div class="sh-balance">Awaiting collection<strong>'+money(m.pendingTotalPaise)+'</strong></div><span class="sh-badge">THIS MONTH</span></div></section>';
     const metrics='<div class="sh-metrics sh-stagger">'+metric(Number(m.totalStudents)||0,'Total residents','users')+metric(Number(m.paidStudents)||0,'Rent paid','checkcircle')+metric(Number(m.pendingStudents)||0,'Awaiting payment','calendar')+metric(Number(m.vacantBeds)||0,'Available beds','bed')+'</div>';
