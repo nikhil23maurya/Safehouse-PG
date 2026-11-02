@@ -22,4 +22,8 @@ assert(!payment.includes('window.SafeHouseNative.openRazorpay('),'UPI must not o
 assert(visual.includes('SAFEHOUSE_PROFESSIONAL_V4'),'professional visual system missing');
 assert(patch.includes('safehouse-professional-v4.css'),'production APK must include the professional theme');
 assert(android.includes('window.setStatusBarColor(Color.rgb(255, 255, 255))'),'native system bars must match UI');
+assert(android.includes('openQrInUpiApp(String imageUrl, int amountPaise)'),'native QR-to-UPI bridge missing');
+assert(android.includes('new com.google.zxing.qrcode.QRCodeReader()'),'provider QR must be decoded locally');
+assert(android.includes('paise.intValueExact() != amountPaise'),'native direct UPI must check exact amount');
+assert(payment.includes('data-shpay-direct'),'custom UPI app trigger missing');
 console.log('SafeHouse v4 professional UI / QR payment contract checks passed.');
