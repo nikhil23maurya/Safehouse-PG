@@ -1,8 +1,8 @@
 SafeHouse 2 Android build
-commit=7e3544fd9e693d18953951fad543c3a1899f7d00
-run_id=41455854368
+commit=7f8c1b11ed7c7d3513da14542d4443a02a8bfd2a
+run_id=41459580107
 run_attempt=1
 build_exit_code=not-run
-utc=2026-11-02T13:46:36Z
+utc=2026-11-02T14:11:39Z
 
 android-build.log not created
