@@ -10,6 +10,8 @@ on:
       - 'scripts/patch-mobile-financial-context.mjs'
       - 'scripts/patch-mobile-stability.mjs'
       - 'scripts/patch-mobile-notifications.mjs'
+      - 'scripts/patch-mobile-luxury.mjs'
+      - 'scripts/safehouse-luxury.css'
       - 'scripts/mobile-notifications-runtime.js'
       - 'scripts/patch-android-notifications.mjs'
       - 'scripts/notification-android/**'
@@ -110,6 +112,12 @@ jobs:
           Path('/tmp/safehouse-mobile.js').write_text(source[a:b], encoding='utf-8')
           PY
           node --check /tmp/safehouse-mobile.js
+
+      - name: Apply SafeHouse luxury UI and branded checkout
+        run: |
+          node scripts/patch-mobile-luxury.mjs
+          grep -q 'SAFEHOUSE_LUXURY_CHECKOUT_V1' mobile/app/src/main/assets/index.html
+          grep -q 'SAFEHOUSE_LUXURY_V1' mobile/app/src/main/assets/index.html
 
       - name: Enable AndroidX
         run: printf 'android.useAndroidX=true\nandroid.enableJetifier=true\n' > mobile/gradle.properties
