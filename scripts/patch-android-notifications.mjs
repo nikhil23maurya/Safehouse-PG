@@ -20,7 +20,7 @@ fs.copyFileSync(path.join(templateDir, 'ic_notification.xml'), path.join(drawabl
 let gradle = fs.readFileSync(gradleFile, 'utf8');
 gradle = gradle.replace(/versionCode\s+\d+/, 'versionCode 23').replace(/versionName\s+'[^']+'/, "versionName '4.0.0'");
 if (!gradle.includes('SAFEHOUSE_NOTIFICATIONS_ANDROID_V1')) {
-  gradle = gradle.replace(/dependencies\s*\{([\s\S]*?)\n\}/, (match, body) => `dependencies {${body}\n    // SAFEHOUSE_NOTIFICATIONS_ANDROID_V1\n    implementation platform('com.google.firebase:firebase-bom:34.17.0')\n    implementation 'com.google.firebase:firebase-messaging'\n}`);
+  gradle = gradle.replace(/dependencies\s*\{([\s\S]*?)\n\}/, (match, body) => `dependencies {${body}\n    // SAFEHOUSE_NOTIFICATIONS_ANDROID_V1\n    implementation platform('com.google.firebase:firebase-bom:34.17.0')\n    implementation 'com.google.firebase:firebase-messaging'\n    // Local QR decoding only. No payment secrets stored on device.\n    implementation 'com.google.zxing:core:3.5.3'\n}`);
 }
 fs.writeFileSync(gradleFile, gradle);
 
