@@ -1,19 +1,9 @@
 SafeHouse 2 Android build
-commit=c872abfe6391403e1f53f98476e3ce0249ac2e07
-run_id=41459668008
+commit=75eeaf9bfb164a7ec8020b7003e31e1b8af93212
+run_id=41463684215
 run_attempt=1
 build_exit_code=0
-utc=2026-11-02T14:13:33Z
-
-
-Welcome to Gradle 8.9!
-
-Here are the highlights of this release:
- - Enhanced Error and Warning Messages
- - IDE Integration Improvements
- - Daemon JVM Information
-
-For more details see https://docs.gradle.org/8.9/release-notes.html
+utc=2026-11-02T14:37:59Z
 
 Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:preBuild UP-TO-DATE
@@ -39,35 +29,35 @@ Starting a Gradle Daemon (subsequent builds will be faster)
 > Task :app:compileDebugShaders NO-SOURCE
 > Task :app:generateDebugAssets UP-TO-DATE
 > Task :app:mergeDebugAssets
-> Task :app:compressDebugAssets
-> Task :app:processDebugJavaRes NO-SOURCE
-> Task :app:mergeDebugJavaResource
-> Task :app:checkDebugDuplicateClasses
-> Task :app:desugarDebugFileDependencies
 > Task :app:processDebugManifestForPackage
-> Task :app:mergeLibDexDebug
-> Task :app:mergeDebugJniLibFolders
-> Task :app:mergeDebugNativeLibs
+> Task :app:processDebugJavaRes NO-SOURCE
+> Task :app:compressDebugAssets
+> Task :app:checkDebugDuplicateClasses
 > Task :app:processDebugResources
-> Task :app:validateSigningDebug
-> Task :app:mergeExtDexDebug
+> Task :app:mergeDebugJavaResource
+> Task :app:desugarDebugFileDependencies
 
 > Task :app:compileDebugJavaWithJavac
 Note: Some input files use or override a deprecated API.
 Note: Recompile with -Xlint:deprecation for details.
 
+> Task :app:mergeLibDexDebug
 > Task :app:dexBuilderDebug
+> Task :app:mergeDebugJniLibFolders
+> Task :app:mergeProjectDexDebug
+> Task :app:mergeDebugNativeLibs
+> Task :app:validateSigningDebug
 > Task :app:writeDebugAppMetadata
 > Task :app:writeDebugSigningConfigVersions
 
 > Task :app:stripDebugDebugSymbols
 Unable to strip the following libraries, packaging them as they are: libdatastore_shared_counter.so.
 
-> Task :app:mergeProjectDexDebug
+> Task :app:mergeExtDexDebug
 > Task :app:packageDebug
 > Task :app:createDebugApkListingFileRedirect
 > Task :app:assembleDebug
-gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1793628761761.json
+gradle/actions: Writing build results to /home/runner/work/_temp/.gradle-actions/build-results/build-1793630261625.json
 
-BUILD SUCCESSFUL in 56s
+BUILD SUCCESSFUL in 21s
 33 actionable tasks: 33 executed
