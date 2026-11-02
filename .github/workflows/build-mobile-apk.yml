@@ -16,6 +16,7 @@ on:
       - 'scripts/safehouse-atelier-v3.css'
       - 'scripts/safehouse-atelier-v3.js'
       - 'scripts/safehouse-atelier-payment-v3.css'
+      - 'scripts/safehouse-atelier-notifications-v3.css'
       - 'scripts/safehouse-atelier-payment-v3.js'
       - 'scripts/mobile-notifications-runtime.js'
       - 'scripts/patch-android-notifications.mjs'
