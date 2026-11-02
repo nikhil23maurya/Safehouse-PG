@@ -78,9 +78,10 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     private void configureSystemBars() {
         Window window = getWindow();
-        window.setStatusBarColor(Color.rgb(8, 12, 21));
-        window.setNavigationBarColor(Color.rgb(8, 12, 21));
-        int flags = 0;
+        window.setStatusBarColor(Color.rgb(255, 255, 255));
+        window.setNavigationBarColor(Color.rgb(255, 255, 255));
+        int flags = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        if (Build.VERSION.SDK_INT >= 26) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
         window.getDecorView().setSystemUiVisibility(flags);
     }
 
@@ -89,15 +90,15 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
         root.setPadding(dp(28), dp(28), dp(28), dp(28));
-        root.setBackgroundColor(Color.rgb(8, 12, 21));
+        root.setBackgroundColor(Color.rgb(246, 247, 249));
 
         TextView mark = new TextView(this);
         mark.setText("⌂");
-        mark.setTextColor(Color.rgb(238, 208, 154));
+        mark.setTextColor(Color.WHITE);
         mark.setTextSize(40);
         mark.setGravity(Gravity.CENTER);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.rgb(33, 38, 57));
+        bg.setColor(Color.rgb(39, 71, 96));
         bg.setCornerRadius(dp(23));
         mark.setBackground(bg);
         LinearLayout.LayoutParams markLp = new LinearLayout.LayoutParams(dp(78), dp(78));
@@ -106,7 +107,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
         TextView name = new TextView(this);
         name.setText("SafeHouse");
-        name.setTextColor(Color.rgb(242, 219, 178));
+        name.setTextColor(Color.rgb(25, 43, 57));
         name.setTextSize(25);
         name.setGravity(Gravity.CENTER);
         name.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
@@ -114,7 +115,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
         TextView tagline = new TextView(this);
         tagline.setText("Rent. Rooms. Residents. Effortlessly.");
-        tagline.setTextColor(Color.rgb(157, 166, 184));
+        tagline.setTextColor(Color.rgb(107, 124, 139));
         tagline.setTextSize(11.5f);
         tagline.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams tagLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -125,7 +126,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     private void createWebView() {
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.rgb(8, 12, 21));
+        webView.setBackgroundColor(Color.rgb(246, 247, 249));
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
