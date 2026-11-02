@@ -598,7 +598,10 @@ student.post("/payments/upi-qr", async (req, res) => {
     }
     // Recheck the PSP first so a delayed webhook never causes a second payment request.
     try { await reconcileQrAttempt(candidate.providerOrderId); }
-    catch (err) { console.warn("QR status could not be reconciled", candidate.providerOrderId); }
+    catch (err) {
+      console.warn("QR status could not be reconciled", candidate.providerOrderId);
+      throw new AppError(503, "QR_RECHECK_REQUIRED", "We are verifying an earlier QR payment. Please retry shortly; do not pay again.");
+    }
     const refreshed = await prisma.rentInvoice.findUnique({ where: { id: invoice.id } });
     if (refreshed && (refreshed.status === "PAID" || refreshed.paidPaise >= refreshed.totalPaise)) {
       throw new AppError(409, "INVOICE_ALREADY_PAID", "This rent payment has already been confirmed");
@@ -638,6 +641,9 @@ student.post("/payments/order", async (req, res) => {
     orderBy: { createdAt: "desc" }
   });
 
+  if (openAttempt?.providerOrderId.startsWith("qr_")) {
+    throw new AppError(409, "UPI_QR_ALREADY_ACTIVE", "A QR payment is already active. Check its status before starting a new payment.");
+  }
   if (openAttempt?.status === "VERIFIED") {
     throw new AppError(409, "PAYMENT_PROCESSING", "A verified payment is waiting for Razorpay confirmation", { orderId: openAttempt.providerOrderId });
   }
