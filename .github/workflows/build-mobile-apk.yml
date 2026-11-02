@@ -28,7 +28,7 @@ permissions:
 
 jobs:
   build-apk:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
 
     steps:
@@ -118,6 +118,14 @@ jobs:
           node scripts/patch-mobile-luxury.mjs
           grep -q 'SAFEHOUSE_LUXURY_CHECKOUT_V1' mobile/app/src/main/assets/index.html
           grep -q 'SAFEHOUSE_LUXURY_V1' mobile/app/src/main/assets/index.html
+          python - <<'PY'
+          from pathlib import Path
+          s = Path('mobile/app/src/main/assets/index.html').read_text(encoding='utf-8')
+          a = s.index('<script>') + len('<script>')
+          b = s.rindex('</script>')
+          Path('/tmp/safehouse-mobile-final.js').write_text(s[a:b], encoding='utf-8')
+          PY
+          node --check /tmp/safehouse-mobile-final.js
 
       - name: Enable AndroidX
         run: printf 'android.useAndroidX=true\nandroid.enableJetifier=true\n' > mobile/gradle.properties
@@ -142,11 +150,17 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
       - name: Install Android SDK components
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "ANDROID_HOME=${ANDROID_HOME:-}" 
+          command -v sdkmanager
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager --install "platforms;android-35" "build-tools;35.0.0"
+          test -f "${ANDROID_HOME}/platforms/android-35/android.jar"
+          test -x "${ANDROID_HOME}/build-tools/35.0.0/aapt2"
+
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
