@@ -1,0 +1,51 @@
+
+/* SAFEHOUSE_ATELIER_PAYMENT_V3: branded checkout, provider-issued QR */
+.sh-pay-open{overflow:hidden!important}
+.sh-pay-overlay{position:fixed;inset:0;z-index:2999;background:rgba(3,5,12,.83);display:flex;align-items:flex-end;justify-content:center;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.sh-pay-container{width:min(100%,520px);background:radial-gradient(circle at 94% 0%,rgba(165,119,66,.13),transparent 38%),linear-gradient(145deg,#181c2d,#0d1320 65%);color:#f7ead4;border:1px solid rgba(232,198,138,.22);border-bottom:0;max-height:94dvh;overflow-y:auto;overscroll-behavior:contain;padding:16px 20px calc(22px + env(safe-area-inset-bottom));border-radius:29px 29px 0 0;box-shadow:0 -26px 72px rgba(0,0,0,.54);animation:shPayUp .45s cubic-bezier(.2,.9,.28,1) both}
+@keyframes shPayUp{from{opacity:.4;transform:translateY(33px)}to{opacity:1;transform:none}}
+.sh-pay-handle{width:40px;height:4px;border-radius:20px;margin:0 auto 19px;background:#50515c}
+.sh-pay-header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.sh-pay-wordmark{display:flex;align-items:center;gap:6px;font-weight:730;letter-spacing:-.4px;font-size:17px;color:#f6e9d3}
+.sh-pay-gold{color:#e9c888;font-weight:640}
+.sh-pay-mark{display:grid;place-items:center;width:30px;height:30px;margin-right:5px;border-radius:10px;background:linear-gradient(135deg,#39354a,#202438);border:1px solid rgba(232,198,141,.28)}
+.sh-pay-mark svg{width:18px;height:18px;color:#f0d8a2}
+.sh-pay-x{background:#24283a;border:1px solid rgba(233,198,146,.13);border-radius:11px;width:35px;height:35px;font-size:21px;color:#e4d1ad;display:grid;place-items:center}
+.sh-pay-amount-label{margin:24px 0 7px;font-size:10px;text-transform:uppercase;color:#c2a271;font-weight:720;letter-spacing:.16em}
+.sh-pay-amount{font-size:36px;color:#ffe8b9;letter-spacing:-1.5px;font-weight:740;line-height:1.1}
+.sh-pay-identity{color:#abb1be;font-size:11.5px;margin-top:8px}
+.sh-pay-tabs{margin:22px 0 15px;padding:4px;display:grid;grid-template-columns:1fr 1fr;gap:4px;background:#0a111d;border:1px solid rgba(220,195,150,.11);border-radius:15px}
+.sh-pay-tabs button{height:44px;display:flex;align-items:center;justify-content:center;gap:8px;border:0;border-radius:11px;color:#939eaf;background:transparent;font-size:12px;font-weight:690}
+.sh-pay-tabs button.active{color:#f8dda6;background:#262939;border:1px solid rgba(232,203,150,.17);box-shadow:0 3px 12px rgba(0,0,0,.2)}
+.sh-pay-tabs svg,.sh-pay-row svg,.sh-pay-app-actions svg,.sh-pay-security svg{width:17px;height:17px}
+.sh-pay-qr-card{padding:20px 14px;border:1px solid rgba(219,192,150,.19);border-radius:22px;background:linear-gradient(135deg,#191e2f,#111726);display:flex;align-items:center;flex-direction:column}
+.sh-pay-qr-frame{width:228px;height:228px;background:#fff;border:9px solid #fff;border-radius:18px;display:flex;justify-content:center;align-items:center;overflow:hidden}
+.sh-pay-qr-frame img{height:100%;width:100%;object-fit:contain;image-rendering:auto}
+.sh-pay-qr-meta{text-align:center;margin-top:15px}
+.sh-pay-qr-meta strong{display:block;color:#f6dca6;font-size:21px;font-weight:730}
+.sh-pay-qr-meta span{font-size:10px;color:#a8afba;display:block;margin-top:4px}
+.sh-pay-instruction{color:#afb6bf;font-size:11px;line-height:1.65;text-align:center;margin:14px auto;max-width:315px}
+.sh-pay-row{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:7px}
+.sh-pay-tertiary{width:100%;border-radius:13px;padding:13px 9px;min-height:45px;background:#24283a;border:1px solid rgba(226,194,145,.14);color:#edd9b5;display:flex;align-items:center;justify-content:center;gap:7px;font-size:11.5px;font-weight:670}
+.sh-pay-tertiary:active{transform:scale(.98)}
+.sh-pay-app-intro{border:1px solid rgba(223,193,145,.14);background:linear-gradient(150deg,#1a2130,#131826);padding:22px;border-radius:21px;text-align:center}
+.sh-pay-app-badge{width:54px;height:54px;display:grid;place-items:center;border-radius:18px;background:#333040;color:#edc98b;margin:0 auto 13px}
+.sh-pay-app-badge svg{width:26px;height:26px}
+.sh-pay-app-intro h3{font-size:17px;letter-spacing:-.4px;color:#f7e2bb;margin:0 0 9px}
+.sh-pay-app-intro p{font-size:11.5px;line-height:1.65;color:#aeb4bf;margin:0}
+.sh-pay-app-intro strong{color:#e2c895}
+.sh-pay-app-actions{display:grid;gap:9px;margin-top:13px}
+.sh-pay-caveat{font-size:10.5px;color:#919aaa;line-height:1.6;margin:12px 0}
+.sh-pay-foot{display:flex;align-items:center;gap:8px;font-size:10.5px;margin:17px 0 11px;min-height:28px;color:#aeb5bf}
+.sh-pay-dot{flex:0 0 auto;width:7px;height:7px;border-radius:50%;background:#e5c189;box-shadow:0 0 12px rgba(229,193,137,.4);animation:shGlow 2.5s infinite}
+#sh-pay-status{flex:1}
+#sh-pay-refresh{background:#312c35;border:1px solid rgba(225,185,121,.22);padding:8px;border-radius:10px;color:#ebc38d;font-size:10px;font-weight:700}
+.sh-pay-security{border-top:1px solid rgba(223,190,139,.11);padding-top:13px;display:flex;align-items:flex-start;gap:7px;font-size:10px;color:#87919f;line-height:1.5}
+.sh-pay-security svg{flex:0 0 auto;color:#c8aa77}
+.sh-pay-loader{text-align:center;min-height:254px;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;color:#aeb5bc}
+.sh-pay-loader p{font-size:11.5px;color:#aeb5bc}
+.sh-pay-error{text-align:center;padding:28px 15px;border:1px solid rgba(233,148,152,.22);background:#241b29;border-radius:20px}
+.sh-pay-error h3{font-size:17px;color:#f6d9ae;margin:9px 0}
+.sh-pay-error p{font-size:11.5px;line-height:1.55;color:#bbc1c8;margin-bottom:17px}
+@media(max-width:390px){.sh-pay-container{padding-left:14px;padding-right:14px}.sh-pay-qr-frame{width:197px;height:197px}.sh-pay-amount{font-size:33px}}
+@media(prefers-reduced-motion:reduce){.sh-pay-container,.sh-pay-dot{animation:none!important}}
