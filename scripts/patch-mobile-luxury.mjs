@@ -2,7 +2,7 @@ import fs from 'node:fs';
 const target='mobile/app/src/main/assets/index.html';
 let html=fs.readFileSync(target,'utf8');
 if(html.includes('SAFEHOUSE_LUXURY_V1')){console.log('Luxury skin already installed');process.exit(0);}
-const css=fs.readFileSync('scripts/safehouse-luxury.css','utf8');
+const css=fs.readFileSync('scripts/safehouse-luxury-v1.css','utf8');
 if(!html.includes('</style>')||!html.includes('</script>'))throw new Error('Missing SafeHouse mobile HTML boundaries');
 html=html.replace('</style>',css+'\n</style>');
 const addon=`
