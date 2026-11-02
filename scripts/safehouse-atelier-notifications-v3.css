@@ -33,3 +33,16 @@
 .toast{z-index:3200!important}
 #modal-root{position:relative;z-index:3150}
 @media(prefers-reduced-motion:reduce){.skeleton-page .sk-line,.skeleton-page .sk-card{animation:none!important}}
+
+/* Gold-only verified payment completion, including legacy success renderer */
+.payment-state-inner{max-width:410px!important;color:#f4e5c7!important}
+.success-ring{filter:drop-shadow(0 0 34px rgba(215,176,109,.2))!important}
+.success-check{background:linear-gradient(140deg,#e7d09e,#b48c51)!important;box-shadow:0 0 45px rgba(219,180,106,.19)!important;border-color:rgba(248,216,161,.3)!important}
+.success-check:after{border-color:#161923!important}
+.success-amount{font-size:34px!important;color:#f7d89d!important;letter-spacing:-1px!important}
+.success-meta{background:#1b2030!important;border-color:rgba(221,185,128,.19)!important;color:#d3c8b1!important;border-radius:17px!important}
+.success-meta strong{color:#edd092!important}
+.confetti i{background:#e5bf7f!important}
+.confirm-orbit{border-color:#373347!important;border-top-color:#e8c68c!important}
+.confirm-orbit:after{background:#211f2c!important;color:#ecc88d!important}
+.payment-state .btn.primary{background:linear-gradient(110deg,#f1d5a0,#caa46b)!important}
