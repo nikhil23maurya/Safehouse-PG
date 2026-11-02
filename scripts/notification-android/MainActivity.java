@@ -78,10 +78,9 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     private void configureSystemBars() {
         Window window = getWindow();
-        window.setStatusBarColor(Color.WHITE);
-        window.setNavigationBarColor(Color.WHITE);
-        int flags = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
-        if (Build.VERSION.SDK_INT >= 26) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
+        window.setStatusBarColor(Color.rgb(8, 12, 21));
+        window.setNavigationBarColor(Color.rgb(8, 12, 21));
+        int flags = 0;
         window.getDecorView().setSystemUiVisibility(flags);
     }
 
@@ -90,15 +89,15 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
         root.setPadding(dp(28), dp(28), dp(28), dp(28));
-        root.setBackgroundColor(Color.WHITE);
+        root.setBackgroundColor(Color.rgb(8, 12, 21));
 
         TextView mark = new TextView(this);
         mark.setText("⌂");
-        mark.setTextColor(Color.WHITE);
+        mark.setTextColor(Color.rgb(238, 208, 154));
         mark.setTextSize(40);
         mark.setGravity(Gravity.CENTER);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.rgb(36, 99, 235));
+        bg.setColor(Color.rgb(33, 38, 57));
         bg.setCornerRadius(dp(23));
         mark.setBackground(bg);
         LinearLayout.LayoutParams markLp = new LinearLayout.LayoutParams(dp(78), dp(78));
@@ -107,7 +106,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
         TextView name = new TextView(this);
         name.setText("SafeHouse");
-        name.setTextColor(Color.rgb(23, 32, 51));
+        name.setTextColor(Color.rgb(242, 219, 178));
         name.setTextSize(25);
         name.setGravity(Gravity.CENTER);
         name.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
@@ -115,7 +114,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
         TextView tagline = new TextView(this);
         tagline.setText("Rent. Rooms. Residents. Effortlessly.");
-        tagline.setTextColor(Color.rgb(133, 144, 160));
+        tagline.setTextColor(Color.rgb(157, 166, 184));
         tagline.setTextSize(11.5f);
         tagline.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams tagLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -126,7 +125,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     private void createWebView() {
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.rgb(247, 248, 251));
+        webView.setBackgroundColor(Color.rgb(8, 12, 21));
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -293,6 +292,85 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         }
 
         @JavascriptInterface public void openExternal(String url) { runOnUiThread(() -> MainActivity.this.openExternal(url)); }
+
+        // SAFEHOUSE_ATELIER_UPI_NATIVE_V3
+        // Save the provider-issued QR without redirecting to a branded payment website.
+        @JavascriptInterface
+        public void savePaymentQr(String imageUrl) {
+            runOnUiThread(() -> {
+                try {
+                    Uri uri = Uri.parse(imageUrl == null ? "" : imageUrl);
+                    String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(java.util.Locale.ROOT);
+                    if (!"https".equalsIgnoreCase(uri.getScheme()) ||
+                        !("rzp.io".equals(host) || host.endsWith(".razorpay.com") || "razorpay.com".equals(host))) {
+                        Toast.makeText(MainActivity.this, "Invalid payment QR provider", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    DownloadManager.Request request = new DownloadManager.Request(uri);
+                    request.setTitle("SafeHouse Rent UPI QR");
+                    request.setDescription("Save this payment QR and use Scan from Gallery in your UPI app");
+                    request.setMimeType("image/png");
+                    request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                    request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
+                        "SafeHouse-UPI-QR-" + System.currentTimeMillis() + ".png");
+                    DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                    dm.enqueue(request);
+                    Toast.makeText(MainActivity.this, "QR download started. Open your UPI app and scan from gallery.", Toast.LENGTH_LONG).show();
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this, "QR could not be saved. Try using another device.", Toast.LENGTH_LONG).show();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void openUpiApp() {
+            runOnUiThread(() -> {
+                try {
+                    String[] packages = {
+                        "com.google.android.apps.nbu.paisa.user",
+                        "com.phonepe.app",
+                        "net.one97.paytm",
+                        "in.org.npci.upiapp",
+                        "in.amazon.mShop.android.shopping",
+                        "com.dreamplug.androidapp"
+                    };
+                    java.util.ArrayList<Intent> targets = new java.util.ArrayList<>();
+                    for (String p : packages) {
+                        Intent launch = getPackageManager().getLaunchIntentForPackage(p);
+                        if (launch != null) targets.add(launch);
+                    }
+                    if (targets.isEmpty()) {
+                        Toast.makeText(MainActivity.this, "No supported UPI app was found", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    Intent first = targets.remove(0);
+                    Intent chooser = Intent.createChooser(first, "Open your UPI app to scan saved QR");
+                    if (!targets.isEmpty()) chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, targets.toArray(new Intent[0]));
+                    startActivity(chooser);
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this, "Could not launch a UPI app", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void openVerifiedUpiIntent(String paymentUri) {
+            runOnUiThread(() -> {
+                try {
+                    Uri uri = Uri.parse(paymentUri == null ? "" : paymentUri);
+                    if (!"upi".equalsIgnoreCase(uri.getScheme()) || !"pay".equalsIgnoreCase(uri.getHost()) ||
+                        uri.getQueryParameter("pa") == null || uri.getQueryParameter("am") == null) {
+                        Toast.makeText(MainActivity.this, "Invalid UPI payment link", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    Intent request = new Intent(Intent.ACTION_VIEW, uri);
+                    startActivity(Intent.createChooser(request, "Pay with UPI"));
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this, "Unable to open UPI payment link", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+
 
         @JavascriptInterface
         public void configureNotifications(String configJson) {

@@ -1,0 +1,48 @@
+/* SafeHouse Atelier: communication studio, every form/state */
+.notify-hero{background:radial-gradient(circle at 96% 0,rgba(222,170,103,.16),transparent 42%),linear-gradient(130deg,#24253a,#131a29)!important;border:1px solid rgba(232,190,125,.22)!important;border-radius:23px!important;padding:22px!important}
+.notify-hero h2{color:#f7e5c8!important;font-weight:710!important;letter-spacing:-.55px!important;font-size:18px!important}
+.notify-hero p,.notify-help,.notify-audience-note{color:#9faabb!important;font-size:11.5px!important;line-height:1.6!important}
+.notify-orb,.notify-preview-icon{background:#343044!important;color:#e9c992!important;border-radius:14px!important}
+.notify-segment{background:#111724!important;border:1px solid rgba(223,194,144,.14)!important;padding:4px!important;border-radius:14px!important}
+.notify-segment button{color:#9da9b6!important;border-radius:11px!important}
+.notify-segment button.active{background:#302d3a!important;border:1px solid rgba(232,190,132,.19)!important;color:#f4d69b!important}
+.notify-card{background:linear-gradient(140deg,#1c2131,#121827)!important;border-radius:23px!important}
+.notify-preview{background:linear-gradient(145deg,#2d2a39,#1b2230)!important;border:1px solid rgba(223,198,156,.16)!important;border-radius:18px!important;padding:16px!important}
+.notify-preview-head{color:#bdb7ab!important}
+.notify-preview b{color:#f7e4c2!important}
+.notify-preview p{color:#b6bdc6!important}
+.notify-template{border:1px solid rgba(228,199,151,.14)!important;background:#242637!important;color:#d6c6a8!important;border-radius:99px!important}
+.notify-student-picker{background:#141a2a!important;border:1px solid rgba(221,188,134,.13)!important;border-radius:16px!important}
+.notify-student-check{border-color:rgba(231,200,145,.11)!important;color:#ece2d0!important}
+.notify-student-check small{color:#98a2b2!important}
+.notify-count,.notify-inline-status{color:#d7bd8e!important}
+.campaign-card{background:linear-gradient(142deg,#1b2131,#121825)!important;border:1px solid rgba(232,201,145,.14)!important}
+.campaign-card b{color:#f2dfbd!important}
+.campaign-card p,.campaign-meta{color:#a3adba!important}
+.push-setup,.push-ready{background:#25212e!important;color:#d6c4ab!important;border:1px solid rgba(226,194,142,.18)!important;border-radius:15px!important;padding:13px!important}
+.notify-hero-top svg{color:#e4c48c!important}
+.notification-page .page-head h1{color:#fff0d3!important}
+[data-modal] .field{margin-bottom:17px}
+[data-modal] .input,[data-modal] .select,[data-modal] .textarea{min-height:48px}
+#student-form,#room-form,#property-form,#new-property-form,#password-form,#reset-student-form{color:#f6e6cc!important}
+#student-form input[type="date"],#notification-form input[type="date"],#notification-form input[type="time"]{color-scheme:dark}
+#notification-form textarea{height:128px!important;resize:vertical!important}
+#student-form .two-col{gap:12px!important}
+#student-form .btn,#password-form .btn,#room-form .btn{width:100%}
+.skeleton-page .sk-line,.skeleton-page .sk-card{background:linear-gradient(110deg,#1c2333,#33344b,#1c2333)!important;background-size:220% 100%!important;animation:shShimmer 1.7s ease-in-out infinite!important}
+.toast{z-index:3200!important}
+#modal-root{position:relative;z-index:3150}
+@media(prefers-reduced-motion:reduce){.skeleton-page .sk-line,.skeleton-page .sk-card{animation:none!important}}
+
+/* Gold-only verified payment completion, including legacy success renderer */
+.payment-state-inner{max-width:410px!important;color:#f4e5c7!important}
+.success-ring{filter:drop-shadow(0 0 34px rgba(215,176,109,.2))!important}
+.success-check{background:linear-gradient(140deg,#e7d09e,#b48c51)!important;box-shadow:0 0 45px rgba(219,180,106,.19)!important;border-color:rgba(248,216,161,.3)!important}
+.success-check:after{border-color:#161923!important}
+.success-amount{font-size:34px!important;color:#f7d89d!important;letter-spacing:-1px!important}
+.success-meta{background:#1b2030!important;border-color:rgba(221,185,128,.19)!important;color:#d3c8b1!important;border-radius:17px!important}
+.success-meta strong{color:#edd092!important}
+.confetti i{background:#e5bf7f!important}
+.confirm-orbit{border-color:#373347!important;border-top-color:#e8c68c!important}
+.confirm-orbit:after{background:#211f2c!important;color:#ecc88d!important}
+.payment-state .btn.primary{background:linear-gradient(110deg,#f1d5a0,#caa46b)!important}

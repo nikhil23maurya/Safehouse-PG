@@ -18,7 +18,7 @@ fs.mkdirSync(drawableDir, { recursive: true });
 fs.copyFileSync(path.join(templateDir, 'ic_notification.xml'), path.join(drawableDir, 'ic_notification.xml'));
 
 let gradle = fs.readFileSync(gradleFile, 'utf8');
-gradle = gradle.replace(/versionCode\s+\d+/, 'versionCode 21').replace(/versionName\s+'[^']+'/, "versionName '2.1.0'");
+gradle = gradle.replace(/versionCode\s+\d+/, 'versionCode 22').replace(/versionName\s+'[^']+'/, "versionName '3.0.0'");
 if (!gradle.includes('SAFEHOUSE_NOTIFICATIONS_ANDROID_V1')) {
   gradle = gradle.replace(/dependencies\s*\{([\s\S]*?)\n\}/, (match, body) => `dependencies {${body}\n    // SAFEHOUSE_NOTIFICATIONS_ANDROID_V1\n    implementation platform('com.google.firebase:firebase-bom:34.17.0')\n    implementation 'com.google.firebase:firebase-messaging'\n}`);
 }
@@ -30,6 +30,15 @@ const manifest = `<?xml version="1.0" encoding="utf-8"?>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="28" />
+    <!-- Visible only to detect installed supported UPI applications. -->
+    <queries>
+        <package android:name="com.google.android.apps.nbu.paisa.user" />
+        <package android:name="com.phonepe.app" />
+        <package android:name="net.one97.paytm" />
+        <package android:name="in.org.npci.upiapp" />
+        <package android:name="in.amazon.mShop.android.shopping" />
+        <package android:name="com.dreamplug.androidapp" />
+    </queries>
 
     <application
         android:allowBackup="false"
