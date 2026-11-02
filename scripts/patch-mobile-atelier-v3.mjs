@@ -11,9 +11,9 @@ if(!layouts.includes('SAFEHOUSE_ATELIER_V3') || !checkout.includes('SAFEHOUSE_QR
 html=html.replace('</style>','\n'+styles+'\n</style>');
 // The existing workflow inserted boot() before our patch. Move invocation to
 // the very end so all redesigned screens and SafeHouse Pay handlers are installed first.
-const bootMarker='\\nboot();\\n';
+const bootMarker=String.fromCharCode(10)+'boot();'+String.fromCharCode(10);
 if(!html.includes(bootMarker))throw new Error('SafeHouse Atelier: expected boot() entrypoint missing');
-html=html.replace(bootMarker,'\\n');
+html=html.replace(bootMarker,String.fromCharCode(10));
 html=html.replace('</script>', '\n/* SAFEHOUSE_ATELIER_V3 installed */\n'+layouts+'\n'+checkout+'\nboot();\n</script>');
 fs.writeFileSync(file,html);
 console.log('SafeHouse Atelier v3: entire app layouts and provider-verified branded payments installed');
