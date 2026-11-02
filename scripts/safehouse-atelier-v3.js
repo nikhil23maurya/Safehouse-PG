@@ -77,7 +77,7 @@
     const d=S.studentDashboard||{},st=d.student||S.student||{},inv=d.currentInvoice,paid=inv?.status==='PAID';
     const name=esc((st.name||S.user?.fullName||'Resident').split(' ')[0]);
     const room=st.room?.number?'Room '+esc(st.room.number):'Your resident suite';
-    const intro=heading('RESIDENT DASHBOARD','Hello, '+name',room+(st.bedLabel?' · Bed '+esc(st.bedLabel):''));
+    const intro=heading('RESIDENT DASHBOARD','Hello, '+name,room+(st.bedLabel?' · Bed '+esc(st.bedLabel):''));
     const hero=inv?'<section class="sh-overview sh-stagger"><div class="sh-overview-label">'+periodLabel(inv)+' rent</div><div class="sh-overview-head"><div><div class="sh-overview-amount">'+(paid?'Paid in full':money(inv.remainingPaise??inv.totalPaise))+'</div><div class="sh-overview-sub">'+(paid?'Your rent is settled.': 'Due '+esc(dateFmt(inv.dueDate)))+'</div></div><span class="sh-badge">'+(paid?'SETTLED':'PAYMENT DUE')+'</span></div><div class="sh-detail-separator"></div><button class="sh-action-primary" data-route="'+(paid?'history':'pay')+'">'+(paid?'View receipt':'Pay rent securely')+' '+glyph(paid?'receipt':'right')+'</button></section>':
     '<section class="sh-panel sh-stagger">'+emptyState('calendar','All clear for now','Your monthly rent statement will appear here once generated.')+'</section>';
     const metrics='<div class="sh-invoice-grid sh-stagger">'+metric(esc(st.room?.number||'—'),'Your room','bed')+metric(money(st.securityDepositPaise),'Security deposit','shield')+'</div>';
