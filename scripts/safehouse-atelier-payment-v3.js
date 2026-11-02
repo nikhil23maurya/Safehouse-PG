@@ -15,9 +15,14 @@
     if(!holder)return;
     const x=current?.qr;
     if(!x){holder.innerHTML='<div class="sh-pay-loader"><div class="spinner"></div><p>Creating your secure, one-time rent QR…</p></div>';return}
-    holder.innerHTML='<div class="sh-pay-qr-card"><div class="sh-pay-qr-frame"><img src="'+esc(x.imageUrl)+'" alt="Invoice-linked UPI payment QR" loading="eager" onerror="this.style.display='none';this.parentNode.textContent='QR image could not load. Check your internet and refresh.'"></div><div class="sh-pay-qr-meta"><strong>'+fmt(x.amountPaise)+'</strong><span>Invoice-linked · Single use</span></div></div>'+
+    holder.innerHTML='<div class="sh-pay-qr-card"><div class="sh-pay-qr-frame"><img src="'+esc(x.imageUrl)+'" alt="Invoice-linked UPI payment QR" loading="eager"></div><div class="sh-pay-qr-meta"><strong>'+fmt(x.amountPaise)+'</strong><span>Invoice-linked · Single use</span></div></div>'+
     '<p class="sh-pay-instruction">Scan from another phone, or save the QR and open it from your UPI app gallery. Your rent updates after confirmed payment.</p>'+
     '<div class="sh-pay-row"><button class="sh-pay-tertiary" data-shpay-save>'+ico('download')+' Save QR</button><button class="sh-pay-tertiary" data-shpay-tab="app">'+ico('wallet')+' Use this phone</button></div>';
+    const image=holder.querySelector('.sh-pay-qr-frame img');
+    if(image)image.addEventListener('error',()=>{
+      const frame=holder.querySelector('.sh-pay-qr-frame');
+      if(frame){frame.textContent='QR image could not load. Check your internet connection.';frame.style.padding='18px';}
+    });
   }
   function renderApps(){
     const holder=modal()?.querySelector('#sh-pay-view');if(!holder)return;
