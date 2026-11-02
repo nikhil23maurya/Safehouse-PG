@@ -354,6 +354,78 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
             });
         }
 
+
+        /**
+         * SAFEHOUSE_NATIVE_QR_UPI_V4
+         * Decode only a Razorpay-generated QR image, validate the exact rupee
+         * amount against the invoice, then let Android launch the UPI app.
+         * App return results never credit rent: only backend capture can do that.
+         */
+        @JavascriptInterface
+        public void openQrInUpiApp(String imageUrl, int amountPaise) {
+            new Thread(() -> {
+                try {
+                    Uri imageUri = Uri.parse(imageUrl == null ? "" : imageUrl);
+                    String h = imageUri.getHost() == null ? "" : imageUri.getHost().toLowerCase(java.util.Locale.ROOT);
+                    if (!"https".equalsIgnoreCase(imageUri.getScheme()) ||
+                        !("rzp.io".equals(h) || "razorpay.com".equals(h) || h.endsWith(".razorpay.com"))) {
+                        throw new IllegalArgumentException("Unrecognised QR provider");
+                    }
+                    if (amountPaise < 100 || amountPaise > 100000000) {
+                        throw new IllegalArgumentException("Invalid payment amount");
+                    }
+                    java.net.HttpURLConnection conn = (java.net.HttpURLConnection)
+                        new java.net.URL(imageUri.toString()).openConnection();
+                    conn.setConnectTimeout(9000);
+                    conn.setReadTimeout(9000);
+                    conn.setInstanceFollowRedirects(true);
+                    android.graphics.Bitmap bmp;
+                    try (java.io.InputStream stream = conn.getInputStream()) {
+                        bmp = android.graphics.BitmapFactory.decodeStream(stream);
+                    } finally { conn.disconnect(); }
+                    if (bmp == null || bmp.getWidth() < 80 || bmp.getHeight() < 80 ||
+                        ((long)bmp.getWidth()) * bmp.getHeight() > 4000000) {
+                        throw new IllegalArgumentException("QR image unavailable");
+                    }
+                    int width = bmp.getWidth(), height = bmp.getHeight();
+                    int[] pixels = new int[width * height];
+                    bmp.getPixels(pixels, 0, width, 0, 0, width, height);
+                    bmp.recycle();
+                    com.google.zxing.BinaryBitmap binary = new com.google.zxing.BinaryBitmap(
+                        new com.google.zxing.common.HybridBinarizer(
+                            new com.google.zxing.RGBLuminanceSource(width, height, pixels)));
+                    String encoded = new com.google.zxing.qrcode.QRCodeReader().decode(binary).getText();
+                    Uri payment = Uri.parse(encoded);
+                    if (!"upi".equalsIgnoreCase(payment.getScheme()) ||
+                        !"pay".equalsIgnoreCase(payment.getHost()) ||
+                        payment.getQueryParameter("pa") == null ||
+                        payment.getQueryParameter("pa").isEmpty()) {
+                        throw new IllegalArgumentException("QR is not a valid UPI payment");
+                    }
+                    String currency = payment.getQueryParameter("cu");
+                    if (currency != null && !"INR".equalsIgnoreCase(currency)) {
+                        throw new IllegalArgumentException("Unexpected currency");
+                    }
+                    String amount = payment.getQueryParameter("am");
+                    if (amount == null || amount.isEmpty()) throw new IllegalArgumentException("UPI QR is missing fixed amount");
+                    java.math.BigDecimal paise = new java.math.BigDecimal(amount).multiply(new java.math.BigDecimal(100));
+                    if (paise.intValueExact() != amountPaise) throw new IllegalArgumentException("QR amount mismatch");
+                    runOnUiThread(() -> {
+                        try {
+                            Intent intent = new Intent(Intent.ACTION_VIEW, payment);
+                            startActivity(Intent.createChooser(intent, "Pay rent with UPI"));
+                        } catch (Exception e) {
+                            callJs("window.SafeHouseUpiError && window.SafeHouseUpiError(" +
+                                q("No UPI app could open the payment. Use the saved QR instead.") + ");");
+                        }
+                    });
+                } catch (Exception e) {
+                    callJs("window.SafeHouseUpiError && window.SafeHouseUpiError(" +
+                        q("Direct UPI could not start. Save the QR and scan it from your UPI app gallery.") + ");");
+                }
+            }).start();
+        }
+
         @JavascriptInterface
         public void openVerifiedUpiIntent(String paymentUri) {
             runOnUiThread(() -> {
