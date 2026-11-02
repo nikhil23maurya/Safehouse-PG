@@ -74,7 +74,11 @@
           else {navigate('studentHome',{},true);toast('Rent was settled through another payment','success')}
           return;
         }
-        if(r.attemptStatus==='FAILED'){status('Payment failed or expired. Please refresh your QR.',true);return}
+        if(r.attemptStatus==='FAILED'){
+          status('The QR expired or the payment was not completed. Refresh the QR to retry.',true);
+          const refresh=modal()?.querySelector('#sh-pay-refresh');if(refresh)refresh.hidden=false;
+          return
+        }
         if(Number(current.qr.expiresAt)>0 && Date.now()>Number(current.qr.expiresAt)*1000){
           status('QR expired. Tap Refresh QR to create a new one.',true);
           const b=modal()?.querySelector('#sh-pay-refresh');if(b)b.hidden=false;
