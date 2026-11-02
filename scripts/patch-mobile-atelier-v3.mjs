@@ -4,7 +4,7 @@ const file='mobile/app/src/main/assets/index.html';
 let html=fs.readFileSync(file,'utf8');
 if(html.includes('SAFEHOUSE_ATELIER_V3')){console.log('SafeHouse Atelier v3 already installed');process.exit(0)}
 if(!html.includes('</style>')||!html.includes('</script>'))throw new Error('SafeHouse Atelier: HTML boundaries missing');
-const styles=['scripts/safehouse-atelier-v3.css','scripts/safehouse-atelier-payment-v3.css','scripts/safehouse-atelier-notifications-v3.css'].map(p=>fs.readFileSync(p,'utf8')).join('\n');
+const styles=['scripts/safehouse-atelier-v3.css','scripts/safehouse-atelier-payment-v3.css','scripts/safehouse-atelier-notifications-v3.css','scripts/safehouse-professional-v4.css'].map(p=>fs.readFileSync(p,'utf8')).join('\n');
 const layouts=fs.readFileSync('scripts/safehouse-atelier-v3.js','utf8');
 const checkout=fs.readFileSync('scripts/safehouse-atelier-payment-v3.js','utf8');
 if(!layouts.includes('SAFEHOUSE_ATELIER_V3') || !checkout.includes('SAFEHOUSE_QR_CHECKOUT_V3'))throw new Error('SafeHouse Atelier: JS markers missing');

@@ -43,13 +43,13 @@
   renderLogin=function(role='OWNER'){
     const owner=role==='OWNER'; S.params.role=role;
     const content='<main class="login-page"><div class="login-wrap"><div class="sh-stage">'+
-    '<div class="sh-login-art sh-stagger">'+mark()+'<div class="sh-brand-name">SafeHouse<span style="color:#e1ba79">.</span></div><span class="sh-brand-caption">A better way to feel at home</span></div>'+
-    '<div class="sh-heading sh-stagger" style="text-align:center;margin-top:29px"><div class="sh-page-overline">PRIVATE RESIDENTIAL SUITE</div><h1 class="sh-h1">Your space, <span style="color:#e3c58e">beautifully managed.</span></h1><p class="sh-sub">A considered experience for property owners and residents.</p></div>'+
+    '<div class="sh-login-art sh-stagger">'+mark()+'<div class="sh-brand-name">SafeHouse<span style="color:#e1ba79">.</span></div><span class="sh-brand-caption">Property and resident management</span></div>'+
+    '<div class="sh-heading sh-stagger" style="text-align:center;margin-top:29px"><div class="sh-page-overline">SAFEHOUSE</div><h1 class="sh-h1">Manage your property with confidence.</h1><p class="sh-sub">Secure access for owners and residents.</p></div>'+
     '<section class="login-card sh-login-form sh-stagger"><div class="segmented"><button type="button" class="'+(owner?'active':'')+'" data-login-role="OWNER">Property owner</button><button type="button" class="'+(!owner?'active':'')+'" data-login-role="STUDENT">Resident</button></div>'+
     '<form id="login-form" data-role="'+esc(role)+'">'+
     '<div class="field"><label for="sh-email">EMAIL ADDRESS</label><div class="input-wrap"><span class="input-icon">'+glyph('mail')+'</span><input id="sh-email" class="input" name="email" type="email" autocomplete="username" placeholder="name@example.com" required></div></div>'+
     '<div class="field"><label for="login-password">PASSWORD</label><div class="input-wrap"><span class="input-icon">'+glyph('lock')+'</span><input id="login-password" class="input" name="password" type="password" autocomplete="current-password" placeholder="Your private password" required><button class="input-right" type="button" aria-label="Show or hide password" data-action="toggle-password">'+glyph('eye')+'</button></div></div>'+
-    '<button class="sh-action-primary" type="submit">'+(owner?'Enter owner suite':'Enter resident suite')+' '+glyph('right')+'</button></form></section>'+
+    '<button class="sh-action-primary" type="submit">'+(owner?'Sign in as owner':'Sign in as resident')+' '+glyph('right')+'</button></form></section>'+
     '<div class="sh-security-foot sh-stagger">'+glyph('shield')+' Secure private access · SafeHouse</div>'+
     '<div class="login-credit sh-stagger">Crafted with care by <strong>Nikhil Maurya</strong></div></div></div></main>';
     $('#app').innerHTML=content;
@@ -62,11 +62,11 @@
     const ring='<div class="sh-ring"><svg viewBox="0 0 100 100" aria-label="'+pct+' percent collected"><circle class="sh-ring-track" cx="50" cy="50" r="43"/><circle class="sh-ring-value" cx="50" cy="50" r="43" style="--ring-off:'+ringOffset+'"/></svg><span>'+pct+'%</span></div>';
     const property=esc(d.property?.name||S.property?.name||'SafeHouse PG');
     const months='<div class="month-nav" style="margin-top:13px"><button aria-label="Previous month" data-action="period-prev">‹</button><span>'+periodLabel(p)+'</span><button aria-label="Next month" data-action="period-next">›</button></div>';
-    const intro=heading('THE PROPERTY SUITE','Welcome back, '+name+' <span style="color:#e2ba79">✦</span>',
+    const intro=heading('OVERVIEW','Welcome back, '+name,
       '<button class="property-switch" data-action="properties"><b>'+property+'</b>'+glyph('down')+'</button>',months);
-    const hero='<section class="sh-overview sh-stagger"><div class="sh-overview-label">Collected this month</div><div class="sh-overview-head"><div><div class="sh-overview-amount">'+money(m.totalCollectedPaise)+'</div><div class="sh-overview-sub">of '+money(m.totalExpectedPaise)+' expected</div></div>'+ring+'</div><div class="sh-track"><span style="width:'+pct+'%"></span></div><div class="sh-overview-foot"><div class="sh-balance">Awaiting collection<strong>'+money(m.pendingTotalPaise)+'</strong></div><span class="sh-badge">LIVE OVERVIEW</span></div></section>';
+    const hero='<section class="sh-overview sh-stagger"><div class="sh-overview-label">Collected this month</div><div class="sh-overview-head"><div><div class="sh-overview-amount">'+money(m.totalCollectedPaise)+'</div><div class="sh-overview-sub">of '+money(m.totalExpectedPaise)+' expected</div></div>'+ring+'</div><div class="sh-track"><span style="width:'+pct+'%"></span></div><div class="sh-overview-foot"><div class="sh-balance">Awaiting collection<strong>'+money(m.pendingTotalPaise)+'</strong></div><span class="sh-badge">THIS MONTH</span></div></section>';
     const metrics='<div class="sh-metrics sh-stagger">'+metric(Number(m.totalStudents)||0,'Total residents','users')+metric(Number(m.paidStudents)||0,'Rent paid','checkcircle')+metric(Number(m.pendingStudents)||0,'Awaiting payment','calendar')+metric(Number(m.vacantBeds)||0,'Available beds','bed')+'</div>';
-    const actions=section('Your workspace','', '<div class="sh-actions">'+quick('studentForm','plus','Add resident')+quick('rooms','bed','Manage rooms')+quick('dues','alert','Collect dues')+'</div>');
+    const actions=section('Quick actions','', '<div class="sh-actions">'+quick('studentForm','plus','Add resident')+quick('rooms','bed','Manage rooms')+quick('dues','alert','Collect dues')+'</div>');
     const pending=Number(m.pendingStudents)||0,overdue=Number(m.overdueStudents)||0;
     const attention=section('Needs your attention','<button class="text-link" data-route="dues">Review all</button>',
       '<div class="sh-notice">'+glyph(pending?'alert':'checkcircle')+'<div><b>'+(pending?overdue+' overdue · '+pending+' awaiting payment':'Everything is up to date')+'</b><p>'+(pending?'Outstanding: '+money(m.pendingTotalPaise)+'. Review and send reminders.':'No outstanding rent needs attention this month.')+'</p></div></div>');
@@ -77,7 +77,7 @@
     const d=S.studentDashboard||{},st=d.student||S.student||{},inv=d.currentInvoice,paid=inv?.status==='PAID';
     const name=esc((st.name||S.user?.fullName||'Resident').split(' ')[0]);
     const room=st.room?.number?'Room '+esc(st.room.number):'Your resident suite';
-    const intro=heading('YOUR PRIVATE RESIDENT SUITE','Good to see you, '+name+' <span style="color:#e7c48c">✦</span>',room+(st.bedLabel?' · Bed '+esc(st.bedLabel):''));
+    const intro=heading('RESIDENT DASHBOARD','Hello, '+name,room+(st.bedLabel?' · Bed '+esc(st.bedLabel):''));
     const hero=inv?'<section class="sh-overview sh-stagger"><div class="sh-overview-label">'+periodLabel(inv)+' rent</div><div class="sh-overview-head"><div><div class="sh-overview-amount">'+(paid?'Paid in full':money(inv.remainingPaise??inv.totalPaise))+'</div><div class="sh-overview-sub">'+(paid?'Your rent is settled.': 'Due '+esc(dateFmt(inv.dueDate)))+'</div></div><span class="sh-badge">'+(paid?'SETTLED':'PAYMENT DUE')+'</span></div><div class="sh-detail-separator"></div><button class="sh-action-primary" data-route="'+(paid?'history':'pay')+'">'+(paid?'View receipt':'Pay rent securely')+' '+glyph(paid?'receipt':'right')+'</button></section>':
     '<section class="sh-panel sh-stagger">'+emptyState('calendar','All clear for now','Your monthly rent statement will appear here once generated.')+'</section>';
     const metrics='<div class="sh-invoice-grid sh-stagger">'+metric(esc(st.room?.number||'—'),'Your room','bed')+metric(money(st.securityDepositPaise),'Security deposit','shield')+'</div>';
@@ -88,7 +88,7 @@
   renderStudents=function(status='ALL',query=''){
     const p=S.period||periodNow();
     const filters=['ALL','PAID','PENDING','OVERDUE'].map(x=>'<button class="chip filter-chip '+(status===x?'active':'')+'" data-student-filter="'+x+'">'+(x==='ALL'?'All':x[0]+x.slice(1).toLowerCase())+'</button>').join('');
-    const intro=heading('RESIDENT MANAGEMENT','Residents','Your residents, beautifully organised.',
+    const intro=heading('RESIDENT MANAGEMENT','Residents','Manage resident information and rent status.',
       '<button class="sh-icon-button" data-route="studentForm" aria-label="Add resident">'+glyph('plus')+'</button>');
     const search='<div class="sh-stagger"><div class="search-wrap"><span>'+glyph('search')+'</span><input id="student-search" class="input" placeholder="Search names, rooms or contacts" autocomplete="off" value="'+esc(query)+'"/></div><div class="filter-row">'+filters+'</div></div>';
     const list=(S.students||[]).map(asResident).join('')||emptyState('users','No residents found',query?'Try a different search.':'Add a resident to begin.','<button class="btn primary" data-route="studentForm">Add resident</button>');
@@ -97,7 +97,7 @@
   };
   renderRooms=function(){
     const rooms=S.rooms||[],total=rooms.reduce((a,r)=>a+Number(r.capacity||0),0),occupied=rooms.reduce((a,r)=>a+Number(r.occupied||0),0);
-    const intro=heading('SPACE MANAGEMENT','Rooms & beds',occupied+' occupied · '+Math.max(0,total-occupied)+' available',
+    const intro=heading('PROPERTY MANAGEMENT','Rooms & beds',occupied+' occupied · '+Math.max(0,total-occupied)+' available',
       '<button class="sh-icon-button" data-route="roomForm" aria-label="Add room">'+glyph('plus')+'</button>');
     const overview='<div class="sh-metrics sh-stagger">'+metric(rooms.length,'Rooms','bed')+metric(total,'Total beds','users')+'</div>';
     const cards=rooms.map(r=>{
@@ -110,7 +110,7 @@
   renderDues=function(){
     const d=S.dues||{},p=d.period||S.period||periodNow();
     const months='<div class="month-nav"><button aria-label="Previous month" data-action="period-prev-dues">‹</button><span>'+periodLabel(p)+'</span><button aria-label="Next month" data-action="period-next-dues">›</button></div>';
-    const intro=heading('COLLECTION DESK','Pending dues',(Number(d.overdueCount)||0)+' overdue · '+((d.dues||[]).length)+' awaiting payment',months);
+    const intro=heading('RENT COLLECTIONS','Pending dues',(Number(d.overdueCount)||0)+' overdue · '+((d.dues||[]).length)+' awaiting payment',months);
     const summary='<div class="sh-callout sh-stagger"><small>Total outstanding</small><strong>'+money(d.totalDuePaise)+'</strong><p>'+periodLabel(p)+' · Verified collection overview</p></div>';
     const cards=(d.dues||[]).map(x=>{
       const name=x.student?.name||'Resident',r=x.student?.room||'—';
@@ -144,7 +144,7 @@
     const inv=S.studentDashboard?.currentInvoice;
     if(!inv)return loadStudentHome();
     if(inv.status==='PAID'){toast('Rent already paid','success');return navigate('studentHome',{},true)}
-    const intro=heading('SAFEHOUSE PAY','Settle your rent','A considered, secure payment experience.');
+    const intro=heading('SAFEHOUSE PAY','Settle your rent','Review your bill and choose a secure payment method.');
     const hero='<section class="sh-overview sh-stagger" style="text-align:center"><div class="sh-overview-label">Total amount due</div><div class="sh-checkout-value">'+money(inv.remainingPaise)+'</div><div class="sh-overview-sub">'+periodLabel(inv)+' · '+safeStatus(inv)+'</div></section>';
     const line=(label,v,negative)=>v?'<div class="bill-line"><span>'+esc(label)+'</span><strong style="'+(negative?'color:#8ed6ac':'')+'">'+(negative?'−':'')+money(v)+'</strong></div>':'';
     const bill='<section class="sh-panel sh-stagger"><div class="sh-ghost-header">Statement details</div>'+
@@ -156,7 +156,7 @@
   };
   renderProfile=function(){
     const owner=S.role==='OWNER',name=S.user?.fullName||'SafeHouse User';
-    const intro=heading('ACCOUNT & PREFERENCES','Your profile','Your private account and preferences.');
+    const intro=heading('ACCOUNT & PREFERENCES','Your profile','Manage your account and property settings.');
     const portrait='<section class="sh-panel sh-portrait sh-stagger"><div class="profile-avatar">'+esc(initials(name))+'</div><h2>'+esc(name)+'</h2><p>'+esc(S.user?.email||'')+'</p><span class="sh-badge">'+(owner?'PROPERTY OWNER':'RESIDENT')+'</span></section>';
     const details='<section class="sh-panel sh-stagger"><div class="sh-ghost-header">Account details</div><div class="sh-display-table">'+
     '<div class="detail-line"><span>Property</span><strong>'+esc(S.property?.name||'SafeHouse PG')+'</strong></div>'+
@@ -168,7 +168,7 @@
   renderStudentDetail=function(st){
     if(!st)return navigate('students');
     const p=S.period||periodNow(),inv=st.periodInvoice||st.invoices?.find(x=>x.year===p.year&&x.month===p.month)||st.invoices?.[0];
-    const intro=heading('RESIDENT DOSSIER','Resident details','A complete view of this resident.');
+    const intro=heading('RESIDENT MANAGEMENT','Resident details','Contact, room and rent details.');
     const portrait='<div class="sh-panel sh-portrait sh-stagger"><div class="profile-avatar">'+esc(initials(st.name))+'</div><h2>'+esc(st.name||'Resident')+'</h2><p>'+(st.room?.number?'Room '+esc(st.room.number):'No room assigned')+(st.bedLabel?' · '+esc(st.bedLabel):'')+'</p><span class="sh-badge">'+esc(st.status||'ACTIVE')+'</span></div>';
     const actions='<div class="sh-actions sh-stagger" style="margin:12px 0">'+
      '<a class="sh-action" href="tel:'+esc(st.mobile||'')+'">'+glyph('phone')+'Call resident</a>'+
@@ -185,7 +185,7 @@
     frame(intro+portrait+actions+about+bill+history+reset,'',{title:'Resident',back:true});
   };
   renderRoomForm=function(){
-    const intro=heading('SPACE MANAGEMENT','Create a room','Create a comfortable space for residents.');
+    const intro=heading('PROPERTY MANAGEMENT','Create a room','Create a comfortable space for residents.');
     const form='<section class="sh-panel sh-stagger"><div class="sh-progress-steps"><i></i><i></i><i></i></div><form id="room-form">'+
       '<div class="field"><label for="sh-room-number">ROOM NUMBER / NAME</label><input id="sh-room-number" class="input" name="number" required placeholder="e.g. A-101"></div>'+
       '<div class="field"><label for="sh-room-capacity">NUMBER OF BEDS</label><input id="sh-room-capacity" class="input" name="capacity" type="number" min="1" max="50" value="2" required></div>'+

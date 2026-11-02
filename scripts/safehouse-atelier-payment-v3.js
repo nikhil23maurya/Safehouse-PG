@@ -4,29 +4,37 @@
   function fmt(n){return moneyP(Number(n)||0)}
   function ico(n){return icon(n)}
   function modal(){return document.getElementById('sh-final-pay')}
-  function close(){if(statusTimer){clearTimeout(statusTimer);statusTimer=null}modal()?.remove();current=null}
+  function close(){if(statusTimer){clearTimeout(statusTimer);statusTimer=null}modal()?.remove();document.body.classList.remove('sh-pay-open');current=null}
   function qrValid(d){return !!(d?.qr?.id?.startsWith('qr_')&&/^https:\/\//.test(d.qr.imageUrl||'')&&Number(d.qr.amountPaise)>0)}
   function status(txt,isError=false){
     const x=modal()?.querySelector('#sh-pay-status');
-    if(x){x.textContent=txt;x.style.color=isError?'#f5a9ac':'#aeb7c5';}
+    if(x){x.textContent=txt;x.style.color=isError?'#b4444e':'#637588';}
   }
   function renderQr(){
     const holder=modal()?.querySelector('#sh-pay-view');
     if(!holder)return;
     const x=current?.qr;
     if(!x){holder.innerHTML='<div class="sh-pay-loader"><div class="spinner"></div><p>Creating your secure, one-time rent QR…</p></div>';return}
-    holder.innerHTML='<div class="sh-pay-qr-card"><div class="sh-pay-qr-frame"><img src="'+esc(x.imageUrl)+'" alt="Unique, fixed-amount UPI payment QR for this rent invoice" loading="eager"></div><div class="sh-pay-qr-meta"><strong>'+fmt(x.amountPaise)+'</strong><span>Invoice-linked · Single use</span></div></div>'+
-    '<p class="sh-pay-instruction">Scan this QR from another phone using any UPI app. SafeHouse will update your rent automatically after confirmation.</p>'+
-    '<div class="sh-pay-row"><button class="sh-pay-tertiary" data-shpay-save>'+ico('download')+' Save QR</button><button class="sh-pay-tertiary" data-shpay-tab="app">'+ico('wallet')+' Use this phone</button></div>';
+    holder.innerHTML='<div class="sh-pay-qr-card"><div class="sh-pay-qr-frame"><img src="'+esc(x.imageUrl)+'" alt="Invoice-linked UPI payment QR" loading="eager"></div><div class="sh-pay-qr-meta"><strong>'+fmt(x.amountPaise)+'</strong><span>Invoice-linked · Single use</span></div></div>'+
+    '<p class="sh-pay-instruction">Scan from another phone, or save the QR and open it from your UPI app gallery. Your rent updates after confirmed payment.</p>'+
+    '<div class="sh-pay-row"><button class="sh-pay-tertiary" data-shpay-save>'+ico('download')+' Save QR</button><button class="sh-pay-tertiary" data-shpay-tab="app" class="sh-pay-tab-app">'+ico('wallet')+' Use this phone</button></div>';
+    const image=holder.querySelector('.sh-pay-qr-frame img');
+    if(image)image.addEventListener('error',()=>{
+      const frame=holder.querySelector('.sh-pay-qr-frame');
+      if(frame){frame.textContent='QR image could not load. Check your internet connection.';frame.style.padding='18px';}
+    });
   }
   function renderApps(){
     const holder=modal()?.querySelector('#sh-pay-view');if(!holder)return;
-    const x=current?.qr;
-    if(!x){holder.innerHTML='<div class="sh-pay-loader"><div class="spinner"></div><p>Preparing your secure rent QR…</p></div>';return}
-    holder.innerHTML='<div class="sh-pay-app-intro"><div class="sh-pay-app-badge">'+ico('shield')+'</div><h3>Pay using your UPI app.</h3><p>Keep your payment inside SafeHouse. Save your unique QR, open your preferred UPI app, then choose <strong>Scan from gallery</strong> to pay the exact rent amount.</p></div>'+
-    '<div class="sh-pay-app-actions"><button class="sh-action-primary" data-shpay-save>'+ico('download')+' 1. Save payment QR</button>'+
-    (current?.intentUrl?'<button class="sh-action-primary" data-shpay-intent>Pay directly with UPI</button>':'<button class="sh-pay-tertiary" data-shpay-open>'+ico('wallet')+' 2. Open a UPI app</button>')+'</div>'+
-    '<p class="sh-pay-caveat">Direct prefilled UPI payment is only offered when the payment provider supplies a verified UPI Intent. No personal UPI IDs or untracked transfers are used.</p>';
+    if(!current?.qr){holder.innerHTML='<div class="sh-pay-loader"><div class="spinner"></div><p>Preparing your invoice-linked UPI request…</p></div>';return}
+    const direct=!!window.SafeHouseNative?.openQrInUpiApp;
+    holder.innerHTML='<div class="sh-pay-app-intro"><div class="sh-pay-app-badge">'+ico('shield')+'</div><h3>Pay securely with UPI</h3><p>'+(direct?
+      'Open your UPI app with the amount prefilled. Check the recipient and confirm in your banking app.':
+      'Save the unique QR, then open your UPI app and choose Scan from Gallery. Review the recipient before paying.')+'</p></div>'+
+      '<div class="sh-pay-app-actions">'+(direct?
+        '<button class="sh-action-primary" data-shpay-direct>'+ico('wallet')+' Pay with UPI app</button><button class="sh-pay-tertiary" data-shpay-save>'+ico('download')+' Save QR instead</button>':
+        '<button class="sh-action-primary" data-shpay-save>'+ico('download')+' Save payment QR</button><button class="sh-pay-tertiary" data-shpay-open>'+ico('wallet')+' Open UPI app</button>')+
+      '</div><p class="sh-pay-caveat">Payment is recorded only after confirmation by the payment provider. Do not send money to any manually shared UPI ID.</p>';
   }
   function choose(tab){
     const root=modal();if(!root)return;
@@ -45,7 +53,8 @@
       schedulePoll();
     }catch(e){
       if(!modal())return;
-      const message=(e?.code==='UPI_QR_NOT_ENABLED')?'UPI QR payments are not yet enabled for this property. The owner must activate them with the payment provider.':errorMessage(e);
+      const detail=errorMessage(e);
+      const message=/UPI_QR_NOT_ENABLED|not activated|not enabled/i.test(detail)?'UPI QR is not enabled for this merchant yet. The owner must activate Razorpay QR API and configure the signed webhook.':(/route not found|not found/i.test(detail)?'Your payment server appears to be outdated or unavailable. Update the backend before making a payment.':detail);
       const holder=modal().querySelector('#sh-pay-view');
       if(holder)holder.innerHTML='<div class="sh-pay-error"><div style="font-size:25px;color:#e3bb82">!</div><h3>Secure QR unavailable</h3><p>'+esc(message)+'</p><button class="sh-pay-tertiary" data-shpay-retry>Try again</button></div>';
       status('Payment not started',true);
@@ -59,14 +68,20 @@
       try{
         const r=await api('/api/student/payments/orders/'+encodeURIComponent(current.qr.id)+'/status');
         if(!modal())return;
-        if(r.paid||r.invoiceStatus==='PAID'){
+        if(r.paid===true && r.invoiceStatus==='PAID'){
           const amount=current.qr.amountPaise;
+          const captured=r.attemptStatus==='CAPTURED';
           close();
           S.studentDashboard=null;
-          showPaymentSuccess(amount);
+          if(captured)showPaymentSuccess(amount);
+          else {navigate('studentHome',{},true);toast('Rent was settled through another payment','success')}
           return;
         }
-        if(r.attemptStatus==='FAILED'){status('Payment failed or expired. Please refresh your QR.',true);return}
+        if(r.attemptStatus==='FAILED'){
+          status('The QR expired or the payment was not completed. Refresh the QR to retry.',true);
+          const refresh=modal()?.querySelector('#sh-pay-refresh');if(refresh)refresh.hidden=false;
+          return
+        }
         if(Number(current.qr.expiresAt)>0 && Date.now()>Number(current.qr.expiresAt)*1000){
           status('QR expired. Tap Refresh QR to create a new one.',true);
           const b=modal()?.querySelector('#sh-pay-refresh');if(b)b.hidden=false;
@@ -91,12 +106,12 @@
     node.innerHTML='<div class="sh-pay-container" role="dialog" aria-modal="true" aria-label="SafeHouse secure UPI checkout"><div class="sh-pay-handle"></div>'+
     '<div class="sh-pay-header"><div class="sh-pay-wordmark"><span class="sh-pay-mark">'+ico('home')+'</span> SafeHouse<span class="sh-pay-gold">Pay</span></div><button class="sh-pay-x" data-shpay-close aria-label="Close checkout">×</button></div>'+
     '<div class="sh-pay-amount-label">SECURE RENT SETTLEMENT</div><div class="sh-pay-amount">'+fmt(inv.remainingPaise)+'</div><div class="sh-pay-identity">'+esc(monthName(inv.year,inv.month))+' · '+esc(S.property?.name||'Your property')+'</div>'+
-    '<div class="sh-pay-tabs"><button data-shpay-tab="qr" class="active">'+ico('grid')+' Scan QR</button><button data-shpay-tab="app">'+ico('wallet')+' UPI app</button></div>'+
+    '<div class="sh-pay-tabs"><button data-shpay-tab="qr" class="sh-pay-tab-qr">'+ico('grid')+' Scan QR</button><button data-shpay-tab="app">'+ico('wallet')+' UPI app</button></div>'+
     '<div id="sh-pay-view"></div><div class="sh-pay-foot"><div class="sh-pay-dot"></div><span id="sh-pay-status" aria-live="polite">Preparing payment…</span><button id="sh-pay-refresh" data-shpay-retry hidden>Refresh QR</button></div>'+
     '<div class="sh-pay-security">'+ico('shield')+' Secure provider-verified payments. Rent is marked paid only after confirmed capture.</div></div>';
     document.body.appendChild(node);
     document.body.classList.add('sh-pay-open');
-    renderQr();
+    choose(window.SafeHouseNative?.openQrInUpiApp?'app':'qr');
     fetchQr(invoiceId);
     node.addEventListener('click',e=>{
       const b=e.target.closest('button');
@@ -113,6 +128,13 @@
         }
         return;
       }
+      if(b.hasAttribute('data-shpay-direct')){
+        if(current?.qr?.imageUrl && window.SafeHouseNative?.openQrInUpiApp){
+          status('Opening your UPI app. Confirm the amount and recipient.');
+          window.SafeHouseNative.openQrInUpiApp(current.qr.imageUrl,Math.round(Number(current.qr.amountPaise)));
+        }else status('Direct UPI unavailable. Save the QR and scan it in your UPI app.',true);
+        return;
+      }
       if(b.hasAttribute('data-shpay-open')){
         if(window.SafeHouseNative?.openUpiApp)window.SafeHouseNative.openUpiApp();
         else toast('Open your UPI app and select Scan from Gallery.');
@@ -127,5 +149,8 @@
   document.addEventListener('keydown',e=>{if(e.key==='Escape'&&modal())dismiss()});
   const originalNavigate=navigate;
   navigate=function(){if(modal())dismiss();return originalNavigate.apply(this,arguments)};
+  window.SafeHouseUpiError=function(message){
+    if(modal()){status(message||'Could not open UPI. Please scan the QR instead.',true);toast(message||'UPI app unavailable','error')}
+  };
   window.__SAFEHOUSE_QR_CHECKOUT_V3=true;
 })();

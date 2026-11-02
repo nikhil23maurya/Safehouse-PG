@@ -10,7 +10,7 @@ import { AppError, assert } from "./errors.js";
 import { requireAuth, requireRole } from "./middleware.js";
 import { createTokenPair, hashPassword, verifyPassword, verifyRazorpayCheckoutSignature, verifyRazorpayWebhookSignature, verifyToken } from "./security.js";
 import { ensureInvoices, getOwnerProperty, getStudentProfile } from "./rent.js";
-import { createRazorpayOrder, createRentUpiQr, fetchRentUpiQr } from "./razorpay.js";
+import { createRazorpayOrder, createRentUpiQr, fetchRentUpiQr, fetchCapturedQrPayments } from "./razorpay.js";
 import { streamReceiptPdf } from "./receipts.js";
 import {
   datePartsInTimeZone,
@@ -24,6 +24,50 @@ import {
   rupeesToPaise,
   whatsappReminderUrl
 } from "./utils.js";
+
+
+// SAFEHOUSE_QR_SETTLEMENT_V2
+// Every credit comes from either a signature-verified webhook or an authenticated
+// provider API response. Client navigation, screenshots and UPI app responses never settle rent.
+async function settleCapturedQrPayment(qrId: string, payment: any) {
+  assert(/^qr_[a-zA-Z0-9]+$/.test(qrId), 400, "INVALID_QR", "Invalid payment QR reference");
+  assert(/^pay_[a-zA-Z0-9]+$/.test(String(payment?.id || "")), 400, "INVALID_PAYMENT", "Invalid provider payment reference");
+  assert(payment.status === "captured" && payment.captured === true &&
+    payment.currency === "INR" && payment.method === "upi" &&
+    Number.isSafeInteger(Number(payment.amount)) && Number(payment.amount) > 0,
+    400, "NOT_CAPTURED", "Only captured UPI payments can settle rent");
+  const attempt = await prisma.paymentAttempt.findUnique({ where: { providerOrderId: qrId } });
+  if (!attempt) return false;
+  assert(Number(payment.amount) === attempt.amountPaise, 400, "PAYMENT_AMOUNT_MISMATCH", "Captured UPI amount differs from invoice");
+  const paidAt = new Date(Number(payment.created_at || Math.floor(Date.now()/1000)) * 1000);
+  await prisma.$transaction(async tx => {
+    const existing = await tx.payment.findUnique({ where: { providerPaymentId: payment.id } });
+    if (existing) return;
+    const invoice = await tx.rentInvoice.findUnique({ where: { id: attempt.invoiceId } });
+    if (!invoice) throw new AppError(404, "INVOICE_NOT_FOUND", "Payment invoice not found");
+    const next = invoice.paidPaise + Number(payment.amount);
+    assert(next <= invoice.totalPaise, 409, "PAYMENT_EXCEEDS_BALANCE", "Captured amount exceeds remaining rent");
+    // Compare-and-swap prevents two different payments racing to over-credit one invoice.
+    const updated = await tx.rentInvoice.updateMany({
+      where: { id: invoice.id, paidPaise: invoice.paidPaise },
+      data: { paidPaise: next, status: next >= invoice.totalPaise ? "PAID" : "DUE" }
+    });
+    if (updated.count !== 1) throw new AppError(409, "PAYMENT_RETRY", "Concurrent rent settlement; retry");
+    await tx.payment.create({ data: {
+      propertyId: invoice.propertyId, studentId: attempt.studentId, invoiceId: invoice.id,
+      amountPaise: Number(payment.amount), source: "RAZORPAY", method: "UPI",
+      providerOrderId: qrId, providerPaymentId: payment.id, receiptNumber: receiptNumber(paidAt),
+      paidAt, metadata: { qrCodeId: qrId, method: "UPI_QR" }
+    }});
+    await tx.paymentAttempt.update({ where: { id: attempt.id },
+      data: { status: "CAPTURED", providerPaymentId: payment.id } });
+  });
+  return true;
+}
+async function reconcileQrAttempt(qrId: string) {
+  const payments = await fetchCapturedQrPayments(qrId);
+  for (const payment of payments) await settleCapturedQrPayment(qrId, payment);
+}
 
 const app = express();
 app.disable("x-powered-by");
@@ -52,38 +96,10 @@ app.post("/api/webhooks/razorpay", express.raw({ type: "application/json", limit
 
   const event = JSON.parse(rawBody.toString("utf8"));
 
-  // SAFEHOUSE_QR_CAPTURE_V1 — separate QR payment source. Razorpay QR payments may have order_id=null.
-  // Credit only a signed qr_code.credited event with an actual captured payment.
   if (event.event === "qr_code.credited") {
     const p = event?.payload?.payment?.entity;
-    const qr = event?.payload?.qr_code?.entity;
-    if (!p?.id || !qr?.id || p.status !== "captured" || p.captured !== true || p.currency !== "INR") {
-      throw new AppError(400, "INVALID_QR_CAPTURE", "QR credit must have a captured INR payment and QR reference");
-    }
-    const attempt = await prisma.paymentAttempt.findUnique({ where: { providerOrderId: qr.id } });
-    if (!attempt || !qr.id.startsWith("qr_")) {
-      throw new AppError(400, "UNKNOWN_QR", "Unknown payment QR");
-    }
-    if (Number(p.amount) !== attempt.amountPaise) {
-      throw new AppError(400, "PAYMENT_AMOUNT_MISMATCH", "QR payment amount differs from the invoice");
-    }
-    await prisma.$transaction(async tx => {
-      const already = await tx.payment.findUnique({ where: { providerPaymentId: p.id } });
-      if (already) return;
-      const inv = await tx.rentInvoice.findUnique({ where: { id: attempt.invoiceId } });
-      if (!inv) throw new AppError(404, "INVOICE_NOT_FOUND", "Invoice no longer exists");
-      const updated = inv.paidPaise + Number(p.amount);
-      if (updated > inv.totalPaise) throw new AppError(409, "PAYMENT_EXCEEDS_BALANCE", "The captured QR amount exceeds remaining rent");
-      const paidAt = new Date(Number(p.created_at || Math.floor(Date.now()/1000))*1000);
-      await tx.payment.create({ data: {
-        propertyId: inv.propertyId, studentId: attempt.studentId, invoiceId: inv.id,
-        amountPaise: Number(p.amount), source: "RAZORPAY", method: "UPI",
-        providerOrderId: qr.id, providerPaymentId: p.id, receiptNumber: receiptNumber(paidAt),
-        paidAt, metadata: { qrCodeId: qr.id, method: "UPI_QR" }
-      }});
-      await tx.paymentAttempt.update({ where: { id: attempt.id }, data: { status: "CAPTURED", providerPaymentId: p.id } });
-      await tx.rentInvoice.update({ where: { id: inv.id }, data: { paidPaise: updated, status: updated >= inv.totalPaise ? "PAID" : "DUE" } });
-    });
+    const qrId = event?.payload?.qr_code?.entity?.id;
+    if (qrId) await settleCapturedQrPayment(qrId, p);
   }
 
   if (event.event === "payment.captured") {
@@ -580,14 +596,25 @@ student.post("/payments/upi-qr", async (req, res) => {
     if (!candidate.providerOrderId.startsWith("qr_")) {
       throw new AppError(409, "PAYMENT_ALREADY_ACTIVE", "A previous payment is still active. Please contact the property owner before retrying.");
     }
+    // Recheck the PSP first so a delayed webhook never causes a second payment request.
+    try { await reconcileQrAttempt(candidate.providerOrderId); }
+    catch (err) {
+      console.warn("QR status could not be reconciled", candidate.providerOrderId);
+      throw new AppError(503, "QR_RECHECK_REQUIRED", "We are verifying an earlier QR payment. Please retry shortly; do not pay again.");
+    }
+    const refreshed = await prisma.rentInvoice.findUnique({ where: { id: invoice.id } });
+    if (refreshed && (refreshed.status === "PAID" || refreshed.paidPaise >= refreshed.totalPaise)) {
+      throw new AppError(409, "INVOICE_ALREADY_PAID", "This rent payment has already been confirmed");
+    }
     const current = await fetchRentUpiQr(candidate.providerOrderId);
+    if (!current) throw new AppError(503, "QR_STATUS_UNAVAILABLE", "Could not verify your existing payment QR. Try again shortly; do not pay twice.");
     const currentExpiry = Number(current?.close_by || 0);
     if (current?.status === "active" && currentExpiry > Math.floor(Date.now()/1000)+10 && candidate.amountPaise === remaining) {
       assert(/^https:\/\//.test(current.image_url), 502, "QR_IMAGE_INVALID", "Invalid provider QR image");
       res.status(200).json({ qr: { id: current.id, imageUrl: current.image_url, expiresAt: currentExpiry, amountPaise: remaining }, status: "AWAITING_PAYMENT" });
       return;
     }
-    if (!current || current.status === "closed" || currentExpiry <= Math.floor(Date.now()/1000)) {
+    if (current.status === "closed" || currentExpiry <= Math.floor(Date.now()/1000)) {
       await prisma.paymentAttempt.updateMany({ where: { id: candidate.id, status: "CREATED" }, data: { status: "FAILED" } });
       continue;
     }
@@ -614,6 +641,9 @@ student.post("/payments/order", async (req, res) => {
     orderBy: { createdAt: "desc" }
   });
 
+  if (openAttempt?.providerOrderId.startsWith("qr_")) {
+    throw new AppError(409, "UPI_QR_ALREADY_ACTIVE", "A QR payment is already active. Check its status before starting a new payment.");
+  }
   if (openAttempt?.status === "VERIFIED") {
     throw new AppError(409, "PAYMENT_PROCESSING", "A verified payment is waiting for Razorpay confirmation", { orderId: openAttempt.providerOrderId });
   }
@@ -660,7 +690,16 @@ student.get("/payments/orders/:orderId/status", async (req, res) => {
   const profile = await studentProfileOrThrow(req.authUser!.id);
   const attempt = await prisma.paymentAttempt.findFirst({ where: { providerOrderId: req.params.orderId, studentId: profile.id }, include: { invoice: true } });
   assert(attempt, 404, "PAYMENT_ATTEMPT_NOT_FOUND", "Payment attempt not found");
-  res.json({ attemptStatus: attempt.status, invoiceStatus: attempt.invoice.status, paid: attempt.invoice.status === "PAID", invoice: invoiceDto(attempt.invoice) });
+  if (attempt.providerOrderId.startsWith("qr_") && attempt.status !== "CAPTURED" && attempt.invoice.status !== "PAID") {
+    // Recover paid QR scans when the signed webhook was delayed or not delivered.
+    // A provider outage must not falsely change the invoice status.
+    try { await reconcileQrAttempt(attempt.providerOrderId); }
+    catch (error) { console.warn("SafeHouse QR reconciliation deferred", attempt.providerOrderId); }
+  }
+  const fresh = await prisma.paymentAttempt.findUnique({ where: { id: attempt.id }, include: { invoice: true } });
+  assert(fresh, 404, "PAYMENT_ATTEMPT_NOT_FOUND", "Payment attempt not found");
+  res.json({ attemptStatus: fresh.status, invoiceStatus: fresh.invoice.status,
+    paid: fresh.invoice.status === "PAID", invoice: invoiceDto(fresh.invoice) });
 });
 
 student.get("/payments/:id/receipt.pdf", async (req, res) => {

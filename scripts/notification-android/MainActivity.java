@@ -78,9 +78,10 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     private void configureSystemBars() {
         Window window = getWindow();
-        window.setStatusBarColor(Color.rgb(8, 12, 21));
-        window.setNavigationBarColor(Color.rgb(8, 12, 21));
-        int flags = 0;
+        window.setStatusBarColor(Color.rgb(255, 255, 255));
+        window.setNavigationBarColor(Color.rgb(255, 255, 255));
+        int flags = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
+        if (Build.VERSION.SDK_INT >= 26) flags |= View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR;
         window.getDecorView().setSystemUiVisibility(flags);
     }
 
@@ -89,15 +90,15 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         root.setOrientation(LinearLayout.VERTICAL);
         root.setGravity(Gravity.CENTER);
         root.setPadding(dp(28), dp(28), dp(28), dp(28));
-        root.setBackgroundColor(Color.rgb(8, 12, 21));
+        root.setBackgroundColor(Color.rgb(246, 247, 249));
 
         TextView mark = new TextView(this);
         mark.setText("⌂");
-        mark.setTextColor(Color.rgb(238, 208, 154));
+        mark.setTextColor(Color.WHITE);
         mark.setTextSize(40);
         mark.setGravity(Gravity.CENTER);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.rgb(33, 38, 57));
+        bg.setColor(Color.rgb(39, 71, 96));
         bg.setCornerRadius(dp(23));
         mark.setBackground(bg);
         LinearLayout.LayoutParams markLp = new LinearLayout.LayoutParams(dp(78), dp(78));
@@ -106,7 +107,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
         TextView name = new TextView(this);
         name.setText("SafeHouse");
-        name.setTextColor(Color.rgb(242, 219, 178));
+        name.setTextColor(Color.rgb(25, 43, 57));
         name.setTextSize(25);
         name.setGravity(Gravity.CENTER);
         name.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
@@ -114,7 +115,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
         TextView tagline = new TextView(this);
         tagline.setText("Rent. Rooms. Residents. Effortlessly.");
-        tagline.setTextColor(Color.rgb(157, 166, 184));
+        tagline.setTextColor(Color.rgb(107, 124, 139));
         tagline.setTextSize(11.5f);
         tagline.setGravity(Gravity.CENTER);
         LinearLayout.LayoutParams tagLp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
@@ -125,7 +126,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     private void createWebView() {
         webView = new WebView(this);
-        webView.setBackgroundColor(Color.rgb(8, 12, 21));
+        webView.setBackgroundColor(Color.rgb(246, 247, 249));
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
         settings.setDomStorageEnabled(true);
@@ -351,6 +352,78 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                     Toast.makeText(MainActivity.this, "Could not launch a UPI app", Toast.LENGTH_SHORT).show();
                 }
             });
+        }
+
+
+        /**
+         * SAFEHOUSE_NATIVE_QR_UPI_V4
+         * Decode only a Razorpay-generated QR image, validate the exact rupee
+         * amount against the invoice, then let Android launch the UPI app.
+         * App return results never credit rent: only backend capture can do that.
+         */
+        @JavascriptInterface
+        public void openQrInUpiApp(String imageUrl, int amountPaise) {
+            new Thread(() -> {
+                try {
+                    Uri imageUri = Uri.parse(imageUrl == null ? "" : imageUrl);
+                    String h = imageUri.getHost() == null ? "" : imageUri.getHost().toLowerCase(java.util.Locale.ROOT);
+                    if (!"https".equalsIgnoreCase(imageUri.getScheme()) ||
+                        !("rzp.io".equals(h) || "razorpay.com".equals(h) || h.endsWith(".razorpay.com"))) {
+                        throw new IllegalArgumentException("Unrecognised QR provider");
+                    }
+                    if (amountPaise < 100 || amountPaise > 100000000) {
+                        throw new IllegalArgumentException("Invalid payment amount");
+                    }
+                    java.net.HttpURLConnection conn = (java.net.HttpURLConnection)
+                        new java.net.URL(imageUri.toString()).openConnection();
+                    conn.setConnectTimeout(9000);
+                    conn.setReadTimeout(9000);
+                    conn.setInstanceFollowRedirects(true);
+                    android.graphics.Bitmap bmp;
+                    try (java.io.InputStream stream = conn.getInputStream()) {
+                        bmp = android.graphics.BitmapFactory.decodeStream(stream);
+                    } finally { conn.disconnect(); }
+                    if (bmp == null || bmp.getWidth() < 80 || bmp.getHeight() < 80 ||
+                        ((long)bmp.getWidth()) * bmp.getHeight() > 4000000) {
+                        throw new IllegalArgumentException("QR image unavailable");
+                    }
+                    int width = bmp.getWidth(), height = bmp.getHeight();
+                    int[] pixels = new int[width * height];
+                    bmp.getPixels(pixels, 0, width, 0, 0, width, height);
+                    bmp.recycle();
+                    com.google.zxing.BinaryBitmap binary = new com.google.zxing.BinaryBitmap(
+                        new com.google.zxing.common.HybridBinarizer(
+                            new com.google.zxing.RGBLuminanceSource(width, height, pixels)));
+                    String encoded = new com.google.zxing.qrcode.QRCodeReader().decode(binary).getText();
+                    Uri payment = Uri.parse(encoded);
+                    if (!"upi".equalsIgnoreCase(payment.getScheme()) ||
+                        !"pay".equalsIgnoreCase(payment.getHost()) ||
+                        payment.getQueryParameter("pa") == null ||
+                        payment.getQueryParameter("pa").isEmpty()) {
+                        throw new IllegalArgumentException("QR is not a valid UPI payment");
+                    }
+                    String currency = payment.getQueryParameter("cu");
+                    if (currency != null && !"INR".equalsIgnoreCase(currency)) {
+                        throw new IllegalArgumentException("Unexpected currency");
+                    }
+                    String amount = payment.getQueryParameter("am");
+                    if (amount == null || amount.isEmpty()) throw new IllegalArgumentException("UPI QR is missing fixed amount");
+                    java.math.BigDecimal paise = new java.math.BigDecimal(amount).multiply(new java.math.BigDecimal(100));
+                    if (paise.intValueExact() != amountPaise) throw new IllegalArgumentException("QR amount mismatch");
+                    runOnUiThread(() -> {
+                        try {
+                            Intent intent = new Intent(Intent.ACTION_VIEW, payment);
+                            startActivity(Intent.createChooser(intent, "Pay rent with UPI"));
+                        } catch (Exception e) {
+                            callJs("window.SafeHouseUpiError && window.SafeHouseUpiError(" +
+                                q("No UPI app could open the payment. Use the saved QR instead.") + ");");
+                        }
+                    });
+                } catch (Exception e) {
+                    callJs("window.SafeHouseUpiError && window.SafeHouseUpiError(" +
+                        q("Direct UPI could not start. Save the QR and scan it from your UPI app gallery.") + ");");
+                }
+            }).start();
         }
 
         @JavascriptInterface

@@ -3,7 +3,7 @@ name: Build SafeHouse Android APK
 on:
   workflow_dispatch:
   push:
-    branches: [main, notifications-v1-inprocess, feat/safehouse-atelier-v3]
+    branches: [main, notifications-v1-inprocess, fix/professional-ui-payment-reliability]
     paths:
       - 'mobile-v2-build/**'
       - 'scripts/patch-mobile-performance.mjs'
@@ -18,6 +18,8 @@ on:
       - 'scripts/safehouse-atelier-payment-v3.css'
       - 'scripts/safehouse-atelier-notifications-v3.css'
       - 'scripts/safehouse-atelier-payment-v3.js'
+      - 'scripts/safehouse-professional-v4.css'
+      - 'scripts/verify-professional-v4.mjs'
       - 'scripts/mobile-notifications-runtime.js'
       - 'scripts/patch-android-notifications.mjs'
       - 'scripts/notification-android/**'
@@ -119,20 +121,6 @@ jobs:
           PY
           node --check /tmp/safehouse-mobile.js
 
-      - name: Apply SafeHouse luxury UI and branded checkout
-        run: |
-          node scripts/patch-mobile-luxury.mjs
-          grep -q 'SAFEHOUSE_LUXURY_CHECKOUT_V1' mobile/app/src/main/assets/index.html
-          grep -q 'SAFEHOUSE_LUXURY_V1' mobile/app/src/main/assets/index.html
-          python - <<'PY'
-          from pathlib import Path
-          s = Path('mobile/app/src/main/assets/index.html').read_text(encoding='utf-8')
-          a = s.index('<script>') + len('<script>')
-          b = s.rindex('</script>')
-          Path('/tmp/safehouse-mobile-final.js').write_text(s[a:b], encoding='utf-8')
-          PY
-          node --check /tmp/safehouse-mobile-final.js
-
       - name: Apply complete SafeHouse Atelier v3 layouts and secure payment screens
         run: |
           node scripts/patch-mobile-atelier-v3.mjs
@@ -148,6 +136,7 @@ jobs:
           PY
           node --check /tmp/safehouse-atelier-v3.js
           grep -q 'savePaymentQr' scripts/notification-android/MainActivity.java
+          node scripts/verify-professional-v4.mjs
 
       - name: Enable AndroidX
         run: printf 'android.useAndroidX=true\nandroid.enableJetifier=true\n' > mobile/gradle.properties

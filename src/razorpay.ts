@@ -74,3 +74,20 @@ export async function fetchRentUpiQr(qrId: string): Promise<RazorpayQrCode | nul
   if (!res.ok) return null;
   return await res.json() as RazorpayQrCode;
 }
+
+/**
+ * Fetch payments directly from Razorpay for a specific issued QR.
+ * Server-to-server only. Used to recover from missed or delayed webhooks.
+ */
+export async function fetchCapturedQrPayments(qrId: string): Promise<Array<{
+  id: string; amount: number; currency: string; status: string; captured: boolean;
+  method: string; created_at?: number; order_id?: string | null;
+}>> {
+  if (!/^qr_[a-zA-Z0-9]+$/.test(qrId)) throw new AppError(400, "INVALID_QR_ID", "Invalid payment QR");
+  const endpoint = "https://api.razorpay.com/v1/payments/qr_codes/" + encodeURIComponent(qrId) + "/payments?count=100";
+  const response = await fetch(endpoint, { headers: { authorization: authHeader() }, signal: AbortSignal.timeout(10000) });
+  if (!response.ok) throw new AppError(502, "QR_STATUS_UNAVAILABLE", "Payment confirmation is temporarily unavailable");
+  const result = await response.json() as any;
+  if (!Array.isArray(result?.items)) throw new AppError(502, "QR_STATUS_INVALID", "Invalid response from the payment provider");
+  return result.items.filter((p: any) => p?.status === "captured" && p?.captured === true && p?.method === "upi");
+}
