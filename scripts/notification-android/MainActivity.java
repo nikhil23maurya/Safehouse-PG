@@ -294,6 +294,85 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
         @JavascriptInterface public void openExternal(String url) { runOnUiThread(() -> MainActivity.this.openExternal(url)); }
 
+        // SAFEHOUSE_ATELIER_UPI_NATIVE_V3
+        // Save the provider-issued QR without redirecting to a branded payment website.
+        @JavascriptInterface
+        public void savePaymentQr(String imageUrl) {
+            runOnUiThread(() -> {
+                try {
+                    Uri uri = Uri.parse(imageUrl == null ? "" : imageUrl);
+                    String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(java.util.Locale.ROOT);
+                    if (!"https".equalsIgnoreCase(uri.getScheme()) ||
+                        !("rzp.io".equals(host) || host.endsWith(".razorpay.com") || "razorpay.com".equals(host))) {
+                        Toast.makeText(MainActivity.this, "Invalid payment QR provider", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    DownloadManager.Request request = new DownloadManager.Request(uri);
+                    request.setTitle("SafeHouse Rent UPI QR");
+                    request.setDescription("Save this payment QR and use Scan from Gallery in your UPI app");
+                    request.setMimeType("image/png");
+                    request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
+                    request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
+                        "SafeHouse-UPI-QR-" + System.currentTimeMillis() + ".png");
+                    DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
+                    dm.enqueue(request);
+                    Toast.makeText(MainActivity.this, "QR download started. Open your UPI app and scan from gallery.", Toast.LENGTH_LONG).show();
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this, "QR could not be saved. Try using another device.", Toast.LENGTH_LONG).show();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void openUpiApp() {
+            runOnUiThread(() -> {
+                try {
+                    String[] packages = {
+                        "com.google.android.apps.nbu.paisa.user",
+                        "com.phonepe.app",
+                        "net.one97.paytm",
+                        "in.org.npci.upiapp",
+                        "in.amazon.mShop.android.shopping",
+                        "com.dreamplug.androidapp"
+                    };
+                    java.util.ArrayList<Intent> targets = new java.util.ArrayList<>();
+                    for (String p : packages) {
+                        Intent launch = getPackageManager().getLaunchIntentForPackage(p);
+                        if (launch != null) targets.add(launch);
+                    }
+                    if (targets.isEmpty()) {
+                        Toast.makeText(MainActivity.this, "No supported UPI app was found", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    Intent first = targets.remove(0);
+                    Intent chooser = Intent.createChooser(first, "Open your UPI app to scan saved QR");
+                    if (!targets.isEmpty()) chooser.putExtra(Intent.EXTRA_INITIAL_INTENTS, targets.toArray(new Intent[0]));
+                    startActivity(chooser);
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this, "Could not launch a UPI app", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void openVerifiedUpiIntent(String paymentUri) {
+            runOnUiThread(() -> {
+                try {
+                    Uri uri = Uri.parse(paymentUri == null ? "" : paymentUri);
+                    if (!"upi".equalsIgnoreCase(uri.getScheme()) || !"pay".equalsIgnoreCase(uri.getHost()) ||
+                        uri.getQueryParameter("pa") == null || uri.getQueryParameter("am") == null) {
+                        Toast.makeText(MainActivity.this, "Invalid UPI payment link", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    Intent request = new Intent(Intent.ACTION_VIEW, uri);
+                    startActivity(Intent.createChooser(request, "Pay with UPI"));
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this, "Unable to open UPI payment link", Toast.LENGTH_SHORT).show();
+                }
+            });
+        }
+
+
         @JavascriptInterface
         public void configureNotifications(String configJson) {
             runOnUiThread(() -> {
