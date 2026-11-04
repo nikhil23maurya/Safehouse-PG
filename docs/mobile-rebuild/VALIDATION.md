@@ -11,7 +11,33 @@ Implementation branch: `codex/safehouse-royal-rebuild`. Pull request: [SafeHouse
 - Backend source, schema, migrations, deployment config and package manifest remain byte-equivalent to baseline `52e08b3a578bcca7e1df8701dfb7fa14473d497d`. The existing contract workflow also builds the backend and checks its financial/runtime/notification contracts in CI.
 - Read-only live API check on 2026-11-04: `/health` returned 200 and accepted `Origin: https://appassets.androidplatform.net`. This establishes reachability/CORS compatibility, not authenticated or financial end-to-end readiness.
 
-The final commit-specific Android build, signed-debug APK verification, emulator instrumentation results and native screenshots are linked in the PR delivery evidence. The workflow packages test fixtures only in a separate instrumentation APK, not the app APK. APK provenance records the actual checked-out implementation commit; debug signing is explicitly identified as testing.
+## Verified build and artifacts
+
+The tested implementation commit is [`a3e91dd3dece32ef8baf5d344b3008abf6f8a0f6`](https://github.com/nikhil23maurya/Safehouse-PG/commit/a3e91dd3dece32ef8baf5d344b3008abf6f8a0f6). Subsequent documentation changes do not change the app packaged in this APK.
+
+| Evidence | Verified result |
+| --- | --- |
+| [Android/frontend run 41864070320](https://github.com/nikhil23maurya/Safehouse-PG/actions/runs/41864070320) | Both jobs passed on 2026-11-04; 33 unit tests and 27 browser tests |
+| [Backend contract run 41864070148](https://github.com/nikhil23maurya/Safehouse-PG/actions/runs/41864070148) | Existing backend build and contracts passed |
+| [Download testing APK](https://github.com/nikhil23maurya/Safehouse-PG/actions/runs/41864070320/artifacts/13340962607) | Debug signed, version 5.0.0/code 50, package `com.safehouse.pg.testing` |
+| [Android diagnostics](https://github.com/nikhil23maurya/Safehouse-PG/actions/runs/41864070320/artifacts/13340723630) | Build/signature/ZIP/identity reports, cold-start video, instrumentation log and 30 screenshots |
+| [Browser visual evidence](https://github.com/nikhil23maurya/Safehouse-PG/actions/runs/41864070320/artifacts/13341996013) | 256 screenshots, browser test report and build metadata |
+
+APK filename: `SafeHouse-5.0.0-testing-a3e91dd3dece.apk` (4,675,761 bytes).
+
+```text
+SHA-256: 091dc6ef5fd9aca5b9c9a36138d9d028edc56b2fb995d9c52b5b750e64532400
+```
+
+The downloaded APK hash matches its sidecar; ZIP integrity passed locally, and `app.js`, `app.css` and `index.html` are byte-identical to the maintained frontend build. CI verified v1/v2 debug signatures and the separate testing package identity. Test fixtures and the deliberately invalid QR recipient are packaged only in the instrumentation APK, not the application APK. GitHub artifact access requires repository access; retention is 30 days.
+
+## Native visual and interaction review
+
+Android 35 instrumentation passed (`OK (1 test)`, 52.067 seconds). This single native journey covers encrypted session persistence and restoration, keyboard focus, owner/resident navigation, unsaved-draft retention through rotation, notification permission, 130% text zoom, QR image loading and captured-payment fixtures, hardware back and background/resume. Core success/failure/financial assertions additionally run in the unit and browser suites.
+
+All 30 native screenshots were reviewed. The focused password field remains above the keyboard; longer forms and the sign-in action remain scrollable with the keyboard open. Rotation retains the entered draft. The notification permission prompt and subsequent allowed state are captured. Dashboard amounts, QR, verified-success fixture, receipt history and resumed paid dashboard render consistently. Browser evidence covers all 32 documented states at four sizes, including screens that require scrolling on the native device.
+
+The 11.16-second cold-start recording was decoded and inspected from the system house mark through the native wordmark reveal to sign-in. The emulator's `am start -W` reported `LaunchState: COLD`, `TotalTime: 5272` ms; this measures activity launch, not web-content readiness. It does not establish the requested 700–1200 ms perceived startup target on physical hardware. No fixed readiness delay is added by the app. Physical-device startup profiling remains part of release acceptance.
 
 ## Limits and unsupported behavior
 
