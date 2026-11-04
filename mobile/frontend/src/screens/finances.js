@@ -94,7 +94,7 @@ export async function duesScreen(ctx) {
         ? dues
             .map((i) =>
               card(
-                `<div class="campaign-head"><div><h3>${esc(i.student.name)}</h3><p class="subtitle">${esc(i.student.room ? `Room ${i.student.room}` : "Unassigned")} · Due ${esc(date(i.dueDate))}</p></div>${invoiceBadge(i)}</div><div class="financial-amount">${money(i.remainingPaise)}</div><div class="action-stack">${button(recording ? "Record payment" : "View invoice", { route: recording ? "manualPayment" : "invoice", params: { id: i.id, residentId: i.student.id }, kind: recording ? "primary" : "secondary", glyph: recording ? "wallet" : "invoice" })}${i.whatsappUrl ? `<button class="text-button" data-action="remind" data-id="${esc(i.id)}">${icon("send")} Send WhatsApp reminder ${icon("external")}</button>` : ""}</div>`,
+                `<div class="campaign-head"><div><h3>${esc(i.student.name)}</h3><p class="subtitle">${esc(i.student.room ? `Room ${i.student.room}` : "Unassigned")} · Due ${esc(date(i.dueDate, ctx.snapshot.property?.timezone))}</p></div>${invoiceBadge(i)}</div><div class="financial-amount">${money(i.remainingPaise)}</div><div class="action-stack">${button(recording ? "Record payment" : "View invoice", { route: recording ? "manualPayment" : "invoice", params: { id: i.id, residentId: i.student.id }, kind: recording ? "primary" : "secondary", glyph: recording ? "wallet" : "invoice" })}${i.whatsappUrl ? `<button class="text-button" data-action="remind" data-id="${esc(i.id)}">${icon("send")} Send WhatsApp reminder ${icon("external")}</button>` : ""}</div>`,
               ),
             )
             .join("")
@@ -140,7 +140,7 @@ export async function invoiceScreen(ctx) {
     back: true,
     nav: owner ? "dues" : "invoices",
     content:
-      `<div class="invoice-header"><span class="row-icon">${icon("invoice")}</span><p class="eyebrow">RENT INVOICE</p><h1>${esc(month(i.year, i.month))}</h1><p class="subtitle">${esc(owner ? resident.name : ctx.snapshot.property?.name)}</p><div class="financial-amount">${money(i.remainingPaise)}</div>${badge(status.label, status.tone)}<p class="subtitle">Due ${esc(date(i.dueDate))}</p><p class="invoice-reference">Invoice ${esc(i.id)}</p></div>` +
+      `<div class="invoice-header"><span class="row-icon">${icon("invoice")}</span><p class="eyebrow">RENT INVOICE</p><h1>${esc(month(i.year, i.month))}</h1><p class="subtitle">${esc(owner ? resident.name : ctx.snapshot.property?.name)}</p><div class="financial-amount">${money(i.remainingPaise)}</div>${badge(status.label, status.tone)}<p class="subtitle">Due ${esc(date(i.dueDate, ctx.snapshot.property?.timezone))}</p><p class="invoice-reference">Invoice ${esc(i.id)}</p></div>` +
       section("The breakdown", card(breakdown(i))) +
       (payable
         ? `<div class="action-stack">${owner ? button("Record payment", { route: "manualPayment", params, glyph: "wallet" }) : button(i.status === "PROCESSING" ? "Check payment" : "Pay rent", { route: "payment", params: { invoiceId: i.id }, glyph: "qr" })}${owner && i.status === "DUE" ? button("Edit charges", { route: "invoiceCharges", params, kind: "secondary", glyph: "edit" }) : ""}</div>`
@@ -148,7 +148,7 @@ export async function invoiceScreen(ctx) {
       (i.payments?.length
         ? section(
             "Payments for this invoice",
-            `<div class="list">${i.payments.map((p) => paymentRow({ ...p, invoice: { id: i.id, year: i.year, month: i.month } })).join("")}</div>`,
+            `<div class="list">${i.payments.map((p) => paymentRow({ ...p, invoice: { id: i.id, year: i.year, month: i.month } }, false, ctx.snapshot.property?.timezone)).join("")}</div>`,
           )
         : "") +
       notice(
@@ -185,7 +185,11 @@ export async function invoicesScreen(ctx) {
         status,
       ) +
       (visible.length
-        ? visible.map((i) => invoiceCard(i)).join("")
+        ? visible
+            .map((i) =>
+              invoiceCard(i, false, undefined, ctx.snapshot.property?.timezone),
+            )
+            .join("")
         : empty(
             "Nothing here yet",
             status === "ALL"
@@ -238,7 +242,7 @@ export async function paymentsScreen(ctx) {
         "Confirmed payments. Receipts when you need them.",
       ) +
       (owner ? periodControl(ctx.snapshot.period) : "") +
-      `<div class="list">${payments.length ? payments.map((p) => paymentRow(p, owner)).join("") : empty("No payments yet", owner ? "No recorded payments for this billing month." : "Your recorded payments and receipts will appear here.", { glyph: "wallet" })}</div>` +
+      `<div class="list">${payments.length ? payments.map((p) => paymentRow(p, owner, ctx.snapshot.property?.timezone)).join("") : empty("No payments yet", owner ? "No recorded payments for this billing month." : "Your recorded payments and receipts will appear here.", { glyph: "wallet" })}</div>` +
       button("Refresh payments", {
         action: "reload",
         kind: "secondary block",

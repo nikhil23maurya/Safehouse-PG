@@ -24,6 +24,12 @@
   stroke-dashoffset: 240;
   animation: draw-logo 800ms ease forwards;
 }
+.session-restore p {
+  color: var(--muted);
+  font-size: 0.875rem;
+  letter-spacing: 0;
+  font-weight: 400;
+}
 @keyframes draw-logo {
   to {
     stroke-dashoffset: 0;
@@ -94,6 +100,20 @@
   color: var(--muted);
   text-align: center;
   margin-top: clamp(32px, 5vh, 64px);
+}
+.keyboard-open .login-page {
+  align-items: flex-start;
+  padding-top: 24px;
+}
+.keyboard-open .login-identity {
+  margin-bottom: 24px;
+}
+.keyboard-open .login-heading h1 {
+  font-size: 2rem;
+  margin-top: 0;
+}
+.keyboard-open .login-heading p {
+  margin-bottom: 24px;
 }
 .property-context {
   display: flex;
@@ -842,10 +862,44 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .content > :first-child,
+  .toast,
+  .dialog,
+  .page-progress::after {
+    animation: none;
+  }
+  button {
+    transition: none;
+  }
   .boot svg,
   .success-mark path,
   .success-mark circle {
     animation: none;
     stroke-dashoffset: 0;
   }
+}
+.reduced-motion .content > :first-child,
+.reduced-motion .toast,
+.reduced-motion .dialog,
+.reduced-motion .page-progress::after,
+.reduced-motion .sk,
+.reduced-motion .spinner,
+.reduced-motion .boot svg,
+.reduced-motion .success-mark path,
+.reduced-motion .success-mark circle {
+  animation: none;
+}
+.reduced-motion button {
+  transition: none;
+}
+.reduced-motion .boot svg,
+.reduced-motion .success-mark path,
+.reduced-motion .success-mark circle {
+  stroke-dashoffset: 0;
+}
+.reduced-motion .sk {
+  background: #edf1f6;
+}
+.reduced-motion .spinner {
+  border-style: dotted;
 }

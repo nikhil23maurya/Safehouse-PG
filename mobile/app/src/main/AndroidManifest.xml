@@ -37,7 +37,7 @@
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|keyboardHidden|fontScale|uiMode"
             android:screenOrientation="unspecified"
             android:windowSoftInputMode="adjustResize">
             <intent-filter>

@@ -109,7 +109,7 @@ export async function residentScreen(ctx) {
       section(
         month(ctx.snapshot.period.year, ctx.snapshot.period.month),
         current
-          ? invoiceCard(current, true, s.id)
+          ? invoiceCard(current, true, s.id, ctx.snapshot.property?.timezone)
           : card(
               empty(
                 "No invoice in this period",
@@ -126,7 +126,7 @@ export async function residentScreen(ctx) {
       section(
         "Residency & rent",
         card(
-          `<dl>${detail("Room", s.room?.number || "Unassigned")}${detail("Bed", s.bedLabel || "Not assigned")}${detail("Joining date", date(s.joiningDate))}${detail("Configured monthly rent", money(s.monthlyRentPaise))}${detail("Security deposit", money(s.securityDepositPaise))}${detail("Rent due day", s.rentDueDay ? `Day ${s.rentDueDay}` : "—")}</dl>`,
+          `<dl>${detail("Room", s.room?.number || "Unassigned")}${detail("Bed", s.bedLabel || "Not assigned")}${detail("Joining date", date(s.joiningDate, "UTC"))}${detail("Configured monthly rent", money(s.monthlyRentPaise))}${detail("Security deposit", money(s.securityDepositPaise))}${detail("Rent due day", s.rentDueDay ? `Day ${s.rentDueDay}` : "—")}</dl>`,
         ),
       ) +
       (s.rentRevisions?.length
@@ -142,7 +142,11 @@ export async function residentScreen(ctx) {
         : "") +
       section(
         "Invoices",
-        (s.invoices || []).map((i) => invoiceCard(i, true, s.id)).join("") ||
+        (s.invoices || [])
+          .map((i) =>
+            invoiceCard(i, true, s.id, ctx.snapshot.property?.timezone),
+          )
+          .join("") ||
           empty(
             "No invoices yet",
             "Issued invoices retain their historical amounts.",
@@ -150,7 +154,7 @@ export async function residentScreen(ctx) {
       ) +
       section(
         "Payment history",
-        `<div class="list">${payments.length ? payments.map((p) => paymentRow(p, false)).join("") : empty("No payments yet", "Confirmed payments and their receipts will appear here.", { glyph: "wallet" })}</div>`,
+        `<div class="list">${payments.length ? payments.map((p) => paymentRow(p, false, ctx.snapshot.property?.timezone)).join("") : empty("No payments yet", "Confirmed payments and their receipts will appear here.", { glyph: "wallet" })}</div>`,
       ) +
       section(
         "Account access",
@@ -267,7 +271,7 @@ export async function residentFormScreen(ctx) {
             attrs: 'maxlength="30"',
           }) +
           (id
-            ? `<dl>${detail("Joined", date(s.joiningDate))}</dl>`
+            ? `<dl>${detail("Joined", date(s.joiningDate, "UTC"))}</dl>`
             : field("joiningDate", "Joining date", {
                 type: "date",
                 required: true,

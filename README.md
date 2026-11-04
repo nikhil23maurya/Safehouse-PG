@@ -2,6 +2,10 @@
 
 Backend for the SafeHouse PG owner/student mobile app.
 
+## Maintained Android app
+
+The Android frontend is maintained in `mobile/frontend/src/` and `mobile/app/src/main/`. The workflows build from this source tree, with locked frontend tooling and commit-specific testing APK artifacts. See [Android build and testing instructions](mobile/README.md), [architecture](docs/mobile-rebuild/ARCHITECTURE.md), [screen changes](docs/mobile-rebuild/SCREEN_CHANGES.md), and [validation limits](docs/mobile-rebuild/VALIDATION.md). The separate testing package does not overwrite the production app.
+
 ## What is implemented
 
 - Owner + Student authentication with access/refresh tokens

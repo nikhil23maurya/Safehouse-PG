@@ -37,7 +37,7 @@ export function profileScreen(ctx) {
         ? section(
             "Residency",
             card(
-              `<dl>${detail("Mobile", student.mobile)}${detail("Joined", date(student.joiningDate))}${detail("Monthly rent", money(student.monthlyRentPaise))}${detail("Security deposit", money(student.securityDepositPaise))}${detail("Rent due day", student.rentDueDay ? `Day ${student.rentDueDay}` : "—")}</dl>`,
+              `<dl>${detail("Mobile", student.mobile)}${detail("Joined", date(student.joiningDate, "UTC"))}${detail("Monthly rent", money(student.monthlyRentPaise))}${detail("Security deposit", money(student.securityDepositPaise))}${detail("Rent due day", student.rentDueDay ? `Day ${student.rentDueDay}` : "—")}</dl>`,
             ),
           )
         : "") +

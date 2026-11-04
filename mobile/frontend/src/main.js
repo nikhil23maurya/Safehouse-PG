@@ -81,6 +81,13 @@ const rootRoutes = new Set([
   "history",
 ]);
 const cache = new ResourceCache();
+function applyMotionPreference() {
+  document.body.classList.toggle(
+    "reduced-motion",
+    Boolean(native.call("prefersReducedMotion")),
+  );
+}
+applyMotionPreference();
 let sequence = 0,
   screen = null,
   dirty = false,
@@ -93,6 +100,7 @@ let submittedForms = 0,
   submissionNavigationAllowed = false;
 const home = () => (state.user?.role === "OWNER" ? "ownerHome" : "studentHome");
 let pendingNotificationRoute = null;
+let restoringMetadata = null;
 function postAuthRoute() {
   if (state.user?.mustChangePassword) return "password";
   if (pendingNotificationRoute === null) return home();
@@ -102,6 +110,10 @@ function postAuthRoute() {
 }
 
 function persist() {
+  if (state.tokens && !state.user && restoringMetadata) {
+    native.save({ ...restoringMetadata, tokens: state.tokens });
+    return;
+  }
   native.save(
     state.tokens
       ? {
@@ -127,6 +139,7 @@ function toast(message, type = "") {
 }
 
 function clearSession() {
+  restoringMetadata = null;
   state.authEpoch++;
   payment.stop();
   cache.clear();
@@ -442,8 +455,9 @@ window.SafeHousePaymentError = () => {
   void payment.resume();
 };
 window.SafeHouseResume = () => {
+  applyMotionPreference();
   if (screen?.paymentFlow) void payment.resume();
-  else if (state.tokens && !dirty && !submittedForms) {
+  else if (state.tokens && state.user && !dirty && !submittedForms) {
     cache.clear();
     void render();
   }
@@ -645,9 +659,11 @@ document.addEventListener("click", async (event) => {
     }
     if (action === "scroll-section") {
       document.getElementById(element.dataset.target)?.scrollIntoView({
-        behavior: matchMedia("(prefers-reduced-motion: reduce)").matches
-          ? "auto"
-          : "smooth",
+        behavior:
+          document.body.classList.contains("reduced-motion") ||
+          matchMedia("(prefers-reduced-motion: reduce)").matches
+            ? "auto"
+            : "smooth",
         block: "start",
       });
       return;
@@ -808,11 +824,28 @@ window.addEventListener("online", () => {
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden && screen?.paymentFlow) void payment.resume();
 });
-let nativeKeyboardOpen = false;
+let nativeKeyboardOpen = false,
+  keyboardFrame;
+function revealFocusedField() {
+  cancelAnimationFrame(keyboardFrame);
+  keyboardFrame = requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      const field = document.activeElement;
+      if (
+        document.body.classList.contains("keyboard-open") &&
+        /^(INPUT|TEXTAREA|SELECT)$/.test(field?.tagName)
+      ) {
+        field.scrollIntoView({ block: "center", behavior: "auto" });
+      }
+    }),
+  );
+}
 const updateKeyboard = () => {
   const focused = /^(INPUT|TEXTAREA|SELECT)$/.test(
     document.activeElement?.tagName,
   );
+  if (focused && document.body.classList.contains("keyboard-open"))
+    revealFocusedField();
   document.body.classList.toggle(
     "keyboard-open",
     nativeKeyboardOpen ||
@@ -825,6 +858,7 @@ window.SafeHouseKeyboard = (open) => {
   updateKeyboard();
 };
 window.visualViewport?.addEventListener("resize", updateKeyboard);
+document.addEventListener("focusin", revealFocusedField);
 document.addEventListener("focusout", () => {
   document.body.classList.remove("keyboard-open");
 });
@@ -832,9 +866,15 @@ document.addEventListener("focusout", () => {
 async function boot() {
   const stored = native.load();
   if (stored?.tokens?.accessToken && stored.tokens.refreshToken) {
+    const restoreEpoch = state.authEpoch;
+    restoringMetadata = stored;
     state.tokens = stored.tokens;
+    document.getElementById("app").innerHTML =
+      `<main class="boot session-restore" role="status"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="m5 22 19-16 19 16M11 22v19h11V29h10v12h5V22"/></svg><span>SafeHouse</span><p>Restoring your account…</p><span class="spinner" aria-hidden="true"></span></main>`;
+    requestAnimationFrame(() => native.call("ready"));
     try {
       const me = await api("/api/auth/me");
+      if (state.authEpoch !== restoreEpoch) return;
       if (!["OWNER", "STUDENT"].includes(me.user?.role))
         throw new Error("Invalid account.");
       state.user = me.user;
@@ -857,8 +897,10 @@ async function boot() {
       state.pendingPayment =
         stored.userId === me.user.id ? stored.pendingPayment || null : null;
       persist();
+      restoringMetadata = null;
       state.route = { name: guardedRoute(postAuthRoute()), params: {} };
     } catch (error) {
+      if (state.authEpoch !== restoreEpoch) return;
       if (error.status === 401 || !state.tokens) clearSession();
       else {
         // Preserve a valid encrypted session during an outage; never delete it on a timeout.

@@ -177,6 +177,12 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         super.onPause();
     }
 
+    @Override public void onConfigurationChanged(android.content.res.Configuration configuration) {
+        super.onConfigurationChanged(configuration);
+        if (webView != null) webView.getSettings().setTextZoom(Math.round(configuration.fontScale * 100));
+        if (hostView != null) hostView.requestApplyInsets();
+    }
+
     private void flushNativeEvents() {
         if (!pageReady) return;
         String installationId = getSharedPreferences(PREFS, MODE_PRIVATE).getString(EXTRA_INSTALLATION_ID, "");
@@ -304,6 +310,9 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
     }
 
     public final class NativeBridge {
+        @JavascriptInterface public boolean prefersReducedMotion() {
+            return android.provider.Settings.Global.getFloat(getContentResolver(), android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f;
+        }
         @JavascriptInterface public String getSession() { return sessionVault.load(); }
         @JavascriptInterface public boolean saveSession(String value) { return sessionVault.save(value); }
         @JavascriptInterface public void ready() {

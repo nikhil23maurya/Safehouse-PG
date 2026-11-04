@@ -15,6 +15,82 @@ test("payment notification opens history after a fresh sign in", async ({
   await expect(page).toHaveURL(/#history$/);
 });
 
+test("cold token refresh preserves encrypted property and pending-QR context during an outage", async ({
+  page,
+}) => {
+  const stored = {
+    tokens: {
+      accessToken: "fixture_OWNER_old_access",
+      refreshToken: "fixture_OWNER_refresh_token",
+    },
+    userId: "owner1",
+    activePropertyId: "property2",
+    period: { year: 2026, month: 11 },
+    pendingPayment: {
+      invoiceId: "invoice1",
+      qr: {
+        id: "qr_savedfixture",
+        imageUrl: "https://rzp.io/i/fixture",
+        amountPaise: 850099,
+        expiresAt: 2000000000,
+      },
+    },
+  };
+  await page.addInitScript((value) => {
+    window.__testVault = value;
+    window.SafeHouseNative = {
+      getSession: () => JSON.stringify(window.__testVault),
+      saveSession: (raw) => {
+        window.__testVault = raw ? JSON.parse(raw) : null;
+        return true;
+      },
+      ready: () => {},
+    };
+  }, stored);
+  await setup(page);
+  await expect(page).toHaveTitle(/^Home/);
+  let meCalls = 0;
+  await page.route("**/api/auth/me", (route) => {
+    meCalls++;
+    if (meCalls === 1)
+      return route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ error: { message: "Expired" } }),
+        headers: { "Access-Control-Allow-Origin": "*" },
+      });
+    return route.abort("connectionreset");
+  });
+  await page.reload();
+  await expect(
+    page.getByText("Could not restore your session.", { exact: false }),
+  ).toBeVisible();
+  const vault = await page.evaluate(() => window.__testVault);
+  expect(vault.activePropertyId).toBe("property2");
+  expect(vault.userId).toBe("owner1");
+  expect(vault.pendingPayment.qr.id).toBe("qr_savedfixture");
+  expect(vault.period).toEqual(stored.period);
+  expect(vault.tokens.accessToken).toBe("fixture_OWNER_access");
+});
+
+test("keyboard layout reveals the focused password field", async ({ page }) => {
+  await setup(page);
+  await page.setViewportSize({ width: 393, height: 530 });
+  await page.getByLabel("Password", { exact: true }).focus();
+  await page.evaluate(() => window.SafeHouseKeyboard(true));
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document.querySelector("[name=password]").getBoundingClientRect()
+            .bottom <
+          innerHeight * 0.8,
+      ),
+    )
+    .toBe(true);
+  await noOverflow(page);
+});
+
 test("owner login, invalid credentials, visibility and logout", async ({
   page,
 }) => {
@@ -321,6 +397,7 @@ test("responsive text scaling and landscape do not overflow", async ({
 }) => {
   await setup(page);
   await login(page);
+  await expect(page.locator('.page-heading')).toHaveCSS('animation-name', 'none');
   await page.evaluate(() => {
     document.documentElement.style.fontSize = "20px";
   });

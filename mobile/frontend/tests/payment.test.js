@@ -2,6 +2,16 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { PaymentController } from "../src/payments/controller.js";
 
+test("delayed confirmation stays pending and does not create another QR", async () => {
+  const h = harness();
+  await h.controller.open(invoice);
+  h.controller.now = () => 1_091_000;
+  await h.controller.check();
+  assert.equal(h.controller.value.phase, "delayed");
+  assert.equal(h.issued(), 1);
+  assert.equal(h.settled(), 0);
+});
+
 const invoice = {
   id: "invoice1",
   year: 2026,
