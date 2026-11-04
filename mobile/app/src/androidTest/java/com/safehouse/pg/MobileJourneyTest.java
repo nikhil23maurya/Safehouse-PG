@@ -75,7 +75,15 @@ public class MobileJourneyTest {
                 instrumentation.runOnMainSync(() -> focused.set(activity.hasWindowFocus()));
                 if (!focused.get()) Thread.sleep(150);
             } while (!focused.get() && System.currentTimeMillis() < deadline);
-            assertTrue("Activity did not return to the foreground: " + name, focused.get());
+            if (!focused.get()) {
+                captureBitmap(name + "-foreground-failure");
+                android.os.ParcelFileDescriptor descriptor = instrumentation.getUiAutomation().executeShellCommand("dumpsys window windows");
+                try (InputStream input = new java.io.FileInputStream(descriptor.getFileDescriptor()); FileOutputStream output = new FileOutputStream(new File(target.getExternalFilesDir(null), "qa/window-focus-failure.txt"))) {
+                    byte[] buffer = new byte[8192]; int count;
+                    while ((count = input.read(buffer)) >= 0) output.write(buffer, 0, count);
+                } finally { descriptor.close(); }
+                fail("Activity did not return to the foreground: " + name);
+            }
             CountDownLatch painted = new CountDownLatch(1);
             instrumentation.runOnMainSync(() -> web.postVisualStateCallback(System.nanoTime(), new WebView.VisualStateCallback() {
                 @Override public void onComplete(long requestId) {
@@ -86,6 +94,9 @@ public class MobileJourneyTest {
         }
         // Allow short UI transitions and emulator composition to finish before capture.
         Thread.sleep(700);
+        captureBitmap(name);
+    }
+    private void captureBitmap(String name) throws Exception {
         Bitmap bitmap = instrumentation.getUiAutomation().takeScreenshot(); assertNotNull(bitmap);
         File directory = new File(target.getExternalFilesDir(null), "qa"); directory.mkdirs();
         try (FileOutputStream output = new FileOutputStream(new File(directory, name + ".png"))) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, output); }
@@ -98,7 +109,9 @@ public class MobileJourneyTest {
 
     @Test public void installedAppJourneysAndScreenshots() throws Exception {
         new SessionVault(target).save("");
-        Intent intent = new Intent(target, MainActivity.class); intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        Intent intent = target.getPackageManager().getLaunchIntentForPackage(target.getPackageName());
+        assertNotNull("Launcher intent unavailable", intent);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
         activity = instrumentation.startActivitySync(intent);
         instrumentation.runOnMainSync(() -> web = findWeb(activity.getWindow().getDecorView()));
         assertNotNull("WebView did not initialize", web);
@@ -201,7 +214,10 @@ public class MobileJourneyTest {
         go("studentHome", "{}");
         instrumentation.runOnMainSync(() -> { activity.moveTaskToBack(true); });
         Thread.sleep(300);
-        instrumentation.runOnMainSync(() -> target.startActivity(intent));
+        Intent resumeIntent = target.getPackageManager().getLaunchIntentForPackage(target.getPackageName());
+        assertNotNull(resumeIntent);
+        resumeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        instrumentation.runOnMainSync(() -> target.startActivity(resumeIntent));
         await("document.getElementById('app').dataset.screen==='studentHome'"); screenshot("26-warm-resume");
         instrumentation.runOnMainSync(() -> activity.finish());
     }

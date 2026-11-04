@@ -5,7 +5,7 @@ on:
   pull_request:
     paths: ['mobile/**', 'scripts/verify-mobile-source.mjs', 'scripts/android-smoke.sh', '.github/workflows/build-mobile-apk.yml']
   push:
-    branches: [main, codex/safehouse-royal-rebuild]
+    branches: [main]
     paths: ['mobile/**', 'scripts/verify-mobile-source.mjs', 'scripts/android-smoke.sh', '.github/workflows/build-mobile-apk.yml']
 
 permissions:
@@ -52,6 +52,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SafeHouse-web-visual-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          overwrite: true
           path: |
             mobile/frontend/visual-evidence/
             mobile/frontend/playwright-report/
@@ -116,6 +117,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SafeHouse-testing-APK-${{ github.event.pull_request.head.sha || github.sha }}
+          overwrite: true
           path: diagnostics/apk/
           if-no-files-found: error
           retention-days: 30
@@ -140,6 +142,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: SafeHouse-Android-diagnostics-${{ github.event.pull_request.head.sha || github.sha }}
+          overwrite: true
           path: |
             android-build.log
             diagnostics/
