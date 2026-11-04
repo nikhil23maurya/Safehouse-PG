@@ -68,7 +68,7 @@ public class SafeHouseFirebaseService extends FirebaseMessagingService {
                 .setContentTitle(title)
                 .setContentText(body)
                 .setStyle(new Notification.BigTextStyle().bigText(body))
-                .setColor(Color.rgb(36, 99, 235))
+                .setColor(getColor(R.color.safehouse_blue))
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true)
                 .setWhen(System.currentTimeMillis());

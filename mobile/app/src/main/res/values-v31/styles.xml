@@ -11,7 +11,8 @@
         <item name="android:colorAccent">#1746C8</item>
         <item name="android:windowBackground">#FFFFFF</item>
         <item name="android:windowSplashScreenBackground">#FFFFFF</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_animated</item>
+        <item name="android:windowSplashScreenAnimationDuration">700</item>
         <item name="android:windowSplashScreenIconBackgroundColor">#FFFFFF</item>
     </style>
 </resources>

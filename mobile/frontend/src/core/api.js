@@ -125,7 +125,21 @@ export function createApiClient({
           getState().tokens?.accessToken &&
           getState().tokens.accessToken !== snapshot.tokens.accessToken
         ) {
-          return raw(path, options, getState().tokens, snapshot.propertyId);
+          try {
+            return await raw(
+              path,
+              options,
+              getState().tokens,
+              snapshot.propertyId,
+            );
+          } catch (retryError) {
+            if (
+              retryError.status === 401 &&
+              getState().authEpoch === snapshot.epoch
+            )
+              onExpired();
+            throw retryError;
+          }
         }
         if (!refreshFlight || refreshFlight.epoch !== snapshot.epoch) {
           const promise = (async () => {

@@ -1,0 +1,9 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:name="roof" android:fillColor="@android:color/transparent" android:strokeColor="@color/safehouse_blue"
+        android:strokeWidth="3.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M29,51L54,30L79,51" android:trimPathEnd="0"/>
+    <path android:name="house" android:fillColor="@android:color/transparent" android:strokeColor="@color/safehouse_blue"
+        android:strokeWidth="3.5" android:strokeLineCap="round" android:strokeLineJoin="round"
+        android:pathData="M37,51V77H51V61H65V77H71V51" android:trimPathEnd="0"/>
+</vector>

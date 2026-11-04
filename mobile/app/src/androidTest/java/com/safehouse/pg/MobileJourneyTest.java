@@ -65,7 +65,27 @@ public class MobileJourneyTest {
         assertEquals("Horizontal overflow: " + name, "true", js("document.documentElement.scrollWidth<=innerWidth+1"));
     }
     private void screenshot(String name) throws Exception {
-        Thread.sleep(150);
+        screenshot(name, true);
+    }
+    private void screenshot(String name, boolean requireAppFocus) throws Exception {
+        if (requireAppFocus) {
+            long deadline = System.currentTimeMillis() + 10000;
+            AtomicReference<Boolean> focused = new AtomicReference<>(false);
+            do {
+                instrumentation.runOnMainSync(() -> focused.set(activity.hasWindowFocus()));
+                if (!focused.get()) Thread.sleep(150);
+            } while (!focused.get() && System.currentTimeMillis() < deadline);
+            assertTrue("Activity did not return to the foreground: " + name, focused.get());
+            CountDownLatch painted = new CountDownLatch(1);
+            instrumentation.runOnMainSync(() -> web.postVisualStateCallback(System.nanoTime(), new WebView.VisualStateCallback() {
+                @Override public void onComplete(long requestId) {
+                    web.postOnAnimation(() -> web.postOnAnimation(painted::countDown));
+                }
+            }));
+            assertTrue("WebView did not present the current frame: " + name, painted.await(10, TimeUnit.SECONDS));
+        }
+        // Allow short UI transitions and emulator composition to finish before capture.
+        Thread.sleep(700);
         Bitmap bitmap = instrumentation.getUiAutomation().takeScreenshot(); assertNotNull(bitmap);
         File directory = new File(target.getExternalFilesDir(null), "qa"); directory.mkdirs();
         try (FileOutputStream output = new FileOutputStream(new File(directory, name + ".png"))) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, output); }
@@ -115,11 +135,22 @@ public class MobileJourneyTest {
         signIn(false); screenshot("03-owner-home");
         assertTrue("Encrypted session did not restore", new SessionVault(target).load().contains("fixture_OWNER_access"));
         assertFalse("Plaintext session must not be in preferences", target.getSharedPreferences("safehouse_secure_session", Context.MODE_PRIVATE).getString("ciphertext", "").contains("fixture_OWNER_access"));
+        js("window.__beforeReload=true");
         instrumentation.runOnMainSync(() -> web.reload());
-        await("document.getElementById('app').dataset.screen==='ownerHome'"); screenshot("04-session-restored");
+        await("!window.__beforeReload&&window.__nativeFixtures&&document.getElementById('app').dataset.screen==='ownerHome'"); screenshot("04-session-restored");
         go("residents", "{}"); screenshot("05-residents");
         go("resident", "{id:'resident1'}"); screenshot("06-resident");
         go("residentForm", "{}"); screenshot("07-add-resident");
+        js("document.querySelector('[name=fullName]').value='Draft kept on rotation';document.querySelector('[name=fullName]').dispatchEvent(new Event('input',{bubbles:true}));");
+        instrumentation.runOnMainSync(() -> activity.setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE));
+        await("innerWidth>innerHeight");
+        assertEquals("true", js("document.querySelector('[name=fullName]').value==='Draft kept on rotation'"));
+        screenshot("07b-form-landscape");
+        instrumentation.runOnMainSync(() -> activity.setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT));
+        await("innerHeight>innerWidth");
+        assertEquals("true", js("document.querySelector('[name=fullName]').value==='Draft kept on rotation'"));
+        js("document.querySelector('[data-action=back]').click()"); await("document.querySelector('[data-action=dialog-confirm]')");
+        js("document.querySelector('[data-action=dialog-confirm]').click()"); await("!document.querySelector('[data-form=resident]')");
         go("rooms", "{}"); screenshot("08-rooms");
         go("room", "{id:'room1'}"); screenshot("09-room");
         go("roomForm", "{}"); screenshot("10-add-room");
@@ -129,9 +160,30 @@ public class MobileJourneyTest {
         go("invoiceCharges", "{id:'invoice1',residentId:'resident1'}"); screenshot("14-charges");
         go("ownerPayments", "{}"); screenshot("15-owner-payments");
         go("notifications", "{}"); screenshot("16-notifications");
+        if (!"true".equals(js("SafeHouseNative.notificationPermissionStatus()==='granted'"))) {
+            js("SafeHouseNative.requestNotificationPermission()");
+            long permissionDeadline = System.currentTimeMillis() + 15000;
+            boolean allowed = false;
+            do {
+                AccessibilityNodeInfo root = instrumentation.getUiAutomation().getRootInActiveWindow();
+                if (root != null) for (AccessibilityNodeInfo node : root.findAccessibilityNodeInfosByText("Allow")) {
+                    if (node.getText() != null && "Allow".equalsIgnoreCase(node.getText().toString())) {
+                        screenshot("16b-notification-permission", false); node.performAction(AccessibilityNodeInfo.ACTION_CLICK); allowed = true; break;
+                    }
+                }
+                if (!allowed) Thread.sleep(200);
+            } while (!allowed && System.currentTimeMillis() < permissionDeadline);
+            assertTrue("Notification permission prompt unavailable", allowed);
+            await("SafeHouseNative.notificationPermissionStatus()==='granted'");
+        }
+        screenshot("16c-notification-allowed");
         go("notificationForm", "{}"); screenshot("17-compose");
         go("properties", "{}"); screenshot("18-properties");
         go("profile", "{}"); screenshot("19-owner-profile");
+        instrumentation.runOnMainSync(() -> web.getSettings().setTextZoom(130));
+        go("ownerHome", "{}"); screenshot("19b-larger-text");
+        instrumentation.runOnMainSync(() -> web.getSettings().setTextZoom(100));
+        go("profile", "{}");
         js("document.querySelector('[data-action=logout]').click()"); await("document.querySelector('[data-action=dialog-confirm]')");
         js("document.querySelector('[data-action=dialog-confirm]').click()"); await("document.querySelector('[data-form=login]')");
         signIn(true); screenshot("20-resident-home");

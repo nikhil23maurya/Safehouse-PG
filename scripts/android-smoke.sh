@@ -9,7 +9,7 @@ adb shell settings put secure show_ime_with_hard_keyboard 1
 # The fresh testing package has no credentials and opens the real sign-in screen.
 adb shell settings put global animator_duration_scale 1.0
 adb shell am force-stop com.safehouse.pg.testing
-adb shell screenrecord --time-limit 6 /sdcard/safehouse-cold-start.mp4 &
+adb shell screenrecord --size 720x1600 --bit-rate 2000000 --time-limit 12 /sdcard/safehouse-cold-start.mp4 &
 record_pid=$!
 adb shell am start -W com.safehouse.pg.testing/com.safehouse.pg.MainActivity | tee diagnostics/cold-start.txt
 wait "$record_pid"

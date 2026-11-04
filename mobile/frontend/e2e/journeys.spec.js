@@ -1,6 +1,20 @@
 import { test, expect } from "@playwright/test";
 import { setup, login, go, noOverflow } from "./helpers.js";
 
+test("payment notification opens history after a fresh sign in", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.evaluate(() =>
+    window.SafeHouseNotificationOpened("history", "{}"),
+  );
+  await page.getByLabel("Email address").fill("resident@example.test");
+  await page.getByLabel("Password", { exact: true }).fill("FixturePass123!");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveTitle(/^Payment history/);
+  await expect(page).toHaveURL(/#history$/);
+});
+
 test("owner login, invalid credentials, visibility and logout", async ({
   page,
 }) => {
@@ -375,17 +389,25 @@ test("form submissions cannot duplicate while the first request is pending", asy
   expect(calls).toBe(1);
 });
 
-test('sign in can be retried after a network interruption', async ({ page }) => {
+test("sign in can be retried after a network interruption", async ({
+  page,
+}) => {
   await setup(page);
   let attempts = 0;
-  await page.route('**/api/auth/login', route => { attempts++; return attempts === 1 ? route.abort('connectionreset') : route.fallback(); });
-  await page.getByLabel('Email address').fill('owner@example.test');
-  await page.getByLabel('Password', { exact: true }).fill('FixturePass123!');
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page.locator('.form-error')).toContainText('Could not connect');
-  await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeEnabled();
-  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await expect(page).toHaveTitle(/^Home/); expect(attempts).toBe(2);
+  await page.route("**/api/auth/login", (route) => {
+    attempts++;
+    return attempts === 1 ? route.abort("connectionreset") : route.fallback();
+  });
+  await page.getByLabel("Email address").fill("owner@example.test");
+  await page.getByLabel("Password", { exact: true }).fill("FixturePass123!");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page.locator(".form-error")).toContainText("Could not connect");
+  await expect(
+    page.getByRole("button", { name: "Sign in", exact: true }),
+  ).toBeEnabled();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveTitle(/^Home/);
+  expect(attempts).toBe(2);
 });
 
 test("expired sessions return to sign in without showing owner data", async ({

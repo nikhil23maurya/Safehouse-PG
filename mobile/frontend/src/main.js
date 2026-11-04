@@ -8,6 +8,7 @@ import {
 } from "./core/state.js";
 import { createApiClient, API_BASE } from "./core/api.js";
 import { native } from "./core/native.js";
+import { notificationRoute } from "./core/notification-routes.js";
 import { PaymentController } from "./payments/controller.js";
 import { shell, skeleton, errorState, button, esc } from "./components/ui.js";
 import {
@@ -91,6 +92,14 @@ const submissions = new WeakSet();
 let submittedForms = 0,
   submissionNavigationAllowed = false;
 const home = () => (state.user?.role === "OWNER" ? "ownerHome" : "studentHome");
+let pendingNotificationRoute = null;
+function postAuthRoute() {
+  if (state.user?.mustChangePassword) return "password";
+  if (pendingNotificationRoute === null) return home();
+  const target = notificationRoute(pendingNotificationRoute, state.user?.role);
+  pendingNotificationRoute = null;
+  return target;
+}
 
 function persist() {
   native.save(
@@ -323,11 +332,7 @@ async function signIn(email, password) {
     throw error;
   }
   dirty = false;
-  await navigate(
-    result.user.mustChangePassword ? "password" : home(),
-    {},
-    { replace: true, force: true },
-  );
+  await navigate(postAuthRoute(), {}, { replace: true, force: true });
   void setupPush().catch(() => {});
 }
 
@@ -406,7 +411,7 @@ window.SafeHouseNotificationRegistration = async (installationId) => {
 window.SafeHouseNotificationPermissionResult = (result) => {
   toast(
     result === "granted"
-      ? "Notifications allowed. Registering this device…"
+      ? "Notifications allowed."
       : result === "denied"
         ? "Notifications are disabled. You can enable them in Android settings."
         : "Device registration is temporarily unavailable.",
@@ -419,11 +424,10 @@ window.SafeHouseNotificationPermissionResult = (result) => {
       ),
     );
 };
-window.SafeHouseNotificationOpened = () => {
-  if (state.tokens)
-    void navigate(
-      state.user?.role === "OWNER" ? "notifications" : "studentHome",
-    );
+window.SafeHouseNotificationOpened = (route) => {
+  pendingNotificationRoute = typeof route === "string" ? route : "studentHome";
+  if (state.tokens && state.user)
+    void navigate(postAuthRoute(), {}, { replace: true });
 };
 window.SafeHouseUpiError = (message) =>
   toast(
@@ -536,7 +540,7 @@ function makeContext(snapshot, key) {
       cache.clear();
       dirty = false;
       persist();
-      await navigate(home(), {}, { replace: true, force: true });
+      await navigate(postAuthRoute(), {}, { replace: true, force: true });
     },
   };
 }
@@ -853,7 +857,7 @@ async function boot() {
       state.pendingPayment =
         stored.userId === me.user.id ? stored.pendingPayment || null : null;
       persist();
-      state.route = { name: guardedRoute(home()), params: {} };
+      state.route = { name: guardedRoute(postAuthRoute()), params: {} };
     } catch (error) {
       if (error.status === 401 || !state.tokens) clearSession();
       else {
