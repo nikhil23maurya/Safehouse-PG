@@ -95,7 +95,6 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
             return insets.consumeSystemWindowInsets();
         });
         hostView.requestApplyInsets();
-        Checkout.preload(getApplicationContext());
         createWebView();
     }
 

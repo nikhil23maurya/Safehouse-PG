@@ -3,6 +3,7 @@ set -euo pipefail
 mkdir -p diagnostics/android-screenshots
 adb install mobile/app/build/outputs/apk/debug/app-debug.apk
 adb install mobile/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+adb shell settings put secure show_ime_with_hard_keyboard 1
 
 # Record a real cold launch with system animation enabled, before fixture injection.
 # The fresh testing package has no credentials and opens the real sign-in screen.

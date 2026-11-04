@@ -106,7 +106,7 @@ public class MobileJourneyTest {
         await("window.__nativeFixtures&&document.querySelector('[data-form=login]')");
         screenshot("01-login");
         js("document.querySelector('[name=password]').focus()");
-        instrumentation.runOnMainSync(() -> ((android.view.inputmethod.InputMethodManager)target.getSystemService(Context.INPUT_METHOD_SERVICE)).showSoftInput(web, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT));
+        instrumentation.runOnMainSync(() -> { web.requestFocus(); ((android.view.inputmethod.InputMethodManager)target.getSystemService(Context.INPUT_METHOD_SERVICE)).showSoftInput(web, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT); });
         Thread.sleep(1500); screenshot("02-login-keyboard");
         try (FileOutputStream info = new FileOutputStream(new File(target.getExternalFilesDir(null), "qa/keyboard-layout.txt"))) {
             info.write(js("JSON.stringify({height:innerHeight,visualHeight:visualViewport.height,focused:document.activeElement.tagName,input:document.querySelector('[name=password]').getBoundingClientRect().toJSON()})").getBytes(StandardCharsets.UTF_8));

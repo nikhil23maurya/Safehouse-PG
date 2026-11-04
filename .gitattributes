@@ -1,0 +1,6 @@
+/mobile/** text=auto eol=lf
+/mobile/**/*.png binary
+/.github/workflows/build-mobile-apk.yml text eol=lf
+/.github/workflows/validate-financial-context.yml text eol=lf
+/scripts/android-smoke.sh text eol=lf
+/scripts/verify-mobile-source.mjs text eol=lf
