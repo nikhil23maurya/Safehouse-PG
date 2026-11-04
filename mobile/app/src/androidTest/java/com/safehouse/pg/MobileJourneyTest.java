@@ -90,7 +90,7 @@ public class MobileJourneyTest {
                 @Override public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                     try {
                         if (request.getUrl().toString().equals("https://rzp.io/i/fixture")) return new WebResourceResponse("image/png", null, instrumentation.getContext().getAssets().open("qr-fixture.png"));
-                        if (request.getUrl().getPath().equals("/assets/app.js")) {
+                        if ("/assets/app.js".equals(request.getUrl().getPath())) {
                             String source = fixtures + "\n" + read(target.getAssets().open("app.js"));
                             return new WebResourceResponse("application/javascript", "UTF-8", new ByteArrayInputStream(source.getBytes(StandardCharsets.UTF_8)));
                         }
@@ -101,10 +101,16 @@ public class MobileJourneyTest {
                 @Override public void onPageFinished(WebView view, String url) { production.onPageFinished(view, url); }
             });
         });
-        js(fixtures); screenshot("01-login");
+        // Reload with fixtures prefixed before the production API client captures fetch.
+        instrumentation.runOnMainSync(() -> { web.clearCache(true); web.reload(); });
+        await("window.__nativeFixtures&&document.querySelector('[data-form=login]')");
+        screenshot("01-login");
         js("document.querySelector('[name=password]').focus()");
         instrumentation.runOnMainSync(() -> ((android.view.inputmethod.InputMethodManager)target.getSystemService(Context.INPUT_METHOD_SERVICE)).showSoftInput(web, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT));
-        Thread.sleep(600); screenshot("02-login-keyboard");
+        Thread.sleep(1500); screenshot("02-login-keyboard");
+        try (FileOutputStream info = new FileOutputStream(new File(target.getExternalFilesDir(null), "qa/keyboard-layout.txt"))) {
+            info.write(js("JSON.stringify({height:innerHeight,visualHeight:visualViewport.height,focused:document.activeElement.tagName,input:document.querySelector('[name=password]').getBoundingClientRect().toJSON()})").getBytes(StandardCharsets.UTF_8));
+        }
         instrumentation.runOnMainSync(() -> ((android.view.inputmethod.InputMethodManager)target.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(web.getWindowToken(),0));
         signIn(false); screenshot("03-owner-home");
         assertTrue("Encrypted session did not restore", new SessionVault(target).load().contains("fixture_OWNER_access"));

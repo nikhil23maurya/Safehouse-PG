@@ -88,6 +88,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                 android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
                 android.graphics.Insets keyboard = insets.getInsets(WindowInsets.Type.ime());
                 view.setPadding(bars.left, bars.top, bars.right, Math.max(bars.bottom, keyboard.bottom));
+                callJs("window.SafeHouseKeyboard && window.SafeHouseKeyboard(" + insets.isVisible(WindowInsets.Type.ime()) + ");");
                 return WindowInsets.CONSUMED;
             }
             view.setPadding(insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(), insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom());
@@ -100,6 +101,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     private void configureSystemBars() {
         Window window = getWindow();
+        if (Build.VERSION.SDK_INT >= 30) window.setDecorFitsSystemWindows(false);
         window.setStatusBarColor(Color.rgb(255, 255, 255));
         window.setNavigationBarColor(Color.rgb(255, 255, 255));
         int flags = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR;
@@ -116,6 +118,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         webView.setBackgroundColor(Color.WHITE);
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
+        settings.setTextZoom(Math.round(getResources().getConfiguration().fontScale * 100));
         settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false);
         settings.setAllowContentAccess(false);
@@ -339,6 +342,10 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                         Toast.makeText(MainActivity.this, "Invalid payment QR provider", Toast.LENGTH_SHORT).show();
                         return;
                     }
+                    if (Build.VERSION.SDK_INT <= 28 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                        requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 9422);
+                        Toast.makeText(MainActivity.this, "Allow storage access, then save the QR again", Toast.LENGTH_LONG).show(); return;
+                    }
                     DownloadManager.Request request = new DownloadManager.Request(uri);
                     request.setTitle("SafeHouse Rent UPI QR");
                     request.setDescription("Save this payment QR and use Scan from Gallery in your UPI app");
@@ -406,15 +413,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                     if (amountPaise < 100 || amountPaise > 100000000) {
                         throw new IllegalArgumentException("Invalid payment amount");
                     }
-                    java.net.HttpURLConnection conn = (java.net.HttpURLConnection)
-                        new java.net.URL(imageUri.toString()).openConnection();
-                    conn.setConnectTimeout(9000);
-                    conn.setReadTimeout(9000);
-                    conn.setInstanceFollowRedirects(true);
-                    android.graphics.Bitmap bmp;
-                    try (java.io.InputStream stream = conn.getInputStream()) {
-                        bmp = android.graphics.BitmapFactory.decodeStream(stream);
-                    } finally { conn.disconnect(); }
+                    android.graphics.Bitmap bmp = ProviderQr.load(imageUri);
                     if (bmp == null || bmp.getWidth() < 80 || bmp.getHeight() < 80 ||
                         ((long)bmp.getWidth()) * bmp.getHeight() > 4000000) {
                         throw new IllegalArgumentException("QR image unavailable");
@@ -457,25 +456,6 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                 }
             }).start();
         }
-
-        @JavascriptInterface
-        public void openVerifiedUpiIntent(String paymentUri) {
-            runOnUiThread(() -> {
-                try {
-                    Uri uri = Uri.parse(paymentUri == null ? "" : paymentUri);
-                    if (!"upi".equalsIgnoreCase(uri.getScheme()) || !"pay".equalsIgnoreCase(uri.getHost()) ||
-                        uri.getQueryParameter("pa") == null || uri.getQueryParameter("am") == null) {
-                        Toast.makeText(MainActivity.this, "Invalid UPI payment link", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    Intent request = new Intent(Intent.ACTION_VIEW, uri);
-                    startActivity(Intent.createChooser(request, "Pay with UPI"));
-                } catch (Exception e) {
-                    Toast.makeText(MainActivity.this, "Unable to open UPI payment link", Toast.LENGTH_SHORT).show();
-                }
-            });
-        }
-
 
         @JavascriptInterface
         public void configureNotifications(String configJson) {
