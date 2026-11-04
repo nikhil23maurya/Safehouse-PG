@@ -1,0 +1,14 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const read = path => fs.readFileSync(path, 'utf8');
+const html = read('mobile/app/src/main/assets/index.html');
+const bundle = read('mobile/app/src/main/assets/app.js');
+const css = read('mobile/app/src/main/assets/app.css');
+const workflow = read('.github/workflows/build-mobile-apk.yml');
+assert.equal((html.match(/<script\b/g) || []).length, 1, 'Exactly one bundled entrypoint');
+assert(!css.includes('!important'), 'No legacy global style overrides');
+for (const marker of ['SAFEHOUSE_ATELIER', 'SAFEHOUSE_LUXURY', 'localStorage', 'qr-fixture', '__nativeFixtures', 'rzp_live_']) assert(!bundle.includes(marker), `Unexpected release asset content: ${marker}`);
+for (const marker of ['base64 -d', 'patch-mobile-', 'git push', 'SafeHouse-Final-Live.apk']) assert(!workflow.includes(marker), `Obsolete build input/behavior: ${marker}`);
+assert(read('src/server.ts').includes('SAFEHOUSE_QR_SETTLEMENT_V2'));
+assert(read('mobile/app/src/main/java/com/safehouse/pg/MainActivity.java').includes('request.addRequestHeader("X-Property-Id", propertyId)'));
+console.log('Maintained frontend source, restricted release inputs and settlement contract verified.');

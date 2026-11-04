@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="safehouse_blue">#2463EB</color>
+    <color name="safehouse_background">#F7F8FB</color>
+    <color name="safehouse_white">#FFFFFF</color>
+</resources>

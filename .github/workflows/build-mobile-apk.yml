@@ -2,236 +2,148 @@ name: Build SafeHouse Android APK
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths: ['mobile/**', 'scripts/verify-mobile-source.mjs', '.github/workflows/build-mobile-apk.yml']
   push:
-    branches: [main, notifications-v1-inprocess, fix/professional-ui-payment-reliability]
-    paths:
-      - 'mobile-v2-build/**'
-      - 'scripts/patch-mobile-performance.mjs'
-      - 'scripts/patch-mobile-financial-context.mjs'
-      - 'scripts/patch-mobile-stability.mjs'
-      - 'scripts/patch-mobile-notifications.mjs'
-      - 'scripts/patch-mobile-luxury.mjs'
-      - 'scripts/safehouse-luxury-v1.css'
-      - 'scripts/patch-mobile-atelier-v3.mjs'
-      - 'scripts/safehouse-atelier-v3.css'
-      - 'scripts/safehouse-atelier-v3.js'
-      - 'scripts/safehouse-atelier-payment-v3.css'
-      - 'scripts/safehouse-atelier-notifications-v3.css'
-      - 'scripts/safehouse-atelier-payment-v3.js'
-      - 'scripts/safehouse-professional-v4.css'
-      - 'scripts/verify-professional-v4.mjs'
-      - 'scripts/mobile-notifications-runtime.js'
-      - 'scripts/patch-android-notifications.mjs'
-      - 'scripts/notification-android/**'
-      - 'scripts/verify-mobile-runtime.mjs'
-      - 'scripts/apply-runtime-stability.mjs'
-      - 'scripts/apply-notifications-*.mjs'
-      - 'src/**'
-      - 'prisma/**'
-      - 'package.json'
-      - '.github/workflows/build-mobile-apk.yml'
+    branches: [main, codex/safehouse-royal-rebuild]
+    paths: ['mobile/**', 'scripts/verify-mobile-source.mjs', '.github/workflows/build-mobile-apk.yml']
 
 permissions:
-  contents: write
+  contents: read
+
+concurrency:
+  group: safehouse-mobile-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-apk:
+  frontend:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
-
+    timeout-minutes: 15
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Reconstruct SafeHouse 2 mobile source
-        shell: bash
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.13.0'
+          cache: npm
+          cache-dependency-path: mobile/frontend/package-lock.json
+      - name: Install locked frontend tooling
+        working-directory: mobile/frontend
+        run: npm ci
+      - name: Unit and payment-state regression tests
+        working-directory: mobile/frontend
+        run: npm test
+      - name: Bundle maintained frontend
+        working-directory: mobile/frontend
+        run: npm run build
+      - name: Validate release asset inputs
         run: |
-          cat mobile-v2-build/part-*.b64 > /tmp/mobile-source.b64
-          base64 -d /tmp/mobile-source.b64 > /tmp/mobile-source.tar.gz
-          tar -xzf /tmp/mobile-source.tar.gz
-          test -f mobile/app/src/main/assets/index.html
-          test -f mobile/app/src/main/java/com/safehouse/pg/MainActivity.java
+          node scripts/verify-mobile-source.mjs
+          node --check mobile/app/src/main/assets/app.js
+      - name: Install test browser
+        working-directory: mobile/frontend
+        run: npx playwright install --with-deps chromium
+      - name: User journeys and four-size screenshot inventory
+        working-directory: mobile/frontend
+        run: npm run test:e2e
+      - name: Upload visual evidence and test diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SafeHouse-web-visual-evidence-${{ github.sha }}
+          path: |
+            mobile/frontend/visual-evidence/
+            mobile/frontend/playwright-report/
+            mobile/frontend/test-results/
+            mobile/frontend/build-meta.json
+          retention-days: 30
 
-      - name: Fix startup and Android safe areas
-        shell: bash
+  android:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.13.0'
+          cache: npm
+          cache-dependency-path: mobile/frontend/package-lock.json
+      - name: Install frontend and prepare separate instrumentation fixtures
+        working-directory: mobile/frontend
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          path = Path('mobile/app/src/main/assets/index.html')
-          source = path.read_text(encoding='utf-8')
-          if 'async function boot()' not in source:
-              raise SystemExit('SafeHouse boot() function is missing')
-          if '\nboot();\n</script>' not in source:
-              marker = source.rfind('</script>')
-              if marker < 0:
-                  raise SystemExit('Closing script tag not found')
-              source = source[:marker] + '\nboot();\n' + source[marker:]
-          safe_area_marker = 'SAFEHOUSE_ANDROID_TOP_INSET_FIX_V1'
-          if safe_area_marker not in source:
-              style_end = source.find('</style>')
-              if style_end < 0:
-                  raise SystemExit('Closing style tag not found')
-              safe_css = '\n'.join([
-                  '/* SAFEHOUSE_ANDROID_TOP_INSET_FIX_V1 */',
-                  ':root{--safe-top:max(env(safe-area-inset-top),28px)}',
-                  '.topbar{height:calc(62px + var(--safe-top))!important;padding:var(--safe-top) 16px 0!important;align-items:center!important}',
-                  '.login-page{padding-top:var(--safe-top)!important}',
-                  '.role-page{padding-top:calc(24px + var(--safe-top))!important}',
-                  '.payment-state{min-height:100vh!important;padding-top:calc(28px + var(--safe-top))!important}',
-                  '@media(min-width:700px){.role-page{padding-top:calc(32px + var(--safe-top))!important}}',
-              ])
-              source = source[:style_end] + safe_css + '\n' + source[style_end:]
-          path.write_text(source, encoding='utf-8')
-          fixed = path.read_text(encoding='utf-8')
-          if '\nboot();\n</script>' not in fixed or safe_area_marker not in fixed:
-              raise SystemExit('SafeHouse startup/safe-area verification failed')
-          PY
-
-      - name: Optimize Android navigation performance
-        run: |
-          node scripts/patch-mobile-performance.mjs
-          grep -q 'SAFEHOUSE_PERF_V1' mobile/app/src/main/assets/index.html
-
-      - name: Apply strict property and month financial UI
-        run: |
-          node scripts/patch-mobile-financial-context.mjs
-          grep -q 'SAFEHOUSE_FINANCIAL_UI_V2' mobile/app/src/main/assets/index.html
-
-      - name: Apply mobile runtime stability fixes
-        run: |
-          node scripts/patch-mobile-stability.mjs
-          node scripts/verify-mobile-runtime.mjs
-
-      - name: Add SafeHouse push notifications
-        shell: bash
-        run: |
-          node scripts/patch-mobile-notifications.mjs
-          node scripts/patch-android-notifications.mjs
-          grep -q 'SAFEHOUSE_NOTIFICATIONS_UI_V1' mobile/app/src/main/assets/index.html
-          grep -q 'firebase_messaging_installation_id_enabled' mobile/app/src/main/AndroidManifest.xml
-          grep -q 'configureNotifications' mobile/app/src/main/java/com/safehouse/pg/MainActivity.java
-          grep -q 'onRegistered' mobile/app/src/main/java/com/safehouse/pg/SafeHouseFirebaseService.java
-          grep -q 'firebase-messaging' mobile/app/build.gradle
-          python - <<'PY'
-          from pathlib import Path
-          source = Path('mobile/app/src/main/assets/index.html').read_text(encoding='utf-8')
-          a = source.index('<script>') + len('<script>')
-          b = source.rindex('</script>')
-          Path('/tmp/safehouse-mobile.js').write_text(source[a:b], encoding='utf-8')
-          PY
-          node --check /tmp/safehouse-mobile.js
-
-      - name: Apply complete SafeHouse Atelier v3 layouts and secure payment screens
-        run: |
-          node scripts/patch-mobile-atelier-v3.mjs
-          grep -q 'SAFEHOUSE_ATELIER_V3' mobile/app/src/main/assets/index.html
-          grep -q 'SAFEHOUSE_QR_CHECKOUT_V3' mobile/app/src/main/assets/index.html
-          python - <<'PY'
-          from pathlib import Path
-          html=Path('mobile/app/src/main/assets/index.html').read_text(encoding='utf-8')
-          start=html.index('<script>')+len('<script>')
-          end=html.rindex('</script>')
-          Path('/tmp/safehouse-atelier-v3.js').write_text(html[start:end],encoding='utf-8')
-          assert html.count('boot();') == 1, 'Unexpected bootstrap count'
-          PY
-          node --check /tmp/safehouse-atelier-v3.js
-          grep -q 'savePaymentQr' scripts/notification-android/MainActivity.java
-          node scripts/verify-professional-v4.mjs
-
-      - name: Enable AndroidX
-        run: printf 'android.useAndroidX=true\nandroid.enableJetifier=true\n' > mobile/gradle.properties
-
-      - name: Align Kotlin dependencies
-        shell: bash
-        run: |
-          cat >> mobile/app/build.gradle <<'EOF'
-
-          configurations.configureEach {
-              resolutionStrategy {
-                  force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'
-                  force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22'
-                  force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
-              }
-          }
-          EOF
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v4
+          npm ci
+          node prepare-android-tests.mjs
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-
-      - name: Install Android SDK components
+      - name: Install compatible Android SDK
         shell: bash
         run: |
-          set -euo pipefail
-          echo "ANDROID_HOME=${ANDROID_HOME:-}" 
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' | sort -V | tail -n 1)"
           test -n "$SDKMANAGER"
-          echo "Using $SDKMANAGER"
-          yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
-          test -f "${ANDROID_HOME}/platforms/android-35/android.jar"
-          test -x "${ANDROID_HOME}/build-tools/35.0.0/aapt2"
-
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-
-      - name: Build installable APK
-        id: build
+      - name: Build testing APK and instrumentation APK
         working-directory: mobile
         shell: bash
         run: |
-          set +e
-          gradle :app:assembleDebug --stacktrace > ../android-build.log 2>&1
-          CODE=$?
-          echo "exit_code=$CODE" >> "$GITHUB_OUTPUT"
-          tail -n 250 ../android-build.log
-          exit 0
-
-      - name: Publish result and diagnostics
-        if: always()
+          set -o pipefail
+          gradle :app:assembleDebug :app:assembleDebugAndroidTest --stacktrace 2>&1 | tee ../android-build.log
+      - name: Verify fresh APK integrity, identity and signature
+        id: apk
         shell: bash
         run: |
-          mkdir -p releases
-          CODE="${{ steps.build.outputs.exit_code }}"
-          if [ -z "$CODE" ]; then CODE="not-run"; fi
-          {
-            echo "SafeHouse 2 Android build"
-            echo "commit=${GITHUB_SHA}"
-            echo "run_id=${GITHUB_RUN_ID}"
-            echo "run_attempt=${GITHUB_RUN_ATTEMPT}"
-            echo "build_exit_code=${CODE}"
-            echo "utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo
-            if [ -f android-build.log ]; then tail -n 250 android-build.log; else echo "android-build.log not created"; fi
-          } > releases/android-build-status.txt
-          if [ "$CODE" = "0" ] && [ -f mobile/app/build/outputs/apk/debug/app-debug.apk ]; then
-            cp mobile/app/build/outputs/apk/debug/app-debug.apk releases/SafeHouse-Final-Live.apk
-            sha256sum releases/SafeHouse-Final-Live.apk > releases/SafeHouse-Final-Live.apk.sha256
-          fi
-          if [ "${GITHUB_REF_NAME}" = "main" ]; then
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add releases/
-            if ! git diff --cached --quiet; then
-              git commit -m "SafeHouse 2 Android build result"
-              git push origin HEAD:main
-            fi
-          fi
-
-      - name: Upload APK artifact
-        if: steps.build.outputs.exit_code == '0'
+          set -euo pipefail
+          mkdir -p diagnostics/apk
+          APK="mobile/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          unzip -t "$APK" > diagnostics/apk/zip-integrity.txt
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" > diagnostics/apk/signature.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > diagnostics/apk/package.txt
+          grep -q "name='com.safehouse.pg.testing'" diagnostics/apk/package.txt
+          NAME="SafeHouse-5.0.0-testing-${GITHUB_SHA:0:12}.apk"
+          cp "$APK" "diagnostics/apk/$NAME"
+          (cd diagnostics/apk && sha256sum "$NAME" > "$NAME.sha256")
+          printf 'commit=%s\nrun_id=%s\nkind=debug/testing\napplication_id=com.safehouse.pg.testing\n' "$GITHUB_SHA" "$GITHUB_RUN_ID" > diagnostics/apk/build-provenance.txt
+      - name: Upload exact testing APK
         uses: actions/upload-artifact@v4
         with:
-          name: SafeHouse-Final-Live-APK
-          path: releases/SafeHouse-Final-Live.apk
+          name: SafeHouse-testing-APK-${{ github.sha }}
+          path: diagnostics/apk/
           if-no-files-found: error
-          retention-days: 14
-
-      - name: Fail workflow when Android build fails
-        if: steps.build.outputs.exit_code != '0'
-        run: exit 1
+          retention-days: 30
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install, launch and inspect the actual Android app
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          script: |
+            mkdir -p diagnostics/android-screenshots
+            adb install mobile/app/build/outputs/apk/debug/app-debug.apk
+            adb install mobile/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+            adb shell am instrument -w com.safehouse.pg.testing.test/androidx.test.runner.AndroidJUnitRunner | tee diagnostics/instrumentation.txt
+            adb pull /sdcard/Android/data/com.safehouse.pg.testing/files/qa/. diagnostics/android-screenshots/
+            adb logcat -d -s AndroidRuntime > diagnostics/android-runtime.txt
+            grep -q 'OK (1 test)' diagnostics/instrumentation.txt
+      - name: Upload Android build and emulator diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SafeHouse-Android-diagnostics-${{ github.sha }}
+          path: |
+            android-build.log
+            diagnostics/
+            mobile/app/build/reports/
+            mobile/app/build/outputs/androidTest-results/
+          retention-days: 30

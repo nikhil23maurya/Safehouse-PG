@@ -1,0 +1,24 @@
+# Implementation and acceptance checklist
+
+- [x] Reconstruct the complete effective legacy frontend and native source.
+- [x] Inspect workflow, frontend patches, native integrations, backend routes, schema and financial settlement.
+- [x] Inventory screens and document architecture decision.
+- [ ] Maintain readable frontend and Android sources; remove patches from build inputs.
+- [ ] Shared theme, primitives, icons, skeletons, errors, dialogs and form states.
+- [ ] Startup, sign in, restoration, expiry, role guards and password changes.
+- [ ] Owner dashboard and property/month context.
+- [ ] Resident dashboard, residency and invoice history.
+- [ ] Resident directory, detail, create/edit/status/reset-password.
+- [ ] Rooms, occupancy, detail, create/edit and capacity rejection.
+- [ ] Dues, invoice breakdown/charges, manual payments, histories and receipts.
+- [ ] QR preparation/image loading, pending/verifying/expired/failed/unavailable/delayed states.
+- [ ] Captured-payment-only success and receipt refresh.
+- [ ] Notification setup, creation, audiences, schedules and campaign actions.
+- [ ] Android insets, keyboard, back, resume, protected assets and secure storage.
+- [ ] Unit/API/payment regression tests and browser journey tests.
+- [ ] Screenshots at 360x800, 393x852, 412x915 and a larger viewport.
+- [ ] Reduced motion, larger text, landscape, keyboard and network failures.
+- [ ] Gradle build, APK ZIP/signature verification and downloadable artifact.
+- [ ] Android install/launch/instrumentation where available.
+- [ ] Confirm backend/schema/deployment and Cyntrova are unchanged.
+- [ ] Commit implementation branch, open PR and report exact validation limitations.
