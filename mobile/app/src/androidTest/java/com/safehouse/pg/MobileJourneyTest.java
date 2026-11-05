@@ -112,13 +112,15 @@ public class MobileJourneyTest {
             CountDownLatch painted = new CountDownLatch(1);
             instrumentation.runOnMainSync(() -> web.postVisualStateCallback(System.nanoTime(), new WebView.VisualStateCallback() {
                 @Override public void onComplete(long requestId) {
+                    web.invalidate();
+                    activity.getWindow().getDecorView().postInvalidateOnAnimation();
                     web.postOnAnimation(() -> web.postOnAnimation(painted::countDown));
                 }
             }));
             assertTrue("WebView did not present the current frame: " + name, painted.await(10, TimeUnit.SECONDS));
         }
         // Allow short UI transitions and emulator composition to finish before capture.
-        Thread.sleep(700);
+        Thread.sleep(1200);
         captureBitmap(name);
     }
     private void captureBitmap(String name) throws Exception {
