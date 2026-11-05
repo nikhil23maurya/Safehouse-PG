@@ -77,6 +77,51 @@ After a successful workflow run, open its **PGOne-testing-APK** artifact and ins
 
 **Do not redistribute a debug APK as a production release.** A public production APK requires release signing, physical-device verification, actual merchant payment validation, support/privacy disclosures and a separate package migration decision.
 
+
+## DBMS practical — database design and viva
+
+PGOne uses **Supabase-hosted PostgreSQL**, accessed through the **Prisma ORM**. Its nine main relational entities are `User`, `Property`, `Room`, `Student`, `RentRevision`, `RentInvoice`, `PaymentAttempt`, `Payment` and `AuditLog`.
+
+- **Owner → Property:** one-to-many via `Property.ownerId`.
+- **Property → Rooms / Students:** one-to-many; residents have an optional room assignment.
+- **Student → RentInvoice:** one-to-many; uniqueness on `(studentId, year, month)` prevents duplicate monthly invoices.
+- **RentInvoice → PaymentAttempt / Payment:** a try to pay is not the same as a completed payment.
+- **Primary keys:** generated string `id` values; **foreign keys:** `ownerId`, `propertyId`, `studentId`, `roomId`, `invoiceId`.
+- **Indexes and unique constraints:** enable efficient property-scoped queries and protect data integrity.
+- **Transactions:** Prisma `$transaction` groups related writes. Money is stored as **integer paise** to avoid floating-point errors.
+- **Normalization:** entities are separated to reduce repetition; invoices deliberately snapshot billed amounts for history.
+
+### ER relationship sketch
+
+```mermaid
+erDiagram
+  User ||--o{ Property : owns
+  User ||--o| Student : resident_profile
+  Property ||--o{ Room : contains
+  Property ||--o{ Student : houses
+  Room o|--o{ Student : assigned
+  Student ||--o{ RentInvoice : billed
+  RentInvoice ||--o{ PaymentAttempt : attempts
+  RentInvoice ||--o{ Payment : receipts
+  Student ||--o{ RentRevision : revisions
+  Property ||--o{ AuditLog : events
+```
+
+**Full DBMS viva preparation:** [Read the complete 30-question guide with actual schema, SQL, joins, ACID, normalization, transaction/payment workflow and live demonstration script](docs/dbms/DBMS-VIVA-GUIDE.md).
+
+### Three quick example queries
+
+```sql
+-- Property rooms
+SELECT "number", "capacity" FROM "Room" WHERE "propertyId" = :property_id;
+-- Residents with assigned room
+SELECT u."fullName", r."number" FROM "Student" s
+JOIN "User" u ON u."id"=s."userId"
+LEFT JOIN "Room" r ON r."id"=s."roomId";
+-- Outstanding balance is stored in paise
+SELECT "totalPaise"-"paidPaise" AS due FROM "RentInvoice" WHERE "status"='DUE';
+```
+
 ## Payment integrity
 
 The backend is intentionally unchanged by the PGOne rebrand. It still applies the audited `SAFEHOUSE_QR_SETTLEMENT_V2` settlement contract:

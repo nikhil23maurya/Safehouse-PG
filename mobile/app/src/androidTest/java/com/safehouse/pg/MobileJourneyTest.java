@@ -98,7 +98,22 @@ public class MobileJourneyTest {
             AtomicReference<Boolean> focused = new AtomicReference<>(false);
             do {
                 instrumentation.runOnMainSync(() -> focused.set(activity.hasWindowFocus()));
-                if (!focused.get()) Thread.sleep(150);
+                if (!focused.get()) {
+                    // A resource-constrained CI emulator can show a Pixel Launcher ANR
+                    // over an otherwise healthy app. Dismiss only this exact system
+                    // dialog; never suppress errors from the PGOne activity itself.
+                    AccessibilityNodeInfo root = instrumentation.getUiAutomation().getRootInActiveWindow();
+                    if (root != null &&
+                        !root.findAccessibilityNodeInfosByText("Pixel Launcher isn't responding").isEmpty()) {
+                        java.util.List<AccessibilityNodeInfo> buttons =
+                            root.findAccessibilityNodeInfosByText("Close app");
+                        if (!buttons.isEmpty()) {
+                            buttons.get(0).performAction(AccessibilityNodeInfo.ACTION_CLICK);
+                            System.out.println("Dismissed Pixel Launcher ANR during emulator startup");
+                        }
+                    }
+                    Thread.sleep(150);
+                }
             } while (!focused.get() && System.currentTimeMillis() < deadline);
             if (!focused.get()) {
                 captureBitmap(name + "-foreground-failure");
