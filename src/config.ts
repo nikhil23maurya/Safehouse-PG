@@ -18,7 +18,7 @@ const envSchema = z.object({
   FIREBASE_ANDROID_API_KEY: optionalNonEmpty,
   FIREBASE_SENDER_ID: optionalNonEmpty,
   FIREBASE_SERVICE_ACCOUNT_JSON: optionalNonEmpty,
-  APP_NAME: z.string().trim().min(1).default("SafeHouse"),
+  APP_NAME: z.string().trim().min(1).default("PGOne"),
   CORS_ORIGINS: z.string().default("*"),
   BOOTSTRAP_OWNER_EMAIL: optionalNonEmpty,
   BOOTSTRAP_OWNER_PASSWORD: optionalNonEmpty,
