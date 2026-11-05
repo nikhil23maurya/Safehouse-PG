@@ -10,8 +10,8 @@ android {
         applicationId 'com.safehouse.pg'
         minSdk 23
         targetSdk 35
-        versionCode 50
-        versionName '5.0.0'
+        versionCode 51
+        versionName '5.0.1'
         manifestPlaceholders = [appLabel: 'PGOne']
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
