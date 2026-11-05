@@ -1,0 +1,60 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'com.safehouse.pg'
+    compileSdk 35
+
+    defaultConfig {
+        applicationId 'com.safehouse.pg'
+        minSdk 23
+        targetSdk 35
+        versionCode 50
+        versionName '5.0.0'
+        manifestPlaceholders = [appLabel: 'PGOne']
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+
+    buildTypes {
+        debug {
+            applicationIdSuffix '.testing'
+            versionNameSuffix '-testing'
+            manifestPlaceholders = [appLabel: 'PGOne Testing']
+        }
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+dependencies {
+    implementation 'com.razorpay:checkout:1.6.40'
+    // SAFEHOUSE_NOTIFICATIONS_ANDROID_V1
+    implementation platform('com.google.firebase:firebase-bom:34.17.0')
+    implementation 'com.google.firebase:firebase-messaging'
+    // Local QR decoding only. No payment secrets stored on device.
+    implementation 'com.google.zxing:core:3.5.3'
+    androidTestImplementation 'androidx.test:runner:1.6.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+}
+
+// The readable frontend is the only asset source. No archive/patch inputs.
+tasks.register('buildFrontend', Exec) {
+    workingDir file('../frontend')
+    commandLine 'node', 'build.mjs'
+    inputs.dir file('../frontend/src')
+    inputs.file file('../frontend/index.html')
+    inputs.file file('../frontend/package-lock.json')
+    outputs.dir file('src/main/assets')
+}
+tasks.named('preBuild').configure { dependsOn 'buildFrontend' }
+
+configurations.configureEach {
+    resolutionStrategy {
+        force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22'
+        force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'
+    }
+}

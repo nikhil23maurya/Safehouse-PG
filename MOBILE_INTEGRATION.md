@@ -1,5 +1,17 @@
 # Mobile integration notes
 
+The maintained Android application now uses the Java/WebView source in `mobile/`, with modules in `mobile/frontend/src/`. Follow [the current Android instructions](mobile/README.md) for builds, secure storage and testing. The Expo environment example below is historical; the maintained app uses the existing public API URL in `mobile/frontend/src/core/api.js` and an encrypted Android Keystore vault.
+
+## Current QR checkout
+
+- `POST /api/student/payments/upi-qr` receives `{ invoiceId }` and returns the backend-issued fixed-amount QR.
+- `GET /api/student/payments/orders/:orderId/status` reconciles the existing attempt. The frontend does not credit an invoice from UPI app return, a screenshot or a button.
+- The success screen requires the matching captured attempt, fully paid invoice, and matching payment/receipt record from `/api/student/invoices`.
+- Existing owner requests include `X-Property-Id` and the selected billing period where supported. Authenticated owner receipt downloads retain the property header.
+- Native QR decoding checks the provider image, exact amount and currency before UPI handoff. API and database secrets are never shipped in the app.
+
+## Historical integration reference
+
 Production mobile environment:
 
 ```env

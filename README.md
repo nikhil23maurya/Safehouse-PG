@@ -1,251 +1,146 @@
-# SafeHouse Backend — Production MVP
+<p align="center"><img src="docs/branding/pgone-mark.svg" width="80" height="80" alt="PGOne logo"/></p>
 
-Backend for the SafeHouse PG owner/student mobile app.
+# PGOne
 
-## What is implemented
+**One platform to manage PGs, hostels and co-living properties.**
 
-- Owner + Student authentication with access/refresh tokens
-- Password hashing with Node's built-in `scrypt`
-- No public student signup — owner creates student accounts
-- Owner property/PG settings
-- Student CRUD + temporary password reset
-- Room management + capacity validation
-- Monthly rent invoices with historical snapshots
-- Dashboard collection metrics
-- Pending/overdue dues
-- WhatsApp reminder deep links — no WhatsApp API
-- Extra invoice charges: electricity, late fee, other charges, discount
-- Manual cash/bank payments
-- Razorpay Orders API
-- Mandatory checkout signature verification
-- Raw-body Razorpay webhook verification
-- `payment.captured` webhook is the final source of truth for PAID status
-- Idempotent Razorpay payment recording
-- Payment history
-- PDF rent receipts
-- Audit logs for sensitive owner actions
-- Render `/health` + `/ready` endpoints
-- Rate limiting, Helmet, CORS and validation
+PGOne is a mobile-first accommodation management application built for Indian PG owners and residents. It keeps room occupancy, resident records, invoices, rent collection and payment history in one structured workflow.
 
-## Architecture
+> **Product status:** Android testing build available via GitHub Actions. A public, release-signed PGOne app has **not** been shipped. Website and app are undergoing a brand migration from SafeHouse.
+
+## Features
+
+| Owner | Resident |
+|---|---|
+| Manage one or more properties, rooms, beds and occupancy | View assigned room and account |
+| Add and update residents; manage rent plans and deposits | View monthly rent invoices and breakdowns |
+| Review dues and collection totals | Initiate configured UPI/QR payment flows |
+| Record manual payments, review payment history and receipts | Track verified payment status and download receipts |
+| Send configured notices and reminders | Receive supported notices and reminders |
+
+The app supports role-specific authentication, property context and managed session restoration. **No public resident self-signup:** an owner creates resident accounts.
+
+## Stack
+
+| Layer | Technology |
+|---|---|
+| Android | Java WebView shell, maintained HTML/CSS/JavaScript frontend |
+| API | Node.js, Express, TypeScript |
+| Data | PostgreSQL (Supabase managed), Prisma ORM |
+| Payments | Razorpay with verified backend capture/webhook reconciliation |
+| Notifications | Firebase Cloud Messaging (when configured) |
+| CI | GitHub Actions for frontend tests, Android tests, screenshots and APKs |
+
+## Repository layout
 
 ```text
-SafeHouse Android app
-        |
-        | HTTPS JSON API
-        v
-Render: SafeHouse Node/Express API
-        |
-        +----> Supabase Managed PostgreSQL
-        |
-        +----> Razorpay Orders API
-                    |
-                    +---- webhook ----> Render API
+mobile/frontend/src/                 Maintained mobile UI and business workflows
+mobile/app/src/main/                Android native shell and vector branding
+mobile/frontend/tests/              Unit/payment-state tests
+mobile/frontend/e2e/                Browser journeys and screenshot tests
+src/                                Backend API, authorization and payment verification
+prisma/                             Schema and database migrations
+.github/workflows/                  Android and backend contract CI
+docs/branding/                      Canonical PGOne mark and brand notes
+docs/mobile-rebuild/                Architecture, screen inventory and validation
 ```
 
-## Local quick start
+## Run the backend locally
 
-1. Copy `.env.example` to `.env` and fill the values.
-2. Install dependencies:
+Requires Node.js, PostgreSQL credentials and properly configured environment secrets.
 
 ```bash
 npm install
-```
-
-3. Generate Prisma Client:
-
-```bash
+cp .env.example .env
 npm run prisma:generate
-```
-
-4. Apply the included database migration:
-
-```bash
 npm run prisma:migrate:deploy
-```
-
-5. Start locally:
-
-```bash
 npm run dev
 ```
 
-Check:
+Update `.env` before running migrations. Check `http://localhost:4000/health` and `http://localhost:4000/ready`. Never commit `.env` or payment secrets.
 
-```text
-http://localhost:4000/health
-http://localhost:4000/ready
+See [API reference](API.md), [mobile integration](MOBILE_INTEGRATION.md) and [deployment checklist](DEPLOY_CHECKLIST.md) for configuration details.
+
+## Build and test Android
+
+```bash
+cd mobile/frontend
+npm ci
+npm test
+npm run build
+npm run test:e2e
 ```
 
-## Supabase setup
+Browser end-to-end tests require Playwright Chromium. For Android native builds use Java 17, Gradle 8.9 and Android SDK 35, or use [GitHub Actions](.github/workflows/build-mobile-apk.yml).
 
-### 1. Create the project
+After a successful workflow run, open its **PGOne-testing-APK** artifact and install the enclosed `PGOne-5.0.0-testing-<sha>.apk`. Android app label is **PGOne Testing**. The debug package ID remains `com.safehouse.pg.testing` for technical compatibility, even though the visible product brand is PGOne. Artifacts are retained for a limited period.
 
-Create a normal Supabase project and keep its database password safe.
+**Do not redistribute a debug APK as a production release.** A public production APK requires release signing, physical-device verification, actual merchant payment validation, support/privacy disclosures and a separate package migration decision.
 
-### 2. Create a dedicated Prisma database user
 
-Open **Supabase -> SQL Editor**, open `SUPABASE_PRISMA_USER.sql`, replace `CHANGE_ME_STRONG_PASSWORD`, and run it.
+## DBMS practical — database design and viva
 
-For the password, using a long random alphanumeric password avoids URL-encoding problems in the connection string.
+PGOne uses **Supabase-hosted PostgreSQL**, accessed through the **Prisma ORM**. Its nine main relational entities are `User`, `Property`, `Room`, `Student`, `RentRevision`, `RentInvoice`, `PaymentAttempt`, `Payment` and `AuditLog`.
 
-### 3. Get the connection string
+- **Owner → Property:** one-to-many via `Property.ownerId`.
+- **Property → Rooms / Students:** one-to-many; residents have an optional room assignment.
+- **Student → RentInvoice:** one-to-many; uniqueness on `(studentId, year, month)` prevents duplicate monthly invoices.
+- **RentInvoice → PaymentAttempt / Payment:** a try to pay is not the same as a completed payment.
+- **Primary keys:** generated string `id` values; **foreign keys:** `ownerId`, `propertyId`, `studentId`, `roomId`, `invoiceId`.
+- **Indexes and unique constraints:** enable efficient property-scoped queries and protect data integrity.
+- **Transactions:** Prisma `$transaction` groups related writes. Money is stored as **integer paise** to avoid floating-point errors.
+- **Normalization:** entities are separated to reduce repetition; invoices deliberately snapshot billed amounts for history.
 
-In Supabase click **Connect** and find **Supavisor Session pooler**. Use the string ending in **port 5432** for this Render/server deployment.
+### ER relationship sketch
 
-It will look similar to:
-
-```text
-postgres://postgres.PROJECT_REF:PASSWORD@REGION.pooler.supabase.com:5432/postgres
+```mermaid
+erDiagram
+  User ||--o{ Property : owns
+  User ||--o| Student : resident_profile
+  Property ||--o{ Room : contains
+  Property ||--o{ Student : houses
+  Room o|--o{ Student : assigned
+  Student ||--o{ RentInvoice : billed
+  RentInvoice ||--o{ PaymentAttempt : attempts
+  RentInvoice ||--o{ Payment : receipts
+  Student ||--o{ RentRevision : revisions
+  Property ||--o{ AuditLog : events
 ```
 
-Change only the DB username from `postgres.PROJECT_REF` to `prisma.PROJECT_REF`, and use the password you created for the `prisma` user:
+**Full DBMS viva preparation:** [Read the complete 30-question guide with actual schema, SQL, joins, ACID, normalization, transaction/payment workflow and live demonstration script](docs/dbms/DBMS-VIVA-GUIDE.md).
 
-```text
-postgres://prisma.PROJECT_REF:PRISMA_PASSWORD@REGION.pooler.supabase.com:5432/postgres
+### Three quick example queries
+
+```sql
+-- Property rooms
+SELECT "number", "capacity" FROM "Room" WHERE "propertyId" = :property_id;
+-- Residents with assigned room
+SELECT u."fullName", r."number" FROM "Student" s
+JOIN "User" u ON u."id"=s."userId"
+LEFT JOIN "Room" r ON r."id"=s."roomId";
+-- Outstanding balance is stored in paise
+SELECT "totalPaise"-"paidPaise" AS due FROM "RentInvoice" WHERE "status"='DUE';
 ```
 
-Paste the full value into Render as `DATABASE_URL`.
+## Payment integrity
 
-Do not expose this URL inside the mobile app.
+The backend is intentionally unchanged by the PGOne rebrand. It still applies the audited `SAFEHOUSE_QR_SETTLEMENT_V2` settlement contract:
 
-## Render deployment
+- Clients cannot mark invoices paid by tapping a button or returning from a UPI app.
+- Captured payments are verified by server-side signatures/webhooks and processed idempotently.
+- Historical invoice amounts are retained as snapshots; money is stored in integer paise.
+- QR payloads are preserved and merchant settlement must be validated with actual financial-provider accounts before release.
 
-Push this backend folder to GitHub. A separate backend repo is simplest for now.
+Changing the Android brand **must never** change payment signatures, backend endpoints, callback identifiers, existing session keys or database semantics.
 
-Create **Render -> New -> Web Service**, connect the GitHub repo, then use:
+## Branding and migration
 
-```text
-Runtime: Node
-Build Command: npm install && npm run build
-Start Command: npm run start:render
-Health Check Path: /health
-```
+The customer-facing brand is **PGOne**. See [brand reference](docs/branding/README.md) for color, mark and spelling. Legacy internal paths such as `com.safehouse.pg`, `SafeHouseNative`, `safehouse-api.onrender.com` and Firebase identifiers are intentionally retained for compatibility; **they do not appear as the product name in the main user interface**. Migrating technical identifiers requires a separate tested plan and may affect upgrades or notification delivery.
 
-The start command runs `prisma migrate deploy` before starting the API, so pending committed migrations are applied during deployment.
+## Security and current limits
 
-Do not manually set `PORT`; Render supplies it.
+No secrets belong in the APK. Production payment flow, FCM, app signing, privacy disclosures and physical Android device/OEM compatibility must be verified separately. The publicly shared repository, examples, and screenshots must not be interpreted as proof of active customers, published store availability or real financial transaction acceptance.
 
-### Render environment variables
+## License and ownership
 
-Required:
-
-```env
-NODE_ENV=production
-DATABASE_URL=<Supabase Session Pooler 5432 URL>
-JWT_ACCESS_SECRET=<strong random secret, at least 32 chars>
-JWT_REFRESH_SECRET=<different strong random secret, at least 32 chars>
-RAZORPAY_KEY_ID=<test key first>
-RAZORPAY_KEY_SECRET=<test key secret>
-RAZORPAY_WEBHOOK_SECRET=<strong webhook secret>
-APP_NAME=SafeHouse
-CORS_ORIGINS=*
-```
-
-For the **first deployment only**, also add:
-
-```env
-BOOTSTRAP_OWNER_EMAIL=your-real-owner-email@example.com
-BOOTSTRAP_OWNER_PASSWORD=<strong initial password>
-BOOTSTRAP_OWNER_NAME=Raj Sharma
-BOOTSTRAP_PROPERTY_NAME=SafeHouse PG
-```
-
-The server creates the first owner and property only if they do not already exist.
-
-After the first deploy succeeds and you can log in, remove **all four** `BOOTSTRAP_OWNER_*` variables from Render. Never leave the initial owner password sitting in environment variables unnecessarily.
-
-### Generate secure secrets
-
-In PowerShell:
-
-```powershell
-node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
-```
-
-Run it separately for `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET`, and `RAZORPAY_WEBHOOK_SECRET`.
-
-## Razorpay setup
-
-Start in **Test Mode**.
-
-1. Create/generate Test API keys in Razorpay.
-2. Put the Test Key ID and Secret in Render.
-3. Enable automatic payment capture in Razorpay Payment Capture settings.
-4. Deploy the backend.
-5. In Razorpay Webhooks create this URL:
-
-```text
-https://YOUR-RENDER-SERVICE.onrender.com/api/webhooks/razorpay
-```
-
-6. Set the webhook secret to exactly the same value as `RAZORPAY_WEBHOOK_SECRET` in Render.
-7. Subscribe to:
-
-```text
-payment.captured
-payment.failed
-```
-
-8. Test a full payment before switching to Live keys.
-
-### Why the app does not mark PAID immediately
-
-The checkout success callback is first signature-verified by the backend. At that point the invoice becomes `PROCESSING` only.
-
-The invoice becomes `PAID` only after the backend receives a valid signed `payment.captured` webhook. This prevents a forged frontend success screen from marking rent as paid.
-
-## First production verification
-
-After Render says the service is live:
-
-```text
-GET https://YOUR-RENDER-SERVICE.onrender.com/health
-GET https://YOUR-RENDER-SERVICE.onrender.com/ready
-```
-
-Both should return `ok: true`.
-
-Then test owner login:
-
-```http
-POST /api/auth/login
-Content-Type: application/json
-
-{
-  "email": "your owner email",
-  "password": "your bootstrap owner password"
-}
-```
-
-Next create at least one room, then create one student, log in as that student, and test the complete Razorpay Test Mode flow.
-
-## Monthly rent behavior
-
-Invoices are historical snapshots. If a student's rent changes today, old invoices are not rewritten.
-
-For reliability the backend automatically ensures the current month's invoice exists when owner/student dashboards are opened. There is also:
-
-```text
-POST /api/owner/rents/generate
-```
-
-for explicit generation.
-
-This means a separate cron job is not required for the first production version.
-
-## Money handling
-
-All money is persisted as integer **paise**, never floating-point rupees. For example ₹8,500 is stored as `850000`. API responses include convenience rupee values where helpful.
-
-## Important production rules
-
-- Never put database/Razorpay secrets in the APK.
-- Do not use Supabase's anon/service key for this backend; this backend connects directly to Postgres with the dedicated Prisma DB user.
-- Keep Razorpay Key Secret on Render only.
-- Keep the webhook endpoint public, but rely on the webhook HMAC signature validation already implemented.
-- Use HTTPS only in the production mobile app.
-- Student passwords should be temporary and changed after first login.
-- Test every payment in Razorpay Test Mode before replacing keys with Live Mode keys.
-
-See `API.md` and `MOBILE_INTEGRATION.md` for the endpoint contract and app wiring plan.
+Project ownership and reuse terms have not been publicly licensed; contact the repository owner before redistribution. Third-party dependencies and bundled fonts retain their own licenses.

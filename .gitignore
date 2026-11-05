@@ -4,3 +4,14 @@ dist/
 src/generated/prisma/
 *.log
 .DS_Store
+
+# Maintained mobile source is mobile/frontend; assets are built deterministically.
+mobile/.gradle/
+mobile/**/build/
+mobile/local.properties
+mobile/app/src/main/assets/
+mobile/frontend/build-meta.json
+mobile/frontend/playwright-report/
+mobile/frontend/test-results/
+mobile/frontend/visual-evidence/
+mobile/app/src/androidTest/assets/

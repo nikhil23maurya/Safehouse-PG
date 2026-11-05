@@ -55,52 +55,16 @@ jobs:
           grep -q 'model NotificationDelivery' prisma/schema.prisma
           test -f prisma/migrations/20260812174500_notifications_v1/migration.sql
 
-      - name: Reconstruct SafeHouse mobile source
+      - name: Build and validate maintained mobile source
         shell: bash
         run: |
-          cat mobile-v2-build/part-*.b64 > /tmp/mobile-source.b64
-          base64 -d /tmp/mobile-source.b64 > /tmp/mobile-source.tar.gz
-          tar -xzf /tmp/mobile-source.tar.gz
-          test -f mobile/app/src/main/assets/index.html
-          test -f mobile/app/src/main/java/com/safehouse/pg/MainActivity.java
-
-      - name: Apply production mobile patches
-        run: |
-          node scripts/patch-mobile-performance.mjs
-          node scripts/patch-mobile-financial-context.mjs
-          node scripts/patch-mobile-stability.mjs
-          node scripts/patch-mobile-notifications.mjs
-          node scripts/patch-android-notifications.mjs
-
-      - name: Validate mobile JavaScript and notification contracts
-        shell: bash
-        run: |
-          node scripts/verify-mobile-runtime.mjs
-          python - <<'PY'
-          from pathlib import Path
-          s = Path('mobile/app/src/main/assets/index.html').read_text(encoding='utf-8')
-          a = s.index('<script>') + len('<script>')
-          b = s.rindex('</script>')
-          Path('/tmp/safehouse-mobile.js').write_text(s[a:b], encoding='utf-8')
-          required = [
-              'SAFEHOUSE_FINANCIAL_UI_V2',
-              'SAFEHOUSE_RUNTIME_STABILITY_V1',
-              'SAFEHOUSE_NOTIFICATIONS_UI_V1',
-              'function ownerContextKey()',
-              'contextQuery()',
-              'periodInvoice',
-              '/api/owner/notifications/send-now',
-              '/api/owner/notifications/campaigns',
-              'SafeHouseNotificationRegistration',
-              'requestNotificationPermission'
-          ]
-          missing = [x for x in required if x not in s]
-          if missing:
-              raise SystemExit('Missing mobile contract markers: ' + ', '.join(missing))
-          print('SafeHouse mobile financial/runtime/notification markers verified')
-          PY
-          node --check /tmp/safehouse-mobile.js
-          grep -q 'firebase_messaging_installation_id_enabled' mobile/app/src/main/AndroidManifest.xml
+          npm ci --prefix mobile/frontend
+          npm test --prefix mobile/frontend
+          npm run build --prefix mobile/frontend
+          node scripts/verify-mobile-source.mjs
+          node --check mobile/app/src/main/assets/app.js
+          test -f mobile/app/src/main/java/com/safehouse/pg/SessionVault.java
+          test -f mobile/app/src/main/java/com/safehouse/pg/SafeHouseFirebaseService.java
           grep -q 'POST_NOTIFICATIONS' mobile/app/src/main/AndroidManifest.xml
           grep -q 'configureNotifications' mobile/app/src/main/java/com/safehouse/pg/MainActivity.java
           grep -q 'onRegistered' mobile/app/src/main/java/com/safehouse/pg/SafeHouseFirebaseService.java
