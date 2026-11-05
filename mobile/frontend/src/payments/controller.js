@@ -31,6 +31,8 @@ export class PaymentController {
       invoice: null,
       payment: null,
       imageReady: false,
+      imageRetryToken: 0,
+      imageError: false,
       checking: false,
       message: "",
     };
@@ -60,6 +62,8 @@ export class PaymentController {
       invoice,
       payment: null,
       imageReady: false,
+      imageRetryToken: 0,
+      imageError: false,
       checking: false,
       message: "",
     };
@@ -116,7 +120,7 @@ export class PaymentController {
       this.emit({ imageReady: false, imageError: true });
   }
   retryImage() {
-    this.emit({ imageReady: false, imageError: false });
+    this.emit({ imageReady: false, imageError: false, imageRetryToken: (this.value.imageRetryToken || 0) + 1 });
   }
   async check() {
     if (!this.value.qr || ["success", "settled"].includes(this.value.phase))

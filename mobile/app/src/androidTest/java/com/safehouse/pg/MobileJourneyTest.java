@@ -248,7 +248,7 @@ public class MobileJourneyTest {
         signIn(true); screenshot("20-resident-home");
         go("invoices", "{}"); screenshot("21-invoices");
         go("history", "{}"); screenshot("22-history");
-        go("payment", "{invoiceId:'invoice1'}"); await("document.querySelector('[data-payment-qr]:not([hidden])')"); screenshot("23-payment-qr");
+        go("payment", "{invoiceId:'invoice1'}"); await("Boolean(document.querySelector('[data-payment-qr]')?.complete && document.querySelector('[data-payment-qr]')?.naturalWidth>0)"); screenshot("23-payment-qr");
         assertEquals("true", js("document.querySelector('[data-payment-qr]').src.startsWith('https://appassets.androidplatform.net/assets/payment-qr.png?')"));
         assertEquals("true", js("document.querySelector('[data-payment-qr]').naturalWidth===document.querySelector('[data-payment-qr]').naturalHeight"));
         js("document.querySelector('[data-action=upi]').click()");
@@ -288,7 +288,7 @@ public class MobileJourneyTest {
             assertTrue("Provider payload changed during handoff", nativeText(QrTestImages.PAYLOAD));
             screenshot("23c-upi-handoff-receiver", false);
             instrumentation.getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK);
-            await("document.querySelector('[data-payment-qr]:not([hidden])')");
+            await("Boolean(document.querySelector('[data-payment-qr]')?.complete && document.querySelector('[data-payment-qr]')?.naturalWidth>0)");
             screenshot("23d-upi-return-pending");
         } finally { setReceiverEnabled(false); }
         assertEquals("false", js("document.body.innerText.includes('Payment Successful')"));

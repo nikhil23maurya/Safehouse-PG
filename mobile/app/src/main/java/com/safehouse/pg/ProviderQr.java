@@ -112,7 +112,8 @@ final class ProviderQr {
         for (int redirects = 0; redirects <= 4; redirects++) {
             if (!trusted(uri)) throw new IllegalArgumentException("Unrecognised QR provider");
             HttpURLConnection connection = (HttpURLConnection)new URL(uri.toString()).openConnection();
-            connection.setConnectTimeout(9000); connection.setReadTimeout(9000); connection.setInstanceFollowRedirects(false);
+            connection.setConnectTimeout(10000); connection.setReadTimeout(15000); connection.setInstanceFollowRedirects(false);
+            connection.setRequestProperty("Accept", "image/png,image/jpeg,image/webp,image/*;q=0.9,*/*;q=0.5");
             try {
                 int status = connection.getResponseCode();
                 if (status >= 300 && status < 400) {

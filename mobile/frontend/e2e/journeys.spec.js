@@ -349,7 +349,7 @@ for (const scenario of ["disabled", "expired", "image", "network", "failed"])
     const expected = {
       disabled: "not enabled",
       expired: "QR expired",
-      image: "QR couldn’t load",
+      image: "QR image unavailable",
       network: "Status temporarily unavailable",
       failed: "Payment failed",
     }[scenario];

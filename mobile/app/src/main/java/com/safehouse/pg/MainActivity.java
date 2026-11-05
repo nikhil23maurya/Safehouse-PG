@@ -148,7 +148,11 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                     try {
                         ProviderQr.Prepared qr = providerQr.prepare(Uri.parse(uri.getQueryParameter("source")), Integer.parseInt(uri.getQueryParameter("amount")));
                         return new WebResourceResponse("image/png", null, 200, "OK", java.util.Collections.singletonMap("Cache-Control", "no-store"), new ByteArrayInputStream(qr.png));
-                    } catch (Exception ignored) { return missingAsset(); }
+                    } catch (Exception e) {
+                        // Report the failure type, but never log payment URLs or UPI details.
+                        android.util.Log.w("PGOneQR", "Provider QR could not be prepared: " + e.getClass().getSimpleName());
+                        return missingAsset();
+                    }
                 }
                 String name = path.substring("/assets/".length());
                 if (!("index.html".equals(name) || "app.js".equals(name) || "app.css".equals(name) || "InterVariable.woff2".equals(name) || "Inter-OFL.txt".equals(name))) return missingAsset();
@@ -369,7 +373,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                 try {
                     ProviderQr.Prepared qr = providerQr.prepare(Uri.parse(imageUrl == null ? "" : imageUrl), amountPaise);
                     QrDownloads.save(MainActivity.this, qr.png);
-                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "QR saved to Pictures / SafeHouse. Open your UPI app and scan from gallery.", Toast.LENGTH_LONG).show());
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "QR saved to Pictures / PGOne. Open your UPI app and scan from gallery.", Toast.LENGTH_LONG).show());
                 } catch (Exception e) {
                     runOnUiThread(() -> Toast.makeText(MainActivity.this, "QR could not be saved. Try using another device.", Toast.LENGTH_LONG).show());
                 }
@@ -445,7 +449,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                 } catch (Exception e) {
                     upiOpening.set(false);
                     callJs("window.SafeHouseUpiError && window.SafeHouseUpiError(" +
-                        q("Direct UPI could not start. Save the QR and scan it from your UPI app gallery.") + ");");
+                        q("The provider QR could not be verified. Reload the QR, or ask the property owner to check the payment setup.") + ");");
                 }
             }).start();
         }
