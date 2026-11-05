@@ -12,7 +12,7 @@ android {
         targetSdk 35
         versionCode 50
         versionName '5.0.0'
-        manifestPlaceholders = [appLabel: 'SafeHouse']
+        manifestPlaceholders = [appLabel: 'PGOne']
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
 
@@ -20,7 +20,7 @@ android {
         debug {
             applicationIdSuffix '.testing'
             versionNameSuffix '-testing'
-            manifestPlaceholders = [appLabel: 'SafeHouse Testing']
+            manifestPlaceholders = [appLabel: 'PGOne Testing']
         }
         release {
             minifyEnabled false

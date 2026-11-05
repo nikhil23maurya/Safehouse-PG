@@ -1,4 +1,3 @@
-<animated-vector xmlns:android="http://schemas.android.com/apk/res/android" android:drawable="@drawable/splash_mark">
-    <target android:name="roof" android:animation="@animator/splash_roof"/>
-    <target android:name="house" android:animation="@animator/splash_house"/>
-</animated-vector>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@drawable/splash_mark" />
+</layer-list>

@@ -34,4 +34,4 @@ await writeFile(
   path.join(out, "index.html"),
   await readFile(path.join(here, "index.html"), "utf8"),
 );
-console.log("Built maintained SafeHouse frontend → Android assets");
+console.log("Built maintained PGOne frontend → Android assets");

@@ -1,48 +1,56 @@
-# SafeHouse Android
+# PGOne Android app
 
-The maintained app consists of `frontend/src/` and `app/src/main/`. The old Base64 archives and UI patch scripts are historical material; neither Android workflow consumes them. Backend prebuild scripts remain separate and unchanged.
+> PGOne is a mobile-first PG and hostel management product for property owners and residents. **The Android client has been rebranded; the backend, APIs and payment settlement logic are intentionally unchanged.**
+
+## App identity
+
+- Product name: **PGOne**
+- UI/launcher/splash identity: **PGOne**, using the same icon geometry and royal-blue + navy colors as the marketing website.
+- Debug/testing label: **PGOne Testing**.
+- Existing Android application IDs (including `com.safehouse.pg.testing`) and Java package namespace are **retained for compatibility**. These are technical identifiers, not the customer-facing brand.
+- The legacy `SafeHouseNative` JavaScript bridge names, Firebase registration identifiers, server URL, and payment callback names are stable integration contracts. Do not rename them as part of a cosmetic rebrand.
+
+## Structure
+
+- `mobile/frontend/src/` — maintained, readable HTML/CSS/JavaScript application and components.
+- `mobile/frontend/src/components/icons.js` — canonical PGOne web-component logo, identical geometry to `docs/branding/pgone-mark.svg`.
+- `mobile/app/src/main/res/drawable/ic_launcher.xml` — Android vector launcher icon.
+- `mobile/app/src/main/java/com/safehouse/pg/BrandSplash.java` — custom PGOne startup animation.
+- `mobile/frontend/build.mjs` — compiles the maintained frontend into Android WebView assets.
+- `mobile/app/src/main/java/` — native session, notifications, QR/UPI integrations.
+- `docs/mobile-rebuild/` — implementation/validation details and constraints.
 
 ## Local frontend checks
 
-```sh
+Requires Node and npm:
+
+```bash
 cd mobile/frontend
 npm ci
 npm test
 npm run build
-npx playwright install chromium
 npm run test:e2e
 ```
 
-`npm run serve` opens a local preview at `http://127.0.0.1:4173`. The normal preview uses the real public API; use the browser tests for controlled fixtures. Never use a live account to create financial test data without approval. Browser previews keep credentials in memory and intentionally do not persist sessions.
+Browser tests require Playwright's Chromium browser (`npx playwright install chromium`). For Android testing, use Java 17, compatible Gradle and Android SDK 35; the GitHub Actions workflow provisions these dependencies.
 
-## Android testing build
+## Building an APK
 
-Use Java 17, Gradle 8.9, Android platform 35 and build-tools 35.0.0. Native dependencies retain the previous supported versions. After `npm ci` in `frontend`, run:
+GitHub Actions: **Build PGOne Android APK** (`.github/workflows/build-mobile-apk.yml`). A push to `main` that changes the mobile source triggers frontend and Android validation. Successful runs upload a commit-specific `PGOne-testing-APK-<sha>` artifact.
 
-```sh
-cd mobile
-gradle :app:assembleDebug
-```
+The artifact contains `PGOne-5.0.0-testing-<sha>.apk`, checksum, Android package metadata and signing diagnostics. **This is a debug/testing build**, not a release-signed production APK. It installs separately from a release package. GitHub artifact download may require repository access.
 
-Gradle invokes the maintained frontend build before packaging. The output is `app/build/outputs/apk/debug/app-debug.apk`. This is a **debug/testing APK**, with application ID `com.safehouse.pg.testing` and app label **SafeHouse Testing**. It installs alongside the current production app. It is not a signed production release, and its debug signing identity can differ between build environments.
+## User journeys
 
-The GitHub workflow verifies ZIP integrity, APK identity and signature, generates SHA-256/provenance records, and uploads a commit-specific artifact. It never commits build outputs or pushes to main. Pull-request and branch builds check out the actual implementation SHA.
+Owners can sign in, select properties, manage rooms and residents, review monthly dues, reconcile payments and access property reports; residents can view invoices, payment history and receipts, and initiate configured payment flows. Existing notification integrations are retained.
 
-## Instrumentation
+## Financial correctness
 
-```sh
-cd mobile/frontend
-node prepare-android-tests.mjs
-cd ..
-gradle :app:assembleDebug :app:assembleDebugAndroidTest
-```
+- Existing `SAFEHOUSE_QR_SETTLEMENT_V2` backend verification and settlement logic remain unchanged.
+- Only backend-confirmed, captured payments become paid.
+- Do not rely on Android UPI app return, a screenshot, or a button click to establish payment success.
+- The payment provider and bank acceptance must be verified separately on real configured accounts before any public release.
 
-`scripts/android-smoke.sh` installs both APKs in an Android 35 emulator and executes the separate test APK. Network fixtures, a deliberately invalid test QR recipient and test sign-in credentials exist only in test tooling/the instrumentation APK. The app APK never bundles them. Native screenshots, cold-start recording, launch timing and instrumentation diagnostics are uploaded separately.
+## Production release gates
 
-## Sessions and navigation
-
-Android credentials are encrypted using AES-GCM with an Android Keystore key. The app uses a restricted HTTPS asset origin and disables arbitrary file/content access. Old file-origin Web storage is not migrated into the new encrypted vault; users moving from the historical app must sign in again. The separate testing package has its own independent session.
-
-Property/month context is captured per request. The backend owns roles, capacity, invoice snapshots, rent revision periods, payment settlement and notification scheduling rules. UI route guards supplement backend permissions. Orientation changes retain the WebView and in-memory form draft. Payment app-return callbacks only trigger a server status check.
-
-See [architecture and screen inventory](../docs/mobile-rebuild/ARCHITECTURE.md), [screen changes](../docs/mobile-rebuild/SCREEN_CHANGES.md) and [validation](../docs/mobile-rebuild/VALIDATION.md).
+A production release requires a managed release keystore, release signing, Google Play or trusted distribution compliance, verified UPI merchant settlement, FCM delivery, physical-device/OEM testing, support and privacy policy. The production package ID should be decided as a **separate migration decision**; never silently change it or lose push notification/session compatibility.

@@ -188,11 +188,11 @@ export async function notificationFormScreen(ctx) {
             required: true,
             type: "textarea",
             value:
-              "Hi {{name}}, your {{month}} rent of {{amount}} is pending. Please check your invoice in SafeHouse.",
+              "Hi {{name}}, your {{month}} rent of {{amount}} is pending. Please check your invoice in PGOne.",
             attrs: 'minlength="2" maxlength="240" data-notification-preview',
             help: "Supported variables: {{name}}, {{property}}, {{room}}, {{month}}, {{amount}}, {{due_date}}, {{days_overdue}}.",
           }) +
-          `<div class="notification-preview"><small>${icon("bell")} Message preview · variables filled by server</small><strong data-preview-title>Rent reminder</strong><p data-preview-body>Hi {{name}}, your {{month}} rent of {{amount}} is pending. Please check your invoice in SafeHouse.</p></div>`,
+          `<div class="notification-preview"><small>${icon("bell")} Message preview · variables filled by server</small><strong data-preview-title>Rent reminder</strong><p data-preview-body>Hi {{name}}, your {{month}} rent of {{amount}} is pending. Please check your invoice in PGOne.</p></div>`,
       ) +
       formSection(
         "02",

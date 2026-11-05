@@ -41,6 +41,7 @@ export function icon(name, className = "") {
   return `<svg class="icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.home}</svg>`;
 }
 
+/** PGOne's canonical SVG geometry. Other icons remain interface primitives. */
 export function brand({ compact = false } = {}) {
-  return `<span class="brand"><svg class="brand-mark" viewBox="0 0 48 48" fill="none" aria-hidden="true"><path class="brand-roof" d="m5 22 19-16 19 16"/><path class="brand-house" d="M11 22v19h11V29h10v12h5V22"/></svg>${compact ? "" : '<span>SafeHouse<span class="brand-dot">.</span></span>'}</span>`;
+  return `<span class="brand"><svg class="brand-mark" viewBox="0 0 64 64" aria-hidden="true" xmlns="http://www.w3.org/2000/svg"><path d="M5 30.1 30.1 8.3a7.5 7.5 0 0 1 9.8 0L59 24.8v11.1L35 15.7 15.2 32.8V59H5Z" fill="#0B2148"/><path d="M15.2 33 35 15.7l24 20.2V52a7 7 0 0 1-7 7H41V45h4V37.5c0-4.9-3.6-8.2-8.8-8.2H31V59H15.2Z" fill="#2056EF"/><path d="M31 29.3h5.2c5.2 0 8.8 3.3 8.8 8.2V45h-4V39c0-2.2-1.5-3.8-3.8-3.8H31Z" fill="#0B2148"/><path d="M23 59V37.2l8-7.9V59Z" fill="#FFF"/><rect x="30.3" y="21.3" width="4" height="4" rx=".7" fill="white"/><rect x="36.2" y="21.3" width="4" height="4" rx=".7" fill="white"/></svg>${compact ? "" : '<span class="brand-wordmark">PG<span class="brand-dot">One</span></span>'}</span>`;
 }

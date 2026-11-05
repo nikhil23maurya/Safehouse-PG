@@ -15,14 +15,12 @@
 .boot svg {
   width: 76px;
   height: 76px;
-  fill: none;
-  stroke: var(--primary);
-  stroke-width: 3;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-dasharray: 240;
-  stroke-dashoffset: 240;
-  animation: draw-logo 800ms ease forwards;
+  display: block;
+  animation: brand-reveal 650ms ease-out both;
+}
+@keyframes brand-reveal {
+  from { opacity: 0.15; transform: scale(0.94); }
+  to { opacity: 1; transform: scale(1); }
 }
 .session-restore p {
   color: var(--muted);

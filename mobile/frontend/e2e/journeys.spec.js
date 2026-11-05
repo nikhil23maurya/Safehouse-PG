@@ -328,7 +328,7 @@ test("QR is pending until exact backend capture and receipt record arrive", asyn
   const downloadPromise = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download receipt" }).click();
   expect((await downloadPromise).suggestedFilename()).toBe(
-    "SafeHouse-SH-TEST-1001.pdf",
+    "PGOne-SH-TEST-1001.pdf",
   );
   expect(fixture.errors).toEqual([]);
 });

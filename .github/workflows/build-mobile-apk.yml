@@ -1,4 +1,4 @@
-name: Build SafeHouse Android APK
+name: Build PGOne Android APK
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: safehouse-mobile-${{ github.head_ref || github.ref_name }}
+  group: pgone-mobile-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -51,7 +51,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SafeHouse-web-visual-evidence-${{ github.event.pull_request.head.sha || github.sha }}
+          name: PGOne-web-visual-evidence-${{ github.event.pull_request.head.sha || github.sha }}
           overwrite: true
           path: |
             mobile/frontend/visual-evidence/
@@ -109,14 +109,14 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > diagnostics/apk/package.txt
           grep -q "name='com.safehouse.pg.testing'" diagnostics/apk/package.txt
           SOURCE_SHA="$(git rev-parse HEAD)"
-          NAME="SafeHouse-5.0.0-testing-${SOURCE_SHA:0:12}.apk"
+          NAME="PGOne-5.0.0-testing-${SOURCE_SHA:0:12}.apk"
           cp "$APK" "diagnostics/apk/$NAME"
           (cd diagnostics/apk && sha256sum "$NAME" > "$NAME.sha256")
           printf 'commit=%s\nrun_id=%s\nkind=debug/testing\napplication_id=com.safehouse.pg.testing\n' "$SOURCE_SHA" "$GITHUB_RUN_ID" > diagnostics/apk/build-provenance.txt
       - name: Upload exact testing APK
         uses: actions/upload-artifact@v4
         with:
-          name: SafeHouse-testing-APK-${{ github.event.pull_request.head.sha || github.sha }}
+          name: PGOne-testing-APK-${{ github.event.pull_request.head.sha || github.sha }}
           overwrite: true
           path: diagnostics/apk/
           if-no-files-found: error
@@ -141,7 +141,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: SafeHouse-Android-diagnostics-${{ github.event.pull_request.head.sha || github.sha }}
+          name: PGOne-Android-diagnostics-${{ github.event.pull_request.head.sha || github.sha }}
           overwrite: true
           path: |
             android-build.log

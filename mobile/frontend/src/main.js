@@ -352,7 +352,7 @@ async function signIn(email, password) {
 async function logout() {
   if (
     !(await confirm({
-      title: "Sign out of SafeHouse?",
+      title: "Sign out of PGOne?",
       message: "You can sign back in with your email and password.",
       confirmLabel: "Sign out",
     }))
@@ -469,7 +469,7 @@ async function receipt(id, receiptNumber) {
   await api("/api/auth/me");
   const role = state.user.role === "OWNER" ? "owner" : "student";
   const path = `/api/${role}/payments/${encodeURIComponent(id)}/receipt.pdf`;
-  const filename = `SafeHouse-${String(receiptNumber || id).replace(/[^a-zA-Z0-9_-]/g, "")}.pdf`;
+  const filename = `PGOne-${String(receiptNumber || id).replace(/[^a-zA-Z0-9_-]/g, "")}.pdf`;
   if (native.has("downloadReceipt"))
     native.call(
       "downloadReceipt",
@@ -590,7 +590,7 @@ async function render() {
     screen = next;
     document.getElementById("app").innerHTML = shell(next, snapshot);
     document.getElementById("app").dataset.screen = state.route.name;
-    document.title = `${next.title || "SafeHouse"} · SafeHouse`;
+    document.title = `${next.title || "PGOne"} · PGOne`;
     window.scrollTo(0, 0);
     document.getElementById("main")?.focus({ preventScroll: true });
     screen.mount?.();
@@ -873,7 +873,7 @@ async function boot() {
     restoringMetadata = stored;
     state.tokens = stored.tokens;
     document.getElementById("app").innerHTML =
-      `<main class="boot session-restore" role="status"><svg viewBox="0 0 48 48" aria-hidden="true"><path d="m5 22 19-16 19 16M11 22v19h11V29h10v12h5V22"/></svg><span>SafeHouse</span><p>Restoring your account…</p><span class="spinner" aria-hidden="true"></span></main>`;
+      `<main class="boot session-restore" role="status"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M5 30.1 30.1 8.3a7.5 7.5 0 0 1 9.8 0L59 24.8v11.1L35 15.7 15.2 32.8V59H5Z" fill="#0B2148"/><path d="M15.2 33 35 15.7l24 20.2V52a7 7 0 0 1-7 7H41V45h4V37.5c0-4.9-3.6-8.2-8.8-8.2H31V59H15.2Z" fill="#2056EF"/><path d="M31 29.3h5.2c5.2 0 8.8 3.3 8.8 8.2V45h-4V39c0-2.2-1.5-3.8-3.8-3.8H31Z" fill="#0B2148"/><path d="M23 59V37.2l8-7.9V59Z" fill="#FFF"/><rect x="30.3" y="21.3" width="4" height="4" rx=".7" fill="white"/><rect x="36.2" y="21.3" width="4" height="4" rx=".7" fill="white"/></svg><span>PGOne</span><p>Restoring your account…</p><span class="spinner" aria-hidden="true"></span></main>`;
     requestAnimationFrame(() => native.call("ready"));
     try {
       const me = await api("/api/auth/me");

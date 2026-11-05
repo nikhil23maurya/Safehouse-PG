@@ -26,7 +26,7 @@ export function profileScreen(ctx) {
     title: "Your account",
     nav: "profile",
     content:
-      heading("YOUR SAFEHOUSE", "A place for the details.") +
+      heading("YOUR PGONE", "A place for the details.") +
       `<div class="resident-profile">${avatar(user.fullName, true)}<div><h1>${esc(user.fullName)}</h1><p>${esc(user.email)}</p>${badge(owner ? "Property owner" : "Resident", "blue")}</div></div>` +
       (property
         ? card(
@@ -45,7 +45,7 @@ export function profileScreen(ctx) {
         "Manage",
         `<div class="list menu-list">${owner ? menu("Your properties", "building", "properties") + menu("Property settings", "rooms", "propertyForm", { edit: true }) + menu("Payment history", "wallet", "ownerPayments") : menu("Your invoices", "invoice", "invoices") + menu("Payment history", "wallet", "history")}${menu("Notifications", "bell", "notifications")}${menu("Change password", "key", "password")}</div>`,
       ) +
-      `<div class="action-stack">${button("Sign out", { action: "logout", kind: "secondary", glyph: "logout" })}</div><p class="context-footnote">SafeHouse 5.0 · Your home, managed simply.</p>`,
+      `<div class="action-stack">${button("Sign out", { action: "logout", kind: "secondary", glyph: "logout" })}</div><p class="context-footnote">PGOne 5.0 · Your PG, under control.</p>`,
   };
 }
 

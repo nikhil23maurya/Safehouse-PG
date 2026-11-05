@@ -40,11 +40,10 @@
 .brand-mark {
   width: 34px;
   height: 34px;
-  stroke: var(--primary);
-  stroke-width: 3.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  flex: 0 0 34px;
+  display: block;
 }
+.brand-wordmark { font-weight: 750; letter-spacing: -0.05em; color: #0B2148; }
 .brand-dot {
   color: var(--primary);
 }
