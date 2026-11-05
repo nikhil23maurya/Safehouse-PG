@@ -1,0 +1,71 @@
+name: Assemble PGOne Android Release
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'mobile/**'
+      - '.github/workflows/assemble-release.yml'
+      - 'scripts/verify-mobile-source.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  assemble:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.13.0'
+          cache: npm
+          cache-dependency-path: mobile/frontend/package-lock.json
+      - name: Prepare maintained frontend
+        working-directory: mobile/frontend
+        run: |
+          npm ci
+          npm test
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' | sort -V | tail -n 1)"
+          test -n "$SDKMANAGER"
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Assemble non-debug release variant
+        working-directory: mobile
+        run: gradle :app:assembleRelease --stacktrace
+      - name: Verify assembly and package identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assembly
+          APK=mobile/app/build/outputs/apk/release/app-release-unsigned.apk
+          test -s "$APK"
+          unzip -t "$APK" > release-assembly/zip-integrity.txt
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > release-assembly/package.txt
+          grep -q "name='com.safehouse.pg'" release-assembly/package.txt
+          grep -q "application-label:'PGOne'" release-assembly/package.txt
+          if grep -q "application-debuggable" release-assembly/package.txt; then
+            echo "Refusing debug-enabled APK" >&2
+            exit 1
+          fi
+          "$ANDROID_HOME/build-tools/35.0.0/zipalign" -c -v 4 "$APK" > release-assembly/alignment.txt
+          cp "$APK" release-assembly/PGOne-unsigned.apk
+          (cd release-assembly && sha256sum PGOne-unsigned.apk > SHA256SUMS)
+      - name: Upload unsigned binary for secure off-runner signing
+        uses: actions/upload-artifact@v4
+        with:
+          name: PGOne-Unsigned-Release-${{ github.sha }}
+          path: release-assembly/
+          if-no-files-found: error
+          retention-days: 7
