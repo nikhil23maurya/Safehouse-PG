@@ -54,10 +54,17 @@ public class MobileJourneyTest {
         instrumentation.runOnMainSync(() -> web.evaluateJavascript(script, result -> { value.set(result); done.countDown(); }));
         assertTrue("JavaScript evaluation timed out", done.await(10, TimeUnit.SECONDS)); return value.get();
     }
-    private void shell(String command) throws Exception {
+    private String shell(String command) throws Exception {
         try (android.os.ParcelFileDescriptor descriptor = instrumentation.getUiAutomation().executeShellCommand(command)) {
-            read(new java.io.FileInputStream(descriptor.getFileDescriptor()));
+            return read(new java.io.FileInputStream(descriptor.getFileDescriptor()));
         }
+    }
+    private String nativeTree(AccessibilityNodeInfo node) {
+        if (node == null) return "(no active window)";
+        StringBuilder text = new StringBuilder();
+        text.append(node.getClassName()).append(" ").append(node.getText()).append(" ").append(node.getContentDescription()).append("\n");
+        for (int i = 0; i < node.getChildCount(); i++) text.append(nativeTree(node.getChild(i)));
+        return text.toString();
     }
     private boolean nativeText(String text) {
         AccessibilityNodeInfo root = instrumentation.getUiAutomation().getRootInActiveWindow();
@@ -222,8 +229,17 @@ public class MobileJourneyTest {
         assertTrue(js("document.querySelector('.upi-help').innerText").contains("No compatible UPI app"));
         screenshot("23b-upi-no-app");
         String testReceiver = "com.safehouse.pg.testing.test/com.safehouse.pg.UpiFixtureActivity";
-        shell("pm enable " + testReceiver);
+        String enabled = shell("pm enable " + testReceiver);
+        assertTrue("Test receiver could not be enabled: " + enabled, enabled.contains("enabled"));
         try {
+            Intent upiQuery = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(QrTestImages.PAYLOAD));
+            long registrationDeadline = System.currentTimeMillis() + 5000;
+            java.util.List<android.content.pm.ResolveInfo> handlers;
+            do {
+                handlers = target.getPackageManager().queryIntentActivities(upiQuery, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
+                if (handlers.isEmpty()) Thread.sleep(150);
+            } while (handlers.isEmpty() && System.currentTimeMillis() < registrationDeadline);
+            assertFalse("Enabled receiver is not visible to Android: " + enabled + shell("dumpsys package com.safehouse.pg.testing.test"), handlers.isEmpty());
             js("document.querySelector('[data-action=upi]').click()");
             long chooserDeadline = System.currentTimeMillis() + 15000;
             while (!nativeText("UPI Test Receiver") && !nativeText("UPI handoff received") && System.currentTimeMillis() < chooserDeadline) Thread.sleep(150);
@@ -231,7 +247,12 @@ public class MobileJourneyTest {
                 AccessibilityNodeInfo root = instrumentation.getUiAutomation().getRootInActiveWindow();
                 assertNotNull("UPI chooser unavailable", root);
                 java.util.List<AccessibilityNodeInfo> choices = root.findAccessibilityNodeInfosByText("UPI Test Receiver");
-                assertFalse("Compatible app not in chooser", choices.isEmpty());
+                if (choices.isEmpty()) {
+                    captureBitmap("23c-upi-chooser-failure");
+                    String state = nativeTree(root) + "\nWEB: " + js("document.body.innerText");
+                    try (FileOutputStream output = new FileOutputStream(new File(target.getExternalFilesDir(null), "qa/upi-chooser-failure.txt"))) { output.write(state.getBytes(StandardCharsets.UTF_8)); }
+                    fail("Compatible app not in chooser: " + state);
+                }
                 AccessibilityNodeInfo choice = choices.get(0);
                 while (!choice.isClickable() && choice.getParent() != null) choice = choice.getParent();
                 choice.performAction(AccessibilityNodeInfo.ACTION_CLICK);

@@ -4,7 +4,7 @@ The follow-up is limited to the Android app and its frontend/test tooling. Backe
 
 ## Changes
 
-- Compact sign-in layout: one-line heading, quieter labels, comfortable inputs, keyboard-safe action and a locally bundled Inter variable font with its SIL OFL license.
+- Compact sign-in layout: one-line heading, quieter labels, comfortable inputs and a keyboard-safe action. A locally bundled Inter variable font (with its SIL OFL license) and more restrained heading weights refine the existing royal-blue/white theme throughout the app.
 - Short, coordinated entry transitions; Android startup hands off only after the WebView has presented its frame. Reduced-motion settings still disable transitions.
 - Payment polling updates status text without replacing the QR or focused action. Busy actions restore focus when appropriate.
 - Android detects the QR matrix inside the provider poster instead of displaying a whole branded sheet or relying on guessed crop coordinates. It adds a four-module quiet zone and integer scaling, then decodes the square again and requires an exact match with the original provider payload. Amount, currency and unambiguous payee/amount fields are checked. No destination or transaction data is constructed by the client.

@@ -92,7 +92,6 @@
 }
 .login-page .field input {
   background: #fbfcfe;
-  border-color: #dce3ef;
   border-radius: 12px;
   min-height: 56px;
   font-size: 0.9375rem;
@@ -730,6 +729,7 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
+  image-rendering: pixelated;
 }
 .qr-stage .sk {
   width: 100%;

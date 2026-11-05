@@ -443,12 +443,9 @@ window.SafeHouseNotificationOpened = (route) => {
     void navigate(postAuthRoute(), {}, { replace: true });
 };
 window.SafeHouseUpiError = (message) => {
-  screen?.upiResult?.(message || "The UPI app could not open. Save the QR and scan it from your UPI app gallery.");
-  toast(
-    message ||
-      "The UPI app could not open. Save the QR and scan it from your UPI app instead.",
-    "error",
-  );
+  const text = message || "The UPI app could not open. Save the QR and scan it from your UPI app gallery.";
+  if (screen?.upiResult) screen.upiResult(text);
+  else toast(text, "error");
 };
 window.SafeHouseUpiOpened = () => screen?.upiResult?.();
 // A native callback is never payment evidence. QR status must reconcile server-side.
