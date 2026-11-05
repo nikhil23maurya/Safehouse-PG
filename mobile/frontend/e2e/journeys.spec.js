@@ -299,7 +299,7 @@ test("QR is pending until exact backend capture and receipt record arrive", asyn
   await login(page, "STUDENT");
   await page.getByRole("button", { name: "Pay rent", exact: true }).click();
   await expect(
-    page.getByAltText("Provider-issued rent payment QR"),
+    page.getByAltText("Verified provider-issued rent payment QR"),
   ).toBeVisible();
   await expect(
     page.getByText("Payment Successful", { exact: true }),
@@ -349,7 +349,7 @@ for (const scenario of ["disabled", "expired", "image", "network", "failed"])
     const expected = {
       disabled: "not enabled",
       expired: "QR expired",
-      image: "QR couldn’t load",
+      image: "QR image unavailable",
       network: "Status temporarily unavailable",
       failed: "Payment failed",
     }[scenario];

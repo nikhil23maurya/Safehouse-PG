@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { PaymentController } from "../src/payments/controller.js";
+import { renderPayment } from "../src/screens/payment.js";
 
 test("delayed confirmation stays pending and does not create another QR", async () => {
   const h = harness();
@@ -214,4 +215,36 @@ test("a stale response after leaving payment cannot show a success screen", asyn
   await opening;
   assert.notEqual(h.controller.value.phase, "success");
   assert.equal(h.settled(), 0);
+});
+
+
+test("native payment offers UPI handoff while QR preview is decoding", () => {
+  const html = renderPayment({phase:"awaiting",qr,invoice,imageReady:false,imageRetryToken:0,checking:false,message:""}, {
+    native:{has:(name)=>["openQrInUpiApp","paymentQrImageUrl"].includes(name),call:(name)=>name==="paymentQrImageUrl"?"https://appassets.androidplatform.net/assets/payment-qr.png?source=x&amount=850099":undefined},
+    snapshot:{property:{name:"PGOne House",timezone:"Asia/Kolkata"}}
+  });
+  assert.match(html,/Pay with a UPI app/);
+  assert.match(html,/data-payment-qr/);
+  assert.doesNotMatch(html,/<img[^>]+\\shidden(?:\\s|>)/);
+  assert.match(html,/payment-qr-image is-loading/);
+});
+
+test("QR image error offers retry without hiding the native UPI action", () => {
+  const html = renderPayment({phase:"awaiting",qr,invoice,imageReady:false,imageError:true,checking:false,message:""}, {
+    native:{has:(name)=>["openQrInUpiApp","paymentQrImageUrl"].includes(name),call:()=>"https://appassets.androidplatform.net/assets/payment-qr.png?source=x&amount=850099"},
+    snapshot:{property:{name:"PGOne House",timezone:"Asia/Kolkata"}}
+  });
+  assert.match(html,/Pay with a UPI app/);
+  assert.match(html,/Reload QR image/);
+  assert.doesNotMatch(html,/data-payment-qr/);
+});
+
+test("reloading QR changes image request without creating a second payment", async () => {
+  const h=harness();
+  await h.controller.open(invoice);
+  h.controller.imageFailed(qr.id);
+  h.controller.retryImage();
+  assert.equal(h.controller.value.imageRetryToken,1);
+  assert.equal(h.controller.value.imageReady,false);
+  assert.equal(h.issued(),1);
 });

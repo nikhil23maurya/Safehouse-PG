@@ -956,3 +956,8 @@
 .reduced-motion .spinner {
   border-style: dotted;
 }
+
+/* Provider QR remains paintable while awaiting verification. Display:none on
+   Android WebView can defer the img request and its load/error callbacks. */
+.payment-qr-image.is-loading { visibility: hidden; }
+.payment-qr-image { width: 100%; max-width: 310px; height: auto; object-fit: contain; }

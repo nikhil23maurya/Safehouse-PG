@@ -13,7 +13,7 @@ async function nativePayment(page) {
   const fixture = await setup(page);
   await login(page, "STUDENT");
   await page.getByRole("button", { name: "Pay rent", exact: true }).click();
-  await expect(page.getByAltText("Provider-issued rent payment QR")).toBeVisible();
+  await expect(page.getByAltText("Verified provider-issued rent payment QR")).toBeVisible();
   return fixture;
 }
 
