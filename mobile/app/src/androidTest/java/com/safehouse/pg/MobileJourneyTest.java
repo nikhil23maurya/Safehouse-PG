@@ -59,6 +59,15 @@ public class MobileJourneyTest {
             return read(new java.io.FileInputStream(descriptor.getFileDescriptor()));
         }
     }
+    private void setReceiverEnabled(boolean enabled) {
+        android.content.ComponentName receiver = new android.content.ComponentName(instrumentation.getContext(), UpiFixtureActivity.class);
+        int desired = enabled ? android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_ENABLED : android.content.pm.PackageManager.COMPONENT_ENABLED_STATE_DISABLED;
+        instrumentation.getUiAutomation().adoptShellPermissionIdentity();
+        try {
+            target.getPackageManager().setComponentEnabledSetting(receiver, desired, android.content.pm.PackageManager.DONT_KILL_APP);
+            assertEquals("Test receiver state: " + receiver.flattenToString(), desired, target.getPackageManager().getComponentEnabledSetting(receiver));
+        } finally { instrumentation.getUiAutomation().dropShellPermissionIdentity(); }
+    }
     private String nativeTree(AccessibilityNodeInfo node) {
         if (node == null) return "(no active window)";
         StringBuilder text = new StringBuilder();
@@ -124,6 +133,7 @@ public class MobileJourneyTest {
     }
 
     @Test public void installedAppJourneysAndScreenshots() throws Exception {
+        setReceiverEnabled(false);
         new SessionVault(target).save("");
         Intent intent = target.getPackageManager().getLaunchIntentForPackage(target.getPackageName());
         assertNotNull("Launcher intent unavailable", intent);
@@ -228,9 +238,7 @@ public class MobileJourneyTest {
         await("document.querySelector('.upi-help')");
         assertTrue(js("document.querySelector('.upi-help').innerText").contains("No compatible UPI app"));
         screenshot("23b-upi-no-app");
-        String testReceiver = "com.safehouse.pg.testing.test/com.safehouse.pg.UpiFixtureActivity";
-        String enabled = shell("pm enable " + testReceiver);
-        assertTrue("Test receiver could not be enabled: " + enabled, enabled.contains("enabled"));
+        setReceiverEnabled(true);
         try {
             Intent upiQuery = new Intent(Intent.ACTION_VIEW, android.net.Uri.parse(QrTestImages.PAYLOAD));
             long registrationDeadline = System.currentTimeMillis() + 5000;
@@ -239,7 +247,7 @@ public class MobileJourneyTest {
                 handlers = target.getPackageManager().queryIntentActivities(upiQuery, android.content.pm.PackageManager.MATCH_DEFAULT_ONLY);
                 if (handlers.isEmpty()) Thread.sleep(150);
             } while (handlers.isEmpty() && System.currentTimeMillis() < registrationDeadline);
-            assertFalse("Enabled receiver is not visible to Android: " + enabled + shell("dumpsys package com.safehouse.pg.testing.test"), handlers.isEmpty());
+            assertFalse("Enabled receiver is not visible to Android: " + shell("dumpsys package " + instrumentation.getContext().getPackageName()), handlers.isEmpty());
             js("document.querySelector('[data-action=upi]').click()");
             long chooserDeadline = System.currentTimeMillis() + 15000;
             while (!nativeText("UPI Test Receiver") && !nativeText("UPI handoff received") && System.currentTimeMillis() < chooserDeadline) Thread.sleep(150);
@@ -265,7 +273,7 @@ public class MobileJourneyTest {
             instrumentation.getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK);
             await("document.querySelector('[data-payment-qr]:not([hidden])')");
             screenshot("23d-upi-return-pending");
-        } finally { shell("pm disable " + testReceiver); }
+        } finally { setReceiverEnabled(false); }
         assertEquals("false", js("document.body.innerText.includes('Payment Successful')"));
         js("window.__nativeFixtures.control.paymentState='CAPTURED';document.querySelector('[data-action=checkPayment]').click()");
         await("document.querySelector('.success-amount')"); screenshot("24-payment-success");
