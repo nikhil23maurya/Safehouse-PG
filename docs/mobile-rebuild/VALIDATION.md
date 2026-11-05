@@ -2,6 +2,8 @@
 
 Implementation branch: `codex/safehouse-royal-rebuild`. Pull request: [SafeHouse-PG #9](https://github.com/nikhil23maurya/Safehouse-PG/pull/9).
 
+The 2026-11-05 login, motion and QR/UPI follow-up is described in [LOGIN-QR-POLISH.md](LOGIN-QR-POLISH.md). Its commit-specific CI, native screenshots and fresh APK are recorded in the PR. The results below retain the original rebuild baseline.
+
 ## Executed checks
 
 - 33 Node unit tests: exact paise display/input, property/month response guards, cache behavior, token refresh sequencing, session expiry, uncertain transport/server errors, property-local financial dates, notification routes and provider-verified payment state transitions.
@@ -13,7 +15,7 @@ Implementation branch: `codex/safehouse-royal-rebuild`. Pull request: [SafeHouse
 
 ## Verified build and artifacts
 
-The tested implementation commit is [`a3e91dd3dece32ef8baf5d344b3008abf6f8a0f6`](https://github.com/nikhil23maurya/Safehouse-PG/commit/a3e91dd3dece32ef8baf5d344b3008abf6f8a0f6). Subsequent documentation changes do not change the app packaged in this APK.
+The original rebuild baseline was tested at [`a3e91dd3dece32ef8baf5d344b3008abf6f8a0f6`](https://github.com/nikhil23maurya/Safehouse-PG/commit/a3e91dd3dece32ef8baf5d344b3008abf6f8a0f6). These baseline artifact links do not include the subsequent 2026-11-05 polish; use the current PR delivery links for that APK.
 
 | Evidence | Verified result |
 | --- | --- |

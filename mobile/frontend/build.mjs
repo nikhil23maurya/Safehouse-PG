@@ -1,11 +1,13 @@
 import { build } from "esbuild";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile, copyFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const out = path.resolve(here, "../app/src/main/assets");
 await mkdir(out, { recursive: true });
+await copyFile(path.join(here, "src/assets/fonts/InterVariable.woff2"), path.join(out, "InterVariable.woff2"));
+await copyFile(path.join(here, "src/assets/fonts/OFL.txt"), path.join(out, "Inter-OFL.txt"));
 await build({
   absWorkingDir: here,
   entryPoints: ["src/main.js"],

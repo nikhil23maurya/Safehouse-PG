@@ -20,4 +20,4 @@ adb shell settings put global animator_duration_scale 0.0
 adb shell am instrument -w com.safehouse.pg.testing.test/androidx.test.runner.AndroidJUnitRunner | tee diagnostics/instrumentation.txt
 adb pull /sdcard/Android/data/com.safehouse.pg.testing/files/qa/. diagnostics/android-screenshots/ || true
 adb logcat -d -s AndroidRuntime > diagnostics/android-runtime.txt
-grep -q 'OK (1 test)' diagnostics/instrumentation.txt
+grep -Eq '^OK \([1-9][0-9]* tests?\)' diagnostics/instrumentation.txt

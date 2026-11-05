@@ -442,12 +442,15 @@ window.SafeHouseNotificationOpened = (route) => {
   if (state.tokens && state.user)
     void navigate(postAuthRoute(), {}, { replace: true });
 };
-window.SafeHouseUpiError = (message) =>
+window.SafeHouseUpiError = (message) => {
+  screen?.upiResult?.(message || "The UPI app could not open. Save the QR and scan it from your UPI app gallery.");
   toast(
     message ||
       "The UPI app could not open. Save the QR and scan it from your UPI app instead.",
     "error",
   );
+};
+window.SafeHouseUpiOpened = () => screen?.upiResult?.();
 // A native callback is never payment evidence. QR status must reconcile server-side.
 window.SafeHousePaymentSuccess = () => void payment.resume();
 window.SafeHousePaymentError = () => {
@@ -686,6 +689,7 @@ document.addEventListener("click", async (event) => {
     if (action === "receipt")
       return await receipt(element.dataset.id, element.dataset.number);
     if (element.dataset.busy) return;
+    const restoreFocus = document.activeElement === element;
     element.dataset.busy = "true";
     element.disabled = true;
     try {
@@ -693,6 +697,8 @@ document.addEventListener("click", async (event) => {
     } finally {
       delete element.dataset.busy;
       element.disabled = false;
+      if (restoreFocus && element.isConnected && document.activeElement === document.body)
+        element.focus({ preventScroll: true });
     }
   } catch (error) {
     toast(error.message, "error");

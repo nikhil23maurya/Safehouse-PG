@@ -39,25 +39,32 @@
   background: white;
   min-height: 100vh;
   min-height: 100dvh;
-  padding: max(36px, env(safe-area-inset-top)) 24px
+  padding: max(40px, env(safe-area-inset-top)) 24px
     max(24px, env(safe-area-inset-bottom));
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  font-family: "Inter", Roboto, sans-serif;
 }
 .login-inner {
   width: 100%;
-  max-width: 420px;
+  max-width: 380px;
+  margin: auto 0;
+  padding: 24px 0;
+  animation: page-enter 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 .login-identity {
-  margin-bottom: clamp(36px, 7vh, 72px);
+  margin-bottom: 48px;
 }
 .login-identity .brand {
-  font-size: 1.5rem;
+  font-size: 1.25rem;
+  font-weight: 650;
+  letter-spacing: -0.035em;
 }
 .login-identity .brand-mark {
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
 }
 .login-overline {
   font-size: 0.6875rem;
@@ -66,19 +73,36 @@
   color: var(--muted);
 }
 .login-heading h1 {
-  font-size: 2.5rem;
-  font-weight: 740;
-  letter-spacing: -0.055em;
-  margin: 12px 0 14px;
-  line-height: 1.15;
-}
-.login-heading h1 span {
-  color: var(--primary);
+  font-size: 1.875rem;
+  font-weight: 650;
+  letter-spacing: -0.04em;
+  margin: 0 0 10px;
+  line-height: 1.25;
 }
 .login-heading p {
-  font-size: 1rem;
+  font-size: 0.9375rem;
   color: var(--muted);
-  margin-bottom: 36px;
+  margin-bottom: 32px;
+}
+.login-page .field label {
+  font-weight: 550;
+}
+.login-page .field {
+  margin-bottom: 20px;
+}
+.login-page .field input {
+  background: #fbfcfe;
+  border-color: #dce3ef;
+  border-radius: 12px;
+  min-height: 56px;
+  font-size: 0.9375rem;
+}
+.login-page .button {
+  min-height: 54px;
+  border-radius: 12px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  margin-top: 8px;
 }
 .login-support {
   display: flex;
@@ -87,7 +111,7 @@
   gap: 8px;
   margin-top: 24px;
   color: var(--muted);
-  font-size: 0.75rem;
+  font-size: 0.8125rem;
   line-height: 1.6;
 }
 .login-support .icon {
@@ -99,21 +123,34 @@
   font-size: 0.75rem;
   color: var(--muted);
   text-align: center;
-  margin-top: clamp(32px, 5vh, 64px);
+  padding-top: 20px;
+  flex-shrink: 0;
 }
 .keyboard-open .login-page {
-  align-items: flex-start;
-  padding-top: 24px;
+  padding-top: 16px;
+  justify-content: flex-start;
+}
+.keyboard-open .login-inner {
+  margin: 0;
+  padding: 0;
 }
 .keyboard-open .login-identity {
   margin-bottom: 24px;
 }
 .keyboard-open .login-heading h1 {
-  font-size: 2rem;
-  margin-top: 0;
+  font-size: 1.5rem;
 }
 .keyboard-open .login-heading p {
   margin-bottom: 24px;
+}
+.keyboard-open .login-footer {
+  display: none;
+}
+@media (max-height: 650px) {
+  .login-page { justify-content: flex-start; padding-top: 24px; }
+  .login-inner { margin: 0; padding: 0; }
+  .login-identity { margin-bottom: 24px; }
+  .login-footer { display: none; }
 }
 .property-context {
   display: flex;
@@ -649,6 +686,7 @@
   white-space: pre-wrap;
 }
 .payment-page {
+  font-family: "Inter", Roboto, sans-serif;
   background: white;
   min-height: 100vh;
   min-height: 100dvh;
@@ -668,7 +706,8 @@
   font-size: 0.875rem;
 }
 .payment-content h1 {
-  font-size: 2.25rem;
+  font-size: 2rem;
+  font-weight: 650;
   margin-top: 8px;
   font-variant-numeric: tabular-nums;
 }
@@ -680,13 +719,12 @@
 .qr-stage {
   width: min(100%, 292px);
   aspect-ratio: 1;
-  margin: 32px auto 20px;
+  margin: 24px auto 16px;
   display: grid;
   place-items: center;
   background: white;
-  border: 1px solid var(--border);
-  border-radius: 14px;
-  padding: 16px;
+  border: 0;
+  padding: 0;
 }
 .qr-stage img {
   width: 100%;
@@ -719,10 +757,10 @@
   margin-top: 8px;
 }
 .payment-status {
-  margin: 24px 0;
-  padding: 12px 8px;
+  margin: 20px 0;
+  padding: 8px;
   border-radius: 10px;
-  background: var(--background);
+  background: transparent;
   font-size: 0.8125rem;
   display: flex;
   gap: 8px;
@@ -742,6 +780,21 @@
   display: flex;
   justify-content: center;
   gap: 24px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.payment-secondary [aria-disabled="true"] {
+  opacity: 0.6;
+  cursor: default;
+}
+.upi-help {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  margin-bottom: 16px;
 }
 .payment-safety {
   color: var(--muted);
@@ -846,13 +899,13 @@
 }
 @media (max-height: 580px) and (orientation: landscape) {
   .login-page {
-    align-items: flex-start;
+    align-items: center;
   }
   .login-identity {
     margin-bottom: 24px;
   }
   .login-heading h1 {
-    font-size: 2rem;
+    font-size: 1.5rem;
   }
   .login-heading p {
     margin-bottom: 24px;
@@ -862,7 +915,8 @@
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .content > :first-child,
+  .content,
+  .login-inner,
   .toast,
   .dialog,
   .page-progress::after {
@@ -878,7 +932,8 @@
     stroke-dashoffset: 0;
   }
 }
-.reduced-motion .content > :first-child,
+.reduced-motion .content,
+.reduced-motion .login-inner,
 .reduced-motion .toast,
 .reduced-motion .dialog,
 .reduced-motion .page-progress::after,

@@ -56,6 +56,8 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
     private View splashView;
     private FrameLayout hostView;
     private SessionVault sessionVault;
+    ProviderQr providerQr = new ProviderQr(ProviderQr::load);
+    private final java.util.concurrent.atomic.AtomicBoolean upiOpening = new java.util.concurrent.atomic.AtomicBoolean();
     private boolean pageReady = false;
     private boolean registrationReceiverAdded = false;
     private String pendingNotificationRoute;
@@ -142,11 +144,17 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                 if (!"appassets.androidplatform.net".equals(uri.getHost())) return null;
                 String path = uri.getPath();
                 if (!isAssetUri(uri) || path == null) return missingAsset();
+                if ("/assets/payment-qr.png".equals(path)) {
+                    try {
+                        ProviderQr.Prepared qr = providerQr.prepare(Uri.parse(uri.getQueryParameter("source")), Integer.parseInt(uri.getQueryParameter("amount")));
+                        return new WebResourceResponse("image/png", null, 200, "OK", java.util.Collections.singletonMap("Cache-Control", "no-store"), new ByteArrayInputStream(qr.png));
+                    } catch (Exception ignored) { return missingAsset(); }
+                }
                 String name = path.substring("/assets/".length());
-                if (!("index.html".equals(name) || "app.js".equals(name) || "app.css".equals(name))) return missingAsset();
+                if (!("index.html".equals(name) || "app.js".equals(name) || "app.css".equals(name) || "InterVariable.woff2".equals(name) || "Inter-OFL.txt".equals(name))) return missingAsset();
                 try {
-                    String mime = name.endsWith(".js") ? "application/javascript" : name.endsWith(".css") ? "text/css" : "text/html";
-                    return new WebResourceResponse(mime, "UTF-8", 200, "OK", java.util.Collections.singletonMap("Cache-Control", "no-cache"), getAssets().open(name));
+                    String mime = name.endsWith(".js") ? "application/javascript" : name.endsWith(".css") ? "text/css" : name.endsWith(".woff2") ? "font/woff2" : name.endsWith(".txt") ? "text/plain" : "text/html";
+                    return new WebResourceResponse(mime, name.endsWith(".woff2") ? null : "UTF-8", 200, "OK", java.util.Collections.singletonMap("Cache-Control", "no-cache"), getAssets().open(name));
                 } catch (Exception ignored) { return missingAsset(); }
             }
 
@@ -318,7 +326,16 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         @JavascriptInterface public void ready() {
             runOnUiThread(() -> {
                 pageReady = true;
-                if (splashView != null) { hostView.removeView(splashView); splashView = null; }
+                if (splashView != null) {
+                    View departing = splashView;
+                    splashView = null;
+                    webView.postVisualStateCallback(System.nanoTime(), new WebView.VisualStateCallback() {
+                        @Override public void onComplete(long requestId) {
+                            if (prefersReducedMotion()) hostView.removeView(departing);
+                            else departing.animate().alpha(0f).setDuration(140).withEndAction(() -> hostView.removeView(departing)).start();
+                        }
+                    });
+                }
                 flushNativeEvents();
             });
         }
@@ -340,34 +357,23 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         // SAFEHOUSE_ATELIER_UPI_NATIVE_V3
         // Save the provider-issued QR without redirecting to a branded payment website.
         @JavascriptInterface
-        public void savePaymentQr(String imageUrl) {
-            runOnUiThread(() -> {
+        public void savePaymentQr(String imageUrl, int amountPaise) {
+            if (Build.VERSION.SDK_INT <= 28 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                runOnUiThread(() -> {
+                    requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 9422);
+                    Toast.makeText(MainActivity.this, "Allow storage access, then save the QR again", Toast.LENGTH_LONG).show();
+                });
+                return;
+            }
+            new Thread(() -> {
                 try {
-                    Uri uri = Uri.parse(imageUrl == null ? "" : imageUrl);
-                    String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(java.util.Locale.ROOT);
-                    if (!"https".equalsIgnoreCase(uri.getScheme()) ||
-                        !("rzp.io".equals(host) || host.endsWith(".razorpay.com") || "razorpay.com".equals(host))) {
-                        Toast.makeText(MainActivity.this, "Invalid payment QR provider", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    if (Build.VERSION.SDK_INT <= 28 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-                        requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 9422);
-                        Toast.makeText(MainActivity.this, "Allow storage access, then save the QR again", Toast.LENGTH_LONG).show(); return;
-                    }
-                    DownloadManager.Request request = new DownloadManager.Request(uri);
-                    request.setTitle("SafeHouse Rent UPI QR");
-                    request.setDescription("Save this payment QR and use Scan from Gallery in your UPI app");
-                    request.setMimeType("image/png");
-                    request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);
-                    request.setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS,
-                        "SafeHouse-UPI-QR-" + System.currentTimeMillis() + ".png");
-                    DownloadManager dm = (DownloadManager) getSystemService(Context.DOWNLOAD_SERVICE);
-                    dm.enqueue(request);
-                    Toast.makeText(MainActivity.this, "QR download started. Open your UPI app and scan from gallery.", Toast.LENGTH_LONG).show();
+                    ProviderQr.Prepared qr = providerQr.prepare(Uri.parse(imageUrl == null ? "" : imageUrl), amountPaise);
+                    QrDownloads.save(MainActivity.this, qr.png);
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "QR saved to Pictures / SafeHouse. Open your UPI app and scan from gallery.", Toast.LENGTH_LONG).show());
                 } catch (Exception e) {
-                    Toast.makeText(MainActivity.this, "QR could not be saved. Try using another device.", Toast.LENGTH_LONG).show();
+                    runOnUiThread(() -> Toast.makeText(MainActivity.this, "QR could not be saved. Try using another device.", Toast.LENGTH_LONG).show());
                 }
-            });
+            }).start();
         }
 
         @JavascriptInterface
@@ -409,56 +415,35 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
          * App return results never credit rent: only backend capture can do that.
          */
         @JavascriptInterface
-        public void openQrInUpiApp(String imageUrl, int amountPaise) {
+        public String paymentQrImageUrl(String imageUrl, int amountPaise) {
+            if (!ProviderQr.trusted(Uri.parse(imageUrl == null ? "" : imageUrl)) || amountPaise <= 0) return "";
+            return Uri.parse("https://appassets.androidplatform.net/assets/payment-qr.png").buildUpon()
+                .appendQueryParameter("source", imageUrl).appendQueryParameter("amount", String.valueOf(amountPaise)).build().toString();
+        }
+
+        @JavascriptInterface
+        public void openQrInUpiApp(String imageUrl, int amountPaise, long expiresAt) {
+            if (!upiOpening.compareAndSet(false, true)) return;
             new Thread(() -> {
                 try {
-                    Uri imageUri = Uri.parse(imageUrl == null ? "" : imageUrl);
-                    String h = imageUri.getHost() == null ? "" : imageUri.getHost().toLowerCase(java.util.Locale.ROOT);
-                    if (!"https".equalsIgnoreCase(imageUri.getScheme()) ||
-                        !("rzp.io".equals(h) || "razorpay.com".equals(h) || h.endsWith(".razorpay.com"))) {
-                        throw new IllegalArgumentException("Unrecognised QR provider");
-                    }
-                    if (amountPaise < 100 || amountPaise > 100000000) {
-                        throw new IllegalArgumentException("Invalid payment amount");
-                    }
-                    android.graphics.Bitmap bmp = ProviderQr.load(imageUri);
-                    if (bmp == null || bmp.getWidth() < 80 || bmp.getHeight() < 80 ||
-                        ((long)bmp.getWidth()) * bmp.getHeight() > 4000000) {
-                        throw new IllegalArgumentException("QR image unavailable");
-                    }
-                    int width = bmp.getWidth(), height = bmp.getHeight();
-                    int[] pixels = new int[width * height];
-                    bmp.getPixels(pixels, 0, width, 0, 0, width, height);
-                    bmp.recycle();
-                    com.google.zxing.BinaryBitmap binary = new com.google.zxing.BinaryBitmap(
-                        new com.google.zxing.common.HybridBinarizer(
-                            new com.google.zxing.RGBLuminanceSource(width, height, pixels)));
-                    String encoded = new com.google.zxing.qrcode.QRCodeReader().decode(binary).getText();
-                    Uri payment = Uri.parse(encoded);
-                    if (!"upi".equalsIgnoreCase(payment.getScheme()) ||
-                        !"pay".equalsIgnoreCase(payment.getHost()) ||
-                        payment.getQueryParameter("pa") == null ||
-                        payment.getQueryParameter("pa").isEmpty()) {
-                        throw new IllegalArgumentException("QR is not a valid UPI payment");
-                    }
-                    String currency = payment.getQueryParameter("cu");
-                    if (currency != null && !"INR".equalsIgnoreCase(currency)) {
-                        throw new IllegalArgumentException("Unexpected currency");
-                    }
-                    String amount = payment.getQueryParameter("am");
-                    if (amount == null || amount.isEmpty()) throw new IllegalArgumentException("UPI QR is missing fixed amount");
-                    java.math.BigDecimal paise = new java.math.BigDecimal(amount).multiply(new java.math.BigDecimal(100));
-                    if (paise.intValueExact() != amountPaise) throw new IllegalArgumentException("QR amount mismatch");
+                    ProviderQr.Prepared prepared = providerQr.prepare(Uri.parse(imageUrl == null ? "" : imageUrl), amountPaise);
                     runOnUiThread(() -> {
                         try {
-                            Intent intent = new Intent(Intent.ACTION_VIEW, payment);
+                            if (expiresAt <= System.currentTimeMillis() / 1000) throw new IllegalArgumentException("QR expired");
+                            Intent intent = new Intent(Intent.ACTION_VIEW, prepared.payment);
+                            if (getPackageManager().queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY).isEmpty()) {
+                                callJs("window.SafeHouseUpiError && window.SafeHouseUpiError(" + q("No compatible UPI app is installed. Save this QR and scan it from your UPI app gallery, or use another phone.") + ");");
+                                return;
+                            }
                             startActivity(Intent.createChooser(intent, "Pay rent with UPI"));
+                            callJs("window.SafeHouseUpiOpened && window.SafeHouseUpiOpened();");
                         } catch (Exception e) {
                             callJs("window.SafeHouseUpiError && window.SafeHouseUpiError(" +
                                 q("No UPI app could open the payment. Use the saved QR instead.") + ");");
-                        }
+                        } finally { upiOpening.set(false); }
                     });
                 } catch (Exception e) {
+                    upiOpening.set(false);
                     callJs("window.SafeHouseUpiError && window.SafeHouseUpiError(" +
                         q("Direct UPI could not start. Save the QR and scan it from your UPI app gallery.") + ");");
                 }

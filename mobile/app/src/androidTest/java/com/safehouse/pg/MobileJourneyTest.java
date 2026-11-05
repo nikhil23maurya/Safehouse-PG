@@ -54,6 +54,15 @@ public class MobileJourneyTest {
         instrumentation.runOnMainSync(() -> web.evaluateJavascript(script, result -> { value.set(result); done.countDown(); }));
         assertTrue("JavaScript evaluation timed out", done.await(10, TimeUnit.SECONDS)); return value.get();
     }
+    private void shell(String command) throws Exception {
+        try (android.os.ParcelFileDescriptor descriptor = instrumentation.getUiAutomation().executeShellCommand(command)) {
+            read(new java.io.FileInputStream(descriptor.getFileDescriptor()));
+        }
+    }
+    private boolean nativeText(String text) {
+        AccessibilityNodeInfo root = instrumentation.getUiAutomation().getRootInActiveWindow();
+        return root != null && !root.findAccessibilityNodeInfosByText(text).isEmpty();
+    }
     private void await(String expression) throws Exception {
         long deadline = System.currentTimeMillis() + 25000;
         do { if ("true".equals(js("Boolean(" + expression + ")"))) return; Thread.sleep(150); } while (System.currentTimeMillis() < deadline);
@@ -115,6 +124,7 @@ public class MobileJourneyTest {
         activity = instrumentation.startActivitySync(intent);
         instrumentation.runOnMainSync(() -> web = findWeb(activity.getWindow().getDecorView()));
         assertNotNull("WebView did not initialize", web);
+        ((MainActivity)activity).providerQr = new ProviderQr(uri -> QrTestImages.poster(QrTestImages.PAYLOAD));
         await("document.querySelector('[data-form=login]')");
         String fixtures = read(instrumentation.getContext().getAssets().open("fixtures.js"));
         instrumentation.runOnMainSync(() -> {
@@ -205,6 +215,36 @@ public class MobileJourneyTest {
         go("invoices", "{}"); screenshot("21-invoices");
         go("history", "{}"); screenshot("22-history");
         go("payment", "{invoiceId:'invoice1'}"); await("document.querySelector('[data-payment-qr]:not([hidden])')"); screenshot("23-payment-qr");
+        assertEquals("true", js("document.querySelector('[data-payment-qr]').src.startsWith('https://appassets.androidplatform.net/assets/payment-qr.png?')"));
+        assertEquals("true", js("document.querySelector('[data-payment-qr]').naturalWidth===document.querySelector('[data-payment-qr]').naturalHeight"));
+        js("document.querySelector('[data-action=upi]').click()");
+        await("document.querySelector('.upi-help')");
+        assertTrue(js("document.querySelector('.upi-help').innerText").contains("No compatible UPI app"));
+        screenshot("23b-upi-no-app");
+        String testReceiver = "com.safehouse.pg.testing.test/com.safehouse.pg.UpiFixtureActivity";
+        shell("pm enable " + testReceiver);
+        try {
+            js("document.querySelector('[data-action=upi]').click()");
+            long chooserDeadline = System.currentTimeMillis() + 15000;
+            while (!nativeText("UPI Test Receiver") && !nativeText("UPI handoff received") && System.currentTimeMillis() < chooserDeadline) Thread.sleep(150);
+            if (!nativeText("UPI handoff received")) {
+                AccessibilityNodeInfo root = instrumentation.getUiAutomation().getRootInActiveWindow();
+                assertNotNull("UPI chooser unavailable", root);
+                java.util.List<AccessibilityNodeInfo> choices = root.findAccessibilityNodeInfosByText("UPI Test Receiver");
+                assertFalse("Compatible app not in chooser", choices.isEmpty());
+                AccessibilityNodeInfo choice = choices.get(0);
+                while (!choice.isClickable() && choice.getParent() != null) choice = choice.getParent();
+                choice.performAction(AccessibilityNodeInfo.ACTION_CLICK);
+            }
+            long handoffDeadline = System.currentTimeMillis() + 10000;
+            while (!nativeText("UPI handoff received") && System.currentTimeMillis() < handoffDeadline) Thread.sleep(150);
+            assertTrue("UPI receiver not launched", nativeText("UPI handoff received"));
+            assertTrue("Provider payload changed during handoff", nativeText(QrTestImages.PAYLOAD));
+            screenshot("23c-upi-handoff-receiver", false);
+            instrumentation.getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK);
+            await("document.querySelector('[data-payment-qr]:not([hidden])')");
+            screenshot("23d-upi-return-pending");
+        } finally { shell("pm disable " + testReceiver); }
         assertEquals("false", js("document.body.innerText.includes('Payment Successful')"));
         js("window.__nativeFixtures.control.paymentState='CAPTURED';document.querySelector('[data-action=checkPayment]').click()");
         await("document.querySelector('.success-amount')"); screenshot("24-payment-success");

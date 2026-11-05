@@ -9,6 +9,8 @@ const types = {
   ".html": "text/html",
   ".js": "application/javascript",
   ".css": "text/css",
+  ".woff2": "font/woff2",
+  ".txt": "text/plain",
 };
 http
   .createServer(async (req, res) => {
@@ -16,7 +18,7 @@ http
       req.url?.split("?")[0] === "/"
         ? "index.html"
         : req.url?.split("?")[0].slice(1);
-    if (!["index.html", "app.js", "app.css"].includes(name)) {
+    if (!["index.html", "app.js", "app.css", "InterVariable.woff2", "Inter-OFL.txt"].includes(name)) {
       res.writeHead(404).end();
       return;
     }

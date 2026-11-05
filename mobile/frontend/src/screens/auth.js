@@ -1,4 +1,4 @@
-import { brand, icon } from "../components/icons.js";
+import { brand } from "../components/icons.js";
 import { button, heading, notice } from "../components/ui.js";
 import { field, formValues } from "../components/forms.js";
 
@@ -6,7 +6,7 @@ export function loginScreen(ctx) {
   return {
     bare: true,
     title: "Sign in",
-    content: `<main class="login-page"><div class="login-inner"><div class="login-identity">${brand()}</div><div class="login-heading"><h1>Welcome to<br>SafeHouse<span>.</span></h1><p>Your home, managed simply.</p></div><form data-form="login" novalidate><div class="form-error" role="alert"></div>${field("email", "Email address", { type: "email", required: true, placeholder: "you@example.com", attrs: 'autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" enterkeyhint="next"' })}${field("password", "Password", { type: "password", required: true, placeholder: "Enter your password", attrs: 'autocomplete="current-password" maxlength="128" enterkeyhint="go"' })}${button("Sign in", { type: "submit", glyph: "arrow", kind: "primary block" })}</form><div class="login-support">${icon("shield")}<span>Resident accounts are created by your property owner.</span></div></div></main>`,
+    content: `<main class="login-page"><div class="login-inner"><div class="login-identity">${brand()}</div><div class="login-heading"><h1>Welcome back</h1><p>Sign in to your SafeHouse account.</p></div><form data-form="login" novalidate><div class="form-error" role="alert"></div>${field("email", "Email address", { type: "email", required: true, placeholder: "you@example.com", attrs: 'autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" enterkeyhint="next"' })}${field("password", "Password", { type: "password", required: true, placeholder: "Enter your password", attrs: 'autocomplete="current-password" maxlength="128" enterkeyhint="go"' })}${button("Sign in", { type: "submit", kind: "primary block" })}</form><div class="login-support"><span>Need an account? Contact your property owner.</span></div></div><span class="login-footer">Your home, managed simply.</span></main>`,
     async submit(name, form) {
       if (name !== "login") return;
       const values = formValues(form);
