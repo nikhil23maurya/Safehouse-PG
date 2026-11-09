@@ -27,8 +27,7 @@ public final class MerchantOnboardingActivity extends Activity {
         try {
             Uri uri = Uri.parse(value);
             return "https".equals(uri.getScheme()) && uri.getUserInfo() == null && uri.getPort() == -1 &&
-                ("merchant.cashfree.com".equals(uri.getHost()) ||
-                    (BuildConfig.DEBUG && "test.cashfree.com".equals(uri.getHost())));
+                "merchant.cashfree.com".equals(uri.getHost());
         } catch (Exception ignored) { return false; }
     }
     private boolean providerUrl(Uri uri) {

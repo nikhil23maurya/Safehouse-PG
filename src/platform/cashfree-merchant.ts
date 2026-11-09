@@ -39,7 +39,7 @@ export function merchantStage(remote: any, expected: string) {
 export function safeOnboardingLink(value: unknown) {
   try {
     const url = new URL(String(value));
-    const allowed = platformConfig.PGONE_CASHFREE_ENV === "TEST" ? ["test.cashfree.com", "merchant.cashfree.com"] : ["merchant.cashfree.com"];
+    const allowed = ["merchant.cashfree.com"];
     assert(url.protocol === "https:" && !url.username && !url.password && !url.port && allowed.includes(url.hostname), 502, "UNSAFE_ONBOARDING_LINK", "The provider onboarding link could not be verified.");
     return url.href;
   } catch { throw new AppError(502, "UNSAFE_ONBOARDING_LINK", "The provider onboarding link could not be verified."); }
