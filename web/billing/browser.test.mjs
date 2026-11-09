@@ -43,7 +43,7 @@ after(async () => {
   await browser?.close();
   server?.close();
 });
-async function fixture(enabled) {
+async function fixture(enabled, supportedApps = ["phonepe"]) {
   const page = await browser.newPage({ viewport: { width: 393, height: 852 } });
   let activated = false,
     starts = 0,
@@ -138,7 +138,7 @@ async function fixture(enabled) {
     scripts++;
     return route.fulfill({
       contentType: "application/javascript",
-      body: `window.Razorpay=class {constructor(){this.events={};window.__sdk=this}on(name,fn){this.events[name]=fn}checkPaymentAdapter(name){return name==='phonepe'?Promise.resolve():Promise.reject(new Error('Not available'))}createPayment(data,options){window.__payment={data,options};} }`,
+      body: `window.Razorpay=class {constructor(){this.events={};window.__sdk=this}on(name,fn){this.events[name]=fn}getSupportedUpiIntentApps(){return Promise.resolve(${JSON.stringify(supportedApps)})}checkPaymentAdapter(){throw new Error('Legacy GPay-only detection must not be called')}createPayment(data,options){window.__payment={data,options};} }`,
     });
   });
   await page.goto(base);
@@ -227,4 +227,24 @@ test("custom one-time SDK payment stays pending until a server-confirmed paid pe
   });
   assert.deepEqual(f.errors, []);
   await page.close();
+});
+
+test("Android's generic UPI chooser uses the exact existing server order",async()=>{
+  const f=await fixture(true,["phonepe","gpay","navi","any"]),page=f.page;
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button",{name:"Pay ₹249 for one month"}).click();
+  await page.getByRole("button",{name:"Choose a UPI app",exact:true}).click();
+  const payment=await page.evaluate(()=>window.__payment);
+  assert.equal(payment.options.app,"any");assert.equal(payment.data.order_id,"order_Test01");
+  assert.equal(payment.data.amount,24900);assert.equal(f.starts,1);
+  await expect(page.locator("#billing-message")).toContainText("Complete this one-time payment");
+  assert.deepEqual(f.errors,[]);await page.close();
+});
+
+test("an unsupported browser gets browser guidance and creates no payment order",async()=>{
+  const f=await fixture(true,[]),page=f.page;
+  await page.getByRole("checkbox").check();
+  await page.getByRole("button",{name:"Pay ₹249 for one month"}).click();
+  await expect(page.getByRole("alert")).toContainText("UPI app launching is unavailable in this browser");
+  assert.equal(f.starts,0);assert.deepEqual(f.errors,[]);await page.close();
 });
