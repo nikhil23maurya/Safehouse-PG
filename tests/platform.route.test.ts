@@ -76,3 +76,33 @@ test("Route API uses only approved domain, parent credentials and safe response 
   await assert.rejects(() => rejected.get("acc_ABC123456789"),
     (e:any) => e.code==="ROUTE_PROVIDER_UNAVAILABLE" && !e.message.includes("private"));
 });
+
+test("rent order carries one immutable linked-account transfer, never a shared PGOne collection", async () => {
+  const { createRazorpayOrder } = await import("../src/razorpay.js");
+  const original = globalThis.fetch;
+  const calls: any[] = [];
+  let trusted = true;
+  globalThis.fetch = (async (_url: any, options: any) => {
+    const body = JSON.parse(options.body);
+    calls.push(body);
+    return new Response(JSON.stringify({
+      id: "order_ROUTESAMPLE123", amount: body.amount, currency: "INR",
+      receipt: body.receipt, status: "created",
+      transfers: trusted ? [{ recipient:"acc_ABC123456789",amount:body.amount,currency:"INR" }] : [],
+    }), {status:200});
+  }) as any;
+  try {
+    const order = await createRazorpayOrder({
+      amountPaise: 750000, receipt: "PGO_RENT_ROUTESAMPLE123",
+      notes:{invoiceId:"invoice1",studentId:"resident1",propertyId:"prop1"},
+      routeAccountId:"acc_ABC123456789",
+    });
+    assert.equal(order.id, "order_ROUTESAMPLE123");
+    assert.deepEqual(calls[0].transfers, [{account:"acc_ABC123456789", amount:750000,currency:"INR",on_hold:false}]);
+    assert.equal(calls[0].partial_payment,false);
+    trusted = false;
+    await assert.rejects(() => createRazorpayOrder({
+      amountPaise:750000,receipt:"PGO_BAD_ROUTE",notes:{invoiceId:"invoice1"},routeAccountId:"acc_ABC123456789",
+    }),{code:"ROUTE_ORDER_NOT_CONFIRMED"});
+  } finally { globalThis.fetch = original; }
+});
