@@ -418,6 +418,7 @@ model PaymentAttempt {
   studentId           String
   provider            String               @default("RAZORPAY")
   providerOrderId     String               @unique
+  routeAccountId      String?
   providerPaymentId   String?              @unique
   amountPaise         Int
   status              PaymentAttemptStatus @default(CREATED)
