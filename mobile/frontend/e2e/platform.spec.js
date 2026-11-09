@@ -159,6 +159,16 @@ async function platform(page) {
     activatePaid() { paid = true; },
   };
 }
+async function expectActivationRedirect(page, name) {
+  await page.evaluate((route) => {
+    const record = { safehouse: true, name: route, params: {}, depth: 1 };
+    history.pushState(record, "", `#${route}`);
+    window.dispatchEvent(new PopStateEvent("popstate", { state: record }));
+  }, name);
+  await expect(page).toHaveURL(/#subscription$/);
+  await expect(page.locator("#app")).toHaveAttribute("data-screen", "subscription");
+}
+
 async function phoneLogin(page) {
   await go(page, "welcome");
   await page.getByRole("button", { name: "Create account", exact: true }).click();
@@ -200,8 +210,7 @@ test("owner merchant forms validate consent, keep bank data out of the vault and
   await page.getByLabel("City",{exact:true}).fill("Bengaluru");
   await page.getByRole("button",{name:"Create my PG"}).click();
   await expect(page).toHaveURL(/#subscription$/);
-  await go(page,"merchant");
-  await expect(page).toHaveURL(/#subscription$/); // unpaid owners cannot enter KYC
+  await expectActivationRedirect(page, "merchant"); // unpaid owners cannot enter KYC
   fixture.activatePaid(); // Simulate a server-verified captured payment.
   // Re-select the workspace to exchange an up-to-date server session.
   await go(page,"workspaces");
@@ -341,8 +350,7 @@ test("phone onboarding, real controls, saved property and restored workspace", a
   await expect(page).toHaveURL(/#subscription$/);
   await expect(page.getByRole("heading", { name: "Your PG is ready. One last step." })).toBeVisible();
   await capture("unpaid-activation");
-  await go(page, "ownerHome");
-  await expect(page).toHaveURL(/#subscription$/); // Dashboard must stay locked.
+  await expectActivationRedirect(page, "ownerHome"); // Dashboard must stay locked.
   expect(fixture.propertiesCreated).toBe(1);
   await expect(page.getByText("One payment covers one calendar month", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Cancel renewal", exact: true })).toHaveCount(0);
@@ -350,8 +358,7 @@ test("phone onboarding, real controls, saved property and restored workspace", a
   await expect(
     page.getByRole("button", { name: /buy|subscribe|pay now|upgrade/i }),
   ).toHaveCount(0);
-  await go(page, "merchant");
-  await expect(page).toHaveURL(/#subscription$/);
+  await expectActivationRedirect(page, "merchant");
   fixture.activatePaid();
   await go(page, "workspaces");
   await page.getByRole("button",{name:/Maple House/}).click();
