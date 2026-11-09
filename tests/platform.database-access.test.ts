@@ -45,7 +45,8 @@ test("anonymous, authenticated and PUBLIC-only callers cannot read or write fina
   }
 });
 
-test("the migration is limited to app/internal tables and does not rewrite unrelated grants",async()=>{
+test("the migration is limited to app/internal tables and does not rewrite unrelated default grants",async()=>{
+  await pool.query('CREATE TABLE "DataApiUnrelatedProbe" (id integer)');
   const result=await pool.query(`SELECT c.relrowsecurity, has_table_privilege('anon',c.oid,'SELECT') AS anonymous_read
     FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
     WHERE n.nspname='public' AND c.relname='DataApiUnrelatedProbe'`);

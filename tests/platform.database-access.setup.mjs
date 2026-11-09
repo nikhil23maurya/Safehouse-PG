@@ -12,6 +12,5 @@ try {
     if (!exists.rowCount) await pool.query(`CREATE ROLE ${role} NOLOGIN`);
   }
   await pool.query("ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO anon, authenticated, PUBLIC");
-  await pool.query('CREATE TABLE "DataApiUnrelatedProbe" (id integer)');
   console.log("Isolated public-grant fixture prepared; no hosted database is permitted.");
 } finally { await pool.end(); }
