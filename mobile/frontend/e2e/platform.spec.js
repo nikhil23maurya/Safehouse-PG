@@ -203,7 +203,10 @@ test("owner merchant forms validate consent, keep bank data out of the vault and
   await go(page,"merchant");
   await expect(page).toHaveURL(/#subscription$/); // unpaid owners cannot enter KYC
   fixture.activatePaid(); // Simulate a server-verified captured payment.
-  await page.reload();
+  // Re-select the workspace to exchange an up-to-date server session.
+  await go(page,"workspaces");
+  await page.getByRole("button",{name:/Maple House/}).click();
+  await expect(page).toHaveURL(/#ownerHome$/);
   await go(page,"merchant");
   await page.getByRole("button",{name:"Set up owner payment account"}).click();
   await expect(page.getByLabel("Legal name")).toHaveValue("Rahul Sharma");
@@ -350,7 +353,8 @@ test("phone onboarding, real controls, saved property and restored workspace", a
   await go(page, "merchant");
   await expect(page).toHaveURL(/#subscription$/);
   fixture.activatePaid();
-  await page.reload();
+  await go(page, "workspaces");
+  await page.getByRole("button",{name:/Maple House/}).click();
   await expect(page).toHaveURL(/#ownerHome$/);
   await go(page, "setupReady");
   await expect(page.getByRole("heading", { name: "Maple House is ready." })).toBeVisible();
