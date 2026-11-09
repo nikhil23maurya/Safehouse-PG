@@ -245,6 +245,7 @@ test("isolated database: creation retries, invitations, access revocation and te
   const phoneA = `+919${String(Math.floor(Math.random() * 1e9)).padStart(9, "0")}`;
   const phoneB = `+918${String(Math.floor(Math.random() * 1e9)).padStart(9, "0")}`;
   const a = await phoneAccount({ uid: `uid-a-${suffix}`, phoneE164: phoneA });
+  await assert.rejects(() => phoneAccount({ uid: `uid-b-${suffix}`, phoneE164: phoneB }, false), { code: "PHONE_ACCOUNT_NOT_FOUND" });
   const b = await phoneAccount({ uid: `uid-b-${suffix}`, phoneE164: phoneB });
   await assert.rejects(
     () => phoneAccount({ uid: "different-uid", phoneE164: a.phoneE164! }),
@@ -263,6 +264,12 @@ test("isolated database: creation retries, invitations, access revocation and te
     createProperty(a.id, input),
   ]);
   assert.equal(p.propertyId, again.propertyId);
+  const other = await createProperty(b.id, { name: "Cedar House", city: "Pune", key: `tenant-b-${suffix}` });
+  assert.notEqual(other.organisationId, p.organisationId); assert.notEqual(other.property.ownerId, p.property.ownerId);
+  const bSnapshot = await accountSnapshot(b.id); assert.equal(bSnapshot.memberships.length, 1);
+  const bTokens = await membershipTokens(b.id, bSnapshot.memberships[0]!.id);
+  assert.equal((await request(`/api/platform/organisations/${p.organisationId}/merchant`, bTokens.accessToken)).status, 403);
+
   assert.equal(await prisma.property.count({ where: { id: p.propertyId } }), 1);
   assert.equal(
     await prisma.room.count({ where: { propertyId: p.propertyId } }),
@@ -289,6 +296,9 @@ test("isolated database: creation retries, invitations, access revocation and te
   const snapshot = await accountSnapshot(a.id);
   const member = snapshot.memberships[0];
   const ownerTokens = await membershipTokens(a.id, member.id);
+  assert.equal((await request("/api/owner/probe", ownerTokens.accessToken, undefined, other.propertyId)).status, 403);
+  assert.equal((await request(`/api/platform/organisations/${other.organisationId}/subscription`, ownerTokens.accessToken)).status, 403);
+
   assert.equal(
     (await request("/api/owner/probe", ownerTokens.accessToken, {})).status,
     402,

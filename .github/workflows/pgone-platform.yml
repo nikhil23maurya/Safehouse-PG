@@ -1,7 +1,7 @@
 name: Verify PGOne Platform
 on:
   pull_request:
-    paths: ['src/**', 'prisma/**', 'tests/**', '.github/workflows/pgone-platform.yml']
+    paths: ['src/**', 'prisma/**', 'tests/**', 'web/billing/**', 'package.json', '.github/workflows/pgone-platform.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -36,4 +36,4 @@ jobs:
       - name: Verify backward-compatible migrations on isolated PostgreSQL
         run: npx prisma migrate deploy
       - name: Verify platform success, failure and isolation
-        run: node --import tsx --test tests/platform.test.ts tests/platform.integration.test.ts
+        run: node --import tsx --test tests/platform.test.ts tests/platform.integration.test.ts tests/platform.public.test.ts

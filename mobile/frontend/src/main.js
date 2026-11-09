@@ -215,9 +215,10 @@ const api = createApiClient({
     persist();
   },
   onExpired: () => {
+    const phone = state.tokens?.kind === "PLATFORM";
     clearSession();
     toast("Your session expired. Please sign in again.", "error");
-    void navigate("login", {}, { replace: true, force: true });
+    void navigate(phone ? "phone" : "login", phone ? { mode: "SIGN_IN" } : {}, { replace: true, force: true });
   },
 });
 
@@ -470,18 +471,55 @@ window.PGOnePhoneEvent = async (attempt, type, value) => {
     onboarding.exchangeAttempt = attempt;
     onboarding.attempt = "";
     onboarding.sentAt = 0;
+    const current = () =>
+      onboarding.exchangeAttempt === attempt && !onboarding.attempt &&
+      state.authEpoch === epoch && ["phone", "otp"].includes(state.route.name);
+    let tokens;
     try {
-      const result = await api("/api/platform/phone", {
-        public: true,
-        method: "POST",
-        body: { idToken: value },
-      });
-      if (onboarding.exchangeAttempt !== attempt || state.authEpoch !== epoch)
-        return;
-      await acceptPlatform(result.tokens);
+      let result;
+      try {
+        result = await api("/api/platform/phone", {
+          public: true,
+          method: "POST",
+          body: { idToken: value, mode: onboarding.authMode },
+        });
+      } catch (error) {
+        if (!current()) return;
+        if (error.code !== "PHONE_ACCOUNT_NOT_FOUND") throw error;
+        const create = await confirm({
+          title: "Create a PGOne account?",
+          message:
+            "Your number is verified, but it has no PGOne phone account yet. Create one to set up or join a PG. Existing password accounts can be linked after signing in with email.",
+          confirmLabel: "Create account",
+          cancelLabel: "Back to sign in",
+        });
+        if (!current()) return;
+        if (!create) {
+          await navigate("phone", { mode: "SIGN_IN" }, { replace: true, force: true });
+          return;
+        }
+        onboarding.authMode = "SIGN_UP";
+        result = await api("/api/platform/phone", {
+          public: true,
+          method: "POST",
+          body: { idToken: value, mode: "SIGN_UP" },
+        });
+      }
+      if (!current()) return;
+      tokens = result.tokens;
     } catch (error) {
+      if (!current()) return;
       toast(error.message, "error");
       await navigate("phone", {}, { replace: true, force: true });
+      return;
+    }
+    try {
+      await acceptPlatform(tokens);
+    } catch (error) {
+      if (state.tokens?.accessToken !== tokens?.accessToken) return;
+      clearSession();
+      toast(error.message, "error");
+      await navigate("phone", { mode: "SIGN_IN" }, { replace: true, force: true });
     }
   }
 };
@@ -495,6 +533,7 @@ async function logout() {
     }))
   )
     return;
+  const phone = state.tokens?.kind === "PLATFORM";
   const logoutEpoch = state.authEpoch;
   let revoked = true;
   const installationId = native.call("getNotificationInstallationId");
@@ -520,7 +559,7 @@ async function logout() {
   }
   if (state.authEpoch !== logoutEpoch) return;
   clearSession();
-  await navigate("login", {}, { replace: true, force: true });
+  await navigate(phone ? "phone" : "login", phone ? { mode: "SIGN_IN" } : {}, { replace: true, force: true });
   if (!revoked)
     toast(
       "Signed out on this device. Server session revocation could not be confirmed.",

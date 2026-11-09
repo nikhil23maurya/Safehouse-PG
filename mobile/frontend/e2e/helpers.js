@@ -40,7 +40,16 @@ export async function setup(page) {
     }),
   );
   await page.goto("/");
-  if (await page.getByRole("button", { name: "I already have an account" }).isVisible()) await page.getByRole("button", { name: "I already have an account" }).click();
+  if (
+    await page
+      .getByRole("button", { name: "Create account", exact: true })
+      .isVisible()
+  ) {
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Use email & password", exact: true })
+      .click();
+  }
   return { ...fixtures, errors };
 }
 export async function login(page, role = "OWNER") {

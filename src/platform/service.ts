@@ -115,10 +115,13 @@ export async function accountSnapshot(accountId: string) {
     })),
   };
 }
-export async function phoneAccount(identity: {
-  uid: string;
-  phoneE164: string;
-}) {
+export async function phoneAccount(
+  identity: {
+    uid: string;
+    phoneE164: string;
+  },
+  create = true,
+) {
   return atomic(async (tx) => {
     const existing = await tx.pgAccount.findFirst({
       where: {
@@ -136,6 +139,12 @@ export async function phoneAccount(identity: {
       );
       return existing;
     }
+    assert(
+      create,
+      404,
+      "PHONE_ACCOUNT_NOT_FOUND",
+      "This number has no PGOne phone account yet. Create an account, or use email sign-in for an existing password account.",
+    );
     const account = await tx.pgAccount.create({
       data: { firebaseUid: identity.uid, phoneE164: identity.phoneE164 },
     });

@@ -9,14 +9,14 @@ Baseline: `c729dac` on `origin/main`. Branch: `codex/pgone-premium-onboarding`. 
 - [x] Add premium welcome and resumable onboarding, retaining existing email/password access.
 - [x] Add verified phone identity, account/profile persistence and explicit memberships/invitations.
 - [x] Add a compatibility boundary to reuse existing owner/resident APIs with server-verified workspace membership. Staff has a separate permission-limited workspace.
-- [ ] Add exactly one INR 24900-paise monthly subscription; server-verified receipts/periods, cancellation, renewal/refund reconciliation and idempotent webhooks.
-- [ ] Add default Play consumption-only UI and a separate web subscription surface.
+- [x] Add exactly one INR 24900-paise monthly subscription; server-verified receipts/periods, cancellation, renewal/refund reconciliation and idempotent webhooks.
+- [x] Add default Play consumption-only UI and a separate web subscription surface.
 - [x] Add merchant setup/status with no unapproved KYC collection or fabricated provider APIs.
-- [ ] Add migration/tenant/security/financial tests, browser and Android journeys, screenshot review and fresh testing APK.
+- [x] Add migration/tenant/security/financial tests, browser and Android journeys, screenshot review and fresh testing APK.
 
 New modules: `src/platform/{config,identity,tokens,service,router,billing,merchant}.ts`, platform models/migration/tests, frontend platform screens/client/styles, Android phone bridge, asset manifest, activation guide. Existing integration files: `src/server.ts`, schema, required nullable contact/password types, frontend routing/session/build entrypoints, native asset loading/build and CI.
 
-Existing rent calculations, `SAFEHOUSE_QR_SETTLEMENT_V2`, reconciliation, manual credit, invoice snapshots, queues, notifications and production configuration are preserved. Cyntrova's unrelated checkout is untouched. No production data migration, provider payment or deployment is authorised by local implementation work.
+Existing rent calculations, `SAFEHOUSE_QR_SETTLEMENT_V2`, reconciliation, manual credit, invoice snapshots, queues and notifications are preserved. Cyntrova's unrelated checkout is untouched. The user subsequently authorised main and production promotion. Source promotion does not establish provider activation, authorise a real payment or replace the existing signing identity.
 
 ## Identity compatibility decision
 
@@ -34,11 +34,19 @@ Reference images guide visual design, not permission to fabricate mobile OTP/Goo
 
 ## Current verification checkpoint
 
-- Baseline browser suite: 31 passed; maintained frontend unit suite: 36 passed.
-- New platform pure unit suite: 6 passed; onboarding browser journeys: 3 passed.
-- Effective backend build and existing financial/runtime contracts passed locally. Production patches are build inputs, not unrelated source edits in this branch.
+- Head `eadada82639739997b90c0b7a922960a92168b0e` passed all three CI workflows. Android run `42608879216` installed the testing APK and passed seven instrumentation tests, with 45 native screenshots reviewed. Supported Lavapipe rendering fixed the previous emulator exits; presented-frame safeguards remain enabled.
+- Latest local verification: 36 frontend unit tests; nine platform/public pure tests; three custom web SDK/browser tests; effective backend build and existing financial/runtime contracts. Existing build patches remain build inputs, not unrelated source edits.
+- The browser suite now covers explicit signup versus sign-in, including confirmation before creating an unknown account without a second OTP. Database integration tests now create two independent owners/properties and reject cross-tenant headers, merchant reads and subscription reads.
 - Actual browser captures include welcome, legacy login, phone, OTP, role choice, profile, PG creation, completion, workspaces, plan, merchant status and invitations. These use clearly synthetic test data, not live OTP/payment confirmation.
-- PostgreSQL migration/integration and Android APK/instrumentation verification are pending CI at this checkpoint.
+- PostgreSQL migrations and integration scenarios passed the previous CI head. Fresh CI is required for the final commit before promotion.
+
+## Production-facing additions
+
+Public routes `/legal/terms`, `/legal/privacy` and `/legal/delete-account` identify PGOne and operator Nikhil Maurya, using the operator's existing public contact `nikhil23maurya@gmail.com`. They describe a verified-request process without inventing a registered company or automatic record deletion. Policy configuration defaults to the service's production policy URLs.
+
+The root build compiles the separate custom billing website and serves it at `/billing/`. Its file allowlist and provider CSP apply only to that surface; API security headers and existing CORS remain unchanged. Public-route tests verify that source/config files are not exposed and API CSP is not widened.
+
+Welcome has separate Create account and Sign in actions. Phone sign-in cannot silently create an unknown account. After Firebase verification, explicit confirmation can create the account with the same fresh token. Unavailable configuration disables sending and offers retry plus existing password access.
 
 ## Work requiring provider access, or not complete
 
@@ -51,4 +59,4 @@ Cashfree merchant onboarding, dynamic bank/KYC submission, signed provider activ
 The requested Google sign-in is not implemented; its button is omitted. No simulated identity/merchant/payment success ships with the app.
 
 
-The second implementation stage adds durable PG-creation drafts/idempotency keys, owner-facing membership revocation (including unused invitations), and a separate web billing build. Android release input checks reject web subscription-authorisation code. Web SDK tests use synthetic provider responses and do not establish live payment readiness. The Android emulator twice disconnected before instrumentation; a bounded-memory AVD and host/runtime diagnostics are being verified in the next run.
+The second implementation stage adds durable PG-creation drafts/idempotency keys, owner-facing membership revocation (including unused invitations), and a separate web billing build. Android release input checks reject web subscription-authorisation code. Web SDK tests use synthetic provider responses and do not establish live payment readiness. Android instrumentation is verified with bounded memory and supported Lavapipe rendering; CI retains runtime diagnostics and screenshots.

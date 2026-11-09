@@ -159,9 +159,11 @@ public class MobileJourneyTest {
         instrumentation.runOnMainSync(() -> web = findWeb(activity.getWindow().getDecorView()));
         assertNotNull("WebView did not initialize", web);
         ((MainActivity)activity).providerQr = new ProviderQr(uri -> QrTestImages.poster(QrTestImages.PAYLOAD));
-        await("document.querySelector('[data-route=login]') || document.querySelector('[data-form=login]')");
-        if ("true".equals(js("Boolean(document.querySelector('[data-route=login]'))"))) {
+        await("document.querySelector('[data-route=phone]') || document.querySelector('[data-form=login]')");
+        if ("true".equals(js("Boolean(document.querySelector('[data-route=phone]'))"))) {
             screenshot("00-welcome");
+            js("document.querySelector('[data-route=phone][data-params*=SIGN_IN]').click()");
+            await("document.querySelector('[data-route=login]')");
             js("document.querySelector('[data-route=login]').click()");
         }
         await("document.querySelector('[data-form=login]')");
@@ -185,8 +187,12 @@ public class MobileJourneyTest {
         });
         // Reload with fixtures prefixed before the production API client captures fetch.
         instrumentation.runOnMainSync(() -> { web.clearCache(true); web.reload(); });
-        await("window.__nativeFixtures && (document.querySelector('[data-route=login]') || document.querySelector('[data-form=login]'))");
-        if ("true".equals(js("Boolean(document.querySelector('[data-route=login]'))"))) js("document.querySelector('[data-route=login]').click()");
+        await("window.__nativeFixtures && (document.querySelector('[data-route=phone]') || document.querySelector('[data-form=login]'))");
+        if ("true".equals(js("Boolean(document.querySelector('[data-route=phone]'))"))) {
+            js("document.querySelector('[data-route=phone][data-params*=SIGN_IN]').click()");
+            await("document.querySelector('[data-route=login]')");
+            js("document.querySelector('[data-route=login]').click()");
+        }
         await("document.querySelector('[data-form=login]')");
         screenshot("01-login");
         js("document.querySelector('[name=password]').focus()");
@@ -319,7 +325,7 @@ public class MobileJourneyTest {
         js("document.querySelector('[data-action=dialog-confirm]').click()");
         await("document.querySelector('[data-form=login]')");
         js("window.__platformFixtureEnabled=true");
-        go("phone", "{}"); screenshot("40-phone");
+        go("phone", "{mode:'SIGN_UP'}"); screenshot("40-phone");
         js("document.querySelector('[name=phone]').value='9123456789';document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));");
         await("document.getElementById('app').dataset.screen==='otp' && document.querySelector('.otp-status').textContent.includes('sent')"); screenshot("41-otp");
         js("document.querySelector('[name=code]').value='123456';document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));");

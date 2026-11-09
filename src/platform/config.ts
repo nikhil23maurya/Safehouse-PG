@@ -27,8 +27,8 @@ export const platformConfig = z
       .url()
       .startsWith("https://")
       .optional(),
-    PGONE_TERMS_URL: z.string().url().startsWith("https://").optional(),
-    PGONE_PRIVACY_URL: z.string().url().startsWith("https://").optional(),
+    PGONE_TERMS_URL: z.string().url().startsWith("https://").default("https://safehouse-api.onrender.com/legal/terms"),
+    PGONE_PRIVACY_URL: z.string().url().startsWith("https://").default("https://safehouse-api.onrender.com/legal/privacy"),
   })
   .parse(process.env);
 

@@ -1,6 +1,6 @@
 # PGOne activation guide
 
-This branch is a review build. Nothing here activates a production provider, runs a production migration or changes existing rent settlement. Keep `PGONE_PLATFORM_ENABLED=false` until staging migration and identity checks pass. Existing email/password accounts and legacy rent payments remain available.
+The user authorised main/production promotion. A merge does not activate Firebase or payment-provider accounts. Existing email/password accounts and legacy rent payments remain available. New provider flags default to disabled until configuration is supplied. Fresh CI migration/isolation verification is required before promotion; it does not establish live OTP or payment acceptance.
 
 ## Firebase phone authentication
 
@@ -44,7 +44,7 @@ If you want digital subscription purchases inside a Play-distributed app, integr
 ## Migration and release order
 
 - Review `prisma/migrations/20261109090000_pgone_platform/migration.sql` against a staging clone and take the normal database backup. It adds platform tables/indexes/check constraints and relaxes `User.email/passwordHash` to nullable for real phone-only actors. Existing values, financial tables and enum values are retained.
-- Run the repository's normal effective build, then `prisma migrate deploy` **only in the approved staging environment**. This work does not run it in production. Do not roll back to old application code after creating phone-only actors without checking nullable-field compatibility.
+- The existing Render start command runs `prisma migrate deploy` on its configured database. Main promotion includes this additive production migration under the user's release authorisation. Review the managed database recovery/backup policy before deployment. Do not roll back to old application code after creating phone-only actors without checking nullable-field compatibility.
 - Verify old password login, property permissions, resident management, invoices, manual payments, QR reconciliation, receipts and notifications alongside the new flows. The CI PostgreSQL instance is disposable and contains synthetic records only.
 - Publish neither a release nor real-payment activation from the testing APK alone. Managed signing, provider sandbox results, physical-device OTP/UPI/FCM and the release review remain required.
 
@@ -59,10 +59,31 @@ If you want digital subscription purchases inside a Play-distributed app, integr
 
 ## Separate web billing build
 
-Run `npm ci --prefix mobile/frontend`, then `node web/billing/build.mjs`. The standalone output is `web/billing/dist`; preview with `node web/billing/serve.mjs` on port 4174. It is never included in Android assets, and Android contains no link to this purchase surface. These commands do not deploy it.
+Run `npm ci --prefix mobile/frontend`, then `node web/billing/build.mjs`. The standalone output is `web/billing/dist`; preview with `node web/billing/serve.mjs` on port 4174. It is never included in Android assets, and Android contains no link to this purchase surface. The root build also builds this website; the API service serves it at `/billing/` after deployment.
 
 Register a Firebase Web app in the same project. Set `PGONE_FIREBASE_WEB_APP_ID` and `PGONE_FIREBASE_WEB_API_KEY`; add the approved billing domain to Firebase Authentication authorised domains and allow it in the web API key's restrictions. Firebase Auth uses in-memory persistence; PGOne session tokens are held in memory and cleared on reload/sign-out. Existing owners can alternatively authenticate with their existing email/password and verified account linking.
 
 After merchant confirmation and sandbox acceptance, set `PGONE_CUSTOM_WEB_BILLING_ENABLED=true` in approved staging. Authorisation endpoints require the exact configured HTTPS billing Origin, authenticated owner, current price/cycle consent and the server-selected subscription. Keep the flag false in production until provider acceptance passes. Approve hosting headers/CSP and the exact CORS origin during deployment; this branch does not modify production CORS.
 
 Only SDK-confirmed supported recurring UPI apps are offered. If none is available, payment stays unavailable. Mandatory provider/UPI authorisation disclosures may appear; PGOne does not conceal the processor or imitate the bank. No card, VPA-collect or UPI-PIN fallback is added.
+
+## Exact production policy values and signing status
+
+```text
+PGONE_TERMS_URL=https://safehouse-api.onrender.com/legal/terms
+PGONE_PRIVACY_URL=https://safehouse-api.onrender.com/legal/privacy
+PGONE_BILLING_WEB_ORIGIN=https://safehouse-api.onrender.com
+```
+
+The existing production Downloads APKs 5.0.0 and 5.0.1 use package `com.safehouse.pg` and the same public release certificate:
+
+```text
+SHA-1: 05:74:A5:E1:42:19:8D:49:DC:64:31:77:2E:DD:6B:35:2A:9E:C6:4C
+SHA-256: D2:07:3D:76:B1:4D:FA:AB:99:92:2B:AD:4B:DE:54:E3:D1:F9:04:FD:29:4B:F3:E7:76:BC:D3:35:4F:4A:95:E0
+```
+
+The user added both fingerprints to Firebase's production app. The original private release keystore has not been located; the user reports no keystore file. An APK contains the public certificate, not the private key. Do not silently replace this signing identity or require uninstalling an existing installation to conceal the missing update signer. CI provides an unsigned production assembly and a separate testing package. Use that testing APK's exact certificate under its separate Firebase app registration.
+
+Firebase test numbers use their configured codes and send no SMS. Keep these entries out of app source and logs. They authenticate real Firebase identities, so use them only for internal verification and remove the entry before customer use of that account. A console test entry has been configured, but a real provider exchange remains pending deployment configuration. Real SMS requires Firebase Blaze billing and the applicable region, quota and app-verification setup.
+
+After deployment, check `/health`, `/ready`, `/api/platform/config?package=com.safehouse.pg`, its exact `deploymentCommit`, the two policy URLs and `/billing/`. A null `phone` requires checking both PGOne feature flags and the Firebase server settings above. Existing one-time rent credentials do not prove recurring Custom Checkout approval.

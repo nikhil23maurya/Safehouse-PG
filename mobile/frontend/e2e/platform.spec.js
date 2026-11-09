@@ -5,6 +5,7 @@ import fs from "node:fs/promises";
 async function platform(page) {
   await page.addInitScript(() => {
     window.__platformVault = null;
+    window.__phoneSends = 0;
     window.SafeHouseNative = {
       getPackageId: () => "com.safehouse.pg.testing",
       ready: () => {},
@@ -14,8 +15,10 @@ async function platform(page) {
         window.__platformVault = raw ? JSON.parse(raw) : null;
         return true;
       },
-      startPhoneSignIn: (_config, _phone, attempt) =>
-        setTimeout(() => window.PGOnePhoneEvent(attempt, "sent", ""), 100),
+      startPhoneSignIn: (_config, _phone, attempt) => {
+        window.__phoneSends++;
+        setTimeout(() => window.PGOnePhoneEvent(attempt, "sent", ""), 100);
+      },
       verifyPhoneCode: (_code, attempt) =>
         setTimeout(
           () =>
@@ -153,11 +156,12 @@ async function platform(page) {
   };
 }
 async function phoneLogin(page) {
-  await page
-    .getByRole("button", { name: "Continue with mobile number" })
-    .click();
+  await go(page, "welcome");
+  await page.getByRole("button", { name: "Create account", exact: true }).click();
   await page.getByLabel("Mobile number").fill("9123456789");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Send verification code", exact: true })
+    .click();
   await expect(
     page.getByText("Verification code sent.", { exact: true }),
   ).toBeVisible();
@@ -170,6 +174,40 @@ async function phoneLogin(page) {
     page.getByRole("heading", { name: "A place for everyone." }),
   ).toBeVisible();
 }
+
+test("sign-in never creates an unknown account without explicit confirmation or sends a second OTP", async ({ page }) => {
+  await platform(page);
+  const modes = [];
+  await page.route("**/api/platform/phone", async (route) => {
+    const mode = route.request().postDataJSON().mode;
+    modes.push(mode);
+    if (mode === "SIGN_IN")
+      return route.fulfill({ status: 404, json: { error: { code: "PHONE_ACCOUNT_NOT_FOUND", message: "No phone account yet." } } });
+    return route.fulfill({ json: { tokens: { kind: "PLATFORM", accessToken: "pg1.test.account", refreshToken: "pg1.test.refresh" } } });
+  });
+  await go(page, "welcome");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByLabel("Mobile number").fill("9123456789");
+  await page.getByRole("button", { name: "Send verification code", exact: true }).click();
+  await page.getByText("Verification code sent.", { exact: true }).waitFor();
+  await page.getByLabel("Verification code").fill("123456");
+  await page.getByRole("button", { name: "Verify & continue" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "Create a PGOne account?" })).toBeVisible();
+  expect(modes).toEqual(["SIGN_IN"]);
+  await dialog.getByRole("button", { name: "Back to sign in", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Sign in to PGOne." })).toBeVisible();
+  expect(modes).toEqual(["SIGN_IN"]);
+
+  await page.getByRole("button", { name: "Send verification code", exact: true }).click();
+  await page.getByText("Verification code sent.", { exact: true }).waitFor();
+  await page.getByLabel("Verification code").fill("123456");
+  await page.getByRole("button", { name: "Verify & continue" }).click();
+  await dialog.getByRole("button", { name: "Create account", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "A place for everyone." })).toBeVisible();
+  expect(modes).toEqual(["SIGN_IN", "SIGN_IN", "SIGN_UP"]);
+  expect(await page.evaluate(() => window.__phoneSends)).toBe(2);
+});
 test("phone onboarding, real controls, saved property and restored workspace", async ({
   page,
 }) => {
@@ -183,14 +221,22 @@ test("phone onboarding, real controls, saved property and restored workspace", a
   };
   await go(page, "welcome");
   await capture("welcome");
-  await page.getByRole("button", { name: "I already have an account" }).click();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Use email & password", exact: true })
+    .click();
   await capture("login");
   await page
     .getByRole("button", { name: "Continue with mobile number" })
     .click();
+  await expect(page.getByRole("heading", { name: "Sign in to PGOne." })).toBeVisible();
+  await page.getByRole("button", { name: "New here? Create account", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Create your PGOne account." })).toBeVisible();
   await capture("phone");
   await page.getByLabel("Mobile number").fill("9123456789");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Send verification code", exact: true })
+    .click();
   await expect(
     page.getByText("Verification code sent.", { exact: true }),
   ).toBeVisible();
@@ -255,12 +301,13 @@ test("phone capability unavailable is honest and existing login stays accessible
     .click();
   await expect(
     page.getByText(
-      /Phone sign-in is awaiting activation|Account services could not be reached/,
+      /Phone sign-in is awaiting activation|The updated account service is not available yet/,
     ),
   ).toBeVisible();
   await page.getByLabel("Mobile number").fill("9123456789");
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await expect(page.locator(".form-error")).toContainText("not activated");
+  await expect(
+    page.getByRole("button", { name: "Send verification code", exact: true }),
+  ).toBeDisabled();
   await expect(page).toHaveURL(/#phone$/);
   await page.getByRole("button", { name: "Use email & password" }).click();
   await expect(page.getByLabel("Email address")).toBeVisible();

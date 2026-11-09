@@ -267,7 +267,7 @@ document.addEventListener("submit", async (event) => {
       const exchange = await api("/api/platform/phone", {
         public: true,
         method: "POST",
-        body: { idToken: await result.user.getIdToken(true) },
+        body: { idToken: await result.user.getIdToken(true), mode: "SIGN_IN" },
       });
       await auth.sdk.signOut(auth.value);
       if (generation === flowGeneration) await session(exchange.tokens);

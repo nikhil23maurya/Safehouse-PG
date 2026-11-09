@@ -1,4 +1,6 @@
-import { build } from "../../mobile/frontend/node_modules/esbuild/lib/main.js";
+const { build } = await import("esbuild").catch(
+  () => import("../../mobile/frontend/node_modules/esbuild/lib/main.js"),
+);
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
 const out = new URL("./dist/", import.meta.url),
   source = new URL("../../mobile/frontend/src/", import.meta.url);

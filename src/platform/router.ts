@@ -72,6 +72,7 @@ platformRouter.get("/config", (req, res) => {
         : null,
     },
     plan: PLAN,
+    deploymentCommit: process.env.RENDER_GIT_COMMIT || null,
     androidBilling: "CONSUMPTION_ONLY",
     legal: {
       terms: platformConfig.PGONE_TERMS_URL || null,
@@ -146,10 +147,16 @@ platformRouter.use((_req, _res, next) => {
   next();
 });
 platformRouter.post("/phone", limited, async (req, res) => {
-  const { idToken } = z
-    .object({ idToken: z.string().min(100).max(10000) })
+  const { idToken, mode } = z
+    .object({
+      idToken: z.string().min(100).max(10000),
+      mode: z.enum(["SIGN_UP", "SIGN_IN"]).default("SIGN_UP"),
+    })
     .parse(req.body);
-  const account = await phoneAccount(await verifyPhoneIdentity(idToken));
+  const account = await phoneAccount(
+    await verifyPhoneIdentity(idToken),
+    mode === "SIGN_UP",
+  );
   res.json({
     tokens: platformPair(account),
     ...(await accountSnapshot(account.id)),

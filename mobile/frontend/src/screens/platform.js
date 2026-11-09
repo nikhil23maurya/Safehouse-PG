@@ -42,10 +42,12 @@ export function welcomeScreen() {
   return {
     bare: true,
     title: "Welcome",
-    content: `<main class="welcome-page royal-page"><div class="welcome-art">${image("hero")}</div><div class="welcome-copy">${brand()}<span class="royal-kicker">A BETTER WAY TO RUN YOUR PG</span><h1>Your PG.<br>Beautifully<br><em>managed.</em></h1><span class="gold-rule"></span><p>Rooms, residents, rent.<br>Everything feels in place.</p></div><div class="welcome-bottom"><span class="welcome-caption">A little more calm. Every day.</span>${primary("Get started", { route: "phone", glyph: "arrow" })}${button("I already have an account", { route: "login", kind: "secondary block" })}<p class="welcome-foot">Thoughtfully made for life at your PG.</p></div></main>`,
+    content: `<main class="welcome-page royal-page"><div class="welcome-art">${image("hero")}</div><div class="welcome-copy">${brand()}<span class="royal-kicker">A BETTER WAY TO RUN YOUR PG</span><h1>Your PG.<br>Beautifully<br><em>managed.</em></h1><span class="gold-rule"></span><p>Rooms, residents, rent.<br>Everything feels in place.</p></div><div class="welcome-bottom"><span class="welcome-caption">A little more calm. Every day.</span>${primary("Create account", { route: "phone", params: { mode: "SIGN_UP" }, glyph: "arrow" })}${button("Sign in", { route: "phone", params: { mode: "SIGN_IN" }, kind: "secondary block" })}<p class="welcome-foot">Thoughtfully made for life at your PG.</p></div></main>`,
   };
 }
 export async function phoneScreen(ctx) {
+  onboarding.authMode = ctx.params.mode || onboarding.authMode || "SIGN_UP";
+  const signingUp = onboarding.authMode === "SIGN_UP";
   const config = await platformConfig(ctx);
   const available =
     !!config.phone &&
@@ -54,11 +56,26 @@ export async function phoneScreen(ctx) {
     config.legal?.privacy;
   return {
     ...page(
-      "Phone sign-in",
-      `${intro("WELCOME TO PGONE", "Let’s get you started.", "One mobile number. All your PG workspaces.")}<div class="phone-secure">${icon("shield")}<span>Secure sign-in with a verification code</span></div>${!available ? notice(config.unavailable ? "Account services could not be reached. Retry when connected, or use your existing account." : "Phone sign-in is awaiting activation on this installation. Use your existing account below.") : ""}${form("phone", `<label class="field"><span class="field-label">Mobile number</span><span class="phone-field"><span>+91</span><input name="phone" aria-label="Mobile number" inputmode="tel" autocomplete="tel-national" maxlength="10" pattern="[6-9][0-9]{9}" required placeholder="Enter your mobile number" value="${esc(onboarding.phone.replace(/^\+91/, ""))}"></span><span class="field-error" id="field-phone-error"></span></label>`, "Continue")}${button("Use email & password", { route: "login", kind: "secondary block" })}<p class="legal-copy">By continuing, you agree to our <button class="text-button" data-route="legal" data-params='{"kind":"terms"}'>Terms</button> and <button class="text-button" data-route="legal" data-params='{"kind":"privacy"}'>Privacy Policy</button>.</p>`,
+      signingUp ? "Create account" : "Sign in",
+      `${intro(signingUp ? "NEW TO PGONE" : "WELCOME BACK", signingUp ? "Create your PGOne account." : "Sign in to PGOne.", signingUp ? "Verify your mobile number, then set up or join your PG." : "Use your registered mobile number to open your workspaces.")}<div class="phone-secure">${icon("shield")}<span>Secure sign-in with a verification code</span></div>${!available ? notice(config.unavailable ? "The updated account service is not available yet. Retry, or use email sign-in for an existing account." : "Phone sign-in is awaiting activation on this installation. Use your existing account below.") : ""}${form("phone", `<label class="field"><span class="field-label">Mobile number</span><span class="phone-field"><span>+91</span><input name="phone" aria-label="Mobile number" inputmode="tel" autocomplete="tel-national" maxlength="10" pattern="[6-9][0-9]{9}" required placeholder="Enter your mobile number" value="${esc(onboarding.phone.replace(/^\+91/, ""))}"></span><span class="field-error" id="field-phone-error"></span></label>`, "Continue")}${!available ? button("Retry phone service", { action: "retryPhone", kind: "secondary block" }) : ""}${button("Use email & password", { route: "login", kind: "secondary block" })}${button(signingUp ? "Already registered? Sign in" : "New here? Create account", { route: "phone", params: { mode: signingUp ? "SIGN_IN" : "SIGN_UP" }, kind: "text-button block" })}<p class="legal-copy">By continuing, you agree to our <button class="text-button" data-route="legal" data-params='{"kind":"terms"}'>Terms</button> and <button class="text-button" data-route="legal" data-params='{"kind":"privacy"}'>Privacy Policy</button>.</p>`,
       "welcome",
       `<div class="auth-architecture">${image("property")}</div>`,
     ),
+    mount() {
+      const submit = document.querySelector(
+        '[data-form="phone"] [type="submit"]',
+      );
+      if (submit) {
+        submit.disabled = !available;
+        submit.querySelector("span").textContent = "Send verification code";
+      }
+    },
+    action(name) {
+      if (name === "retryPhone") {
+        onboarding.config = null;
+        return ctx.reload();
+      }
+    },
     async submit(_name, el) {
       if (!available)
         throw new Error(
