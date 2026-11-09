@@ -62,7 +62,7 @@ export class CashfreePG {
   constructor(private readonly fetcher: typeof fetch = fetch) {}
   async request(path: string, method = "GET", body?: object, idempotency?: string) {
     assert(cashfreeBillingConfigured(), 503, "CASHFREE_BILLING_NOT_CONFIGURED", "Cashfree PGOne billing is awaiting configuration.");
-    assert(/^\/pg\/orders(?:\/[a-zA-Z0-9_-]+(?:\/payments)?)?$/.test(path), 400, "CASHFREE_INVALID_PATH", "Invalid provider order path.");
+    assert(/^\/pg\/orders(?:\/[a-zA-Z0-9_-]+(?:\/(?:payments|refunds))?)?$/.test(path), 400, "CASHFREE_INVALID_PATH", "Invalid provider order path.");
     const base = client().environment === "TEST" ? "https://sandbox.cashfree.com" : "https://api.cashfree.com";
     let response: Response;
     try {
@@ -90,6 +90,7 @@ export class CashfreePG {
   }
   get(id: string) { return this.request(`/pg/orders/${encodeURIComponent(id)}`); }
   payments(id: string) { return this.request(`/pg/orders/${encodeURIComponent(id)}/payments`); }
+  refunds(id: string) { return this.request(`/pg/orders/${encodeURIComponent(id)}/refunds`); }
   create(local: Local, phone: string, customerName: string) {
     return this.request("/pg/orders", "POST", {
       order_id: orderId(local.receiptReference),
@@ -135,6 +136,19 @@ export async function reconcileCashfreeOrder(id: string, organisationId: string,
   }
   const payment = succeeded[0];
   assert(successfulCashfreePayment(payment, remote, local), 409, "CASHFREE_PAYMENT_MISMATCH", "Only an exact captured INR 249 payment can activate an account.");
+  // Refund status is an independent provider check, not part of the original payment event.
+  const remoteRefunds = await provider.refunds(remote.order_id);
+  assert(Array.isArray(remoteRefunds), 502, "CASHFREE_REFUND_RESPONSE", "Refund status could not be verified.");
+  const refundValues = remoteRefunds.filter((refund: any) => refund.refund_status === "SUCCESS")
+    .map((refund: any) => {
+      assert(refund.order_id === remote.order_id && String(refund.cf_payment_id) === String(payment.cf_payment_id) &&
+        refund.refund_currency === "INR" && moneyPaise(refund.refund_amount) > 0,
+        409, "CASHFREE_REFUND_MISMATCH", "Refund does not match the verified order.");
+      return moneyPaise(refund.refund_amount);
+    });
+  const totalRefunded = refundValues.reduce((sum: number, amount: number) => sum + amount, 0);
+  assert(Number.isSafeInteger(totalRefunded) && totalRefunded <= PLAN.amountPaise,
+    409, "CASHFREE_REFUND_OVERFLOW", "Refund total requires operator reconciliation.");
   assert(client().environment === "LIVE", 409, "CASHFREE_TEST_NO_ACCESS", "Sandbox transactions cannot activate live PGOne subscriptions.");
   const paymentId = String(payment.cf_payment_id);
   const paidAt = new Date(payment.payment_completion_time || payment.payment_time);
@@ -143,6 +157,14 @@ export async function reconcileCashfreeOrder(id: string, organisationId: string,
     if (existing) {
       assert(existing.providerPaymentId === `cf_${paymentId}` && existing.amountPaise === PLAN.amountPaise &&
         existing.organisationId === local.organisationId, 409, "CASHFREE_RECEIPT_CONFLICT", "Existing receipt belongs to a different payment.");
+      if (totalRefunded > existing.refundedPaise) {
+        await tx.pgPlanReceipt.update({ where: { id: existing.id }, data: {
+          refundedPaise: totalRefunded, status: "REFUNDED",
+        } });
+        await tx.pgPlanOrder.update({ where: { id: local.id }, data: { status: "REFUNDED", open: false } });
+        await audit(tx, null, local.organisationId, "CASHFREE_SAAS_REFUND_VERIFIED", existing.id,
+          { refundedPaise: totalRefunded, orderId: remote.order_id });
+      }
       return;
     }
     assert(paidAt.getTime() >= local.createdAt.getTime() - 300000 && paidAt.getTime() <= Date.now() + 30000,
@@ -158,9 +180,10 @@ export async function reconcileCashfreeOrder(id: string, organisationId: string,
     const receipt = await tx.pgPlanReceipt.create({ data: {
       organisationId: local.organisationId, orderId: local.id, providerPaymentId: `cf_${paymentId}`,
       receiptNumber: `PGONE-${local.receiptReference}`, amountPaise: PLAN.amountPaise, taxPaise: local.taxPaise,
-      refundedPaise: 0, status: "CAPTURED", paidAt, periodStart: start, periodEnd: end, anchorDay: chain.anchorDay,
+      refundedPaise: totalRefunded, status: totalRefunded ? "REFUNDED" : "CAPTURED",
+      paidAt, periodStart: start, periodEnd: end, anchorDay: chain.anchorDay,
     } });
-    await tx.pgPlanOrder.update({ where: { id: local.id }, data: { status: "CAPTURED", open: false } });
+    await tx.pgPlanOrder.update({ where: { id: local.id }, data: { status: totalRefunded ? "REFUNDED" : "CAPTURED", open: false } });
     await audit(tx, null, local.organisationId, "CASHFREE_SAAS_PAYMENT_VERIFIED", receipt.id, {
       providerPaymentId: paymentId, orderId: remote.order_id, amountPaise: local.amountPaise, periodEnd: end.toISOString(),
     });
