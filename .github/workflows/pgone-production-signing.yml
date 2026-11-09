@@ -16,15 +16,14 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     environment: production-signing
-    env:
-      PGONE_RELEASE_KEYSTORE_B64: ${{ secrets.PGONE_RELEASE_KEYSTORE_B64 }}
-      PGONE_RELEASE_STORE_PASSWORD: ${{ secrets.PGONE_RELEASE_STORE_PASSWORD }}
-      PGONE_RELEASE_KEY_ALIAS: ${{ secrets.PGONE_RELEASE_KEY_ALIAS }}
-      PGONE_RELEASE_KEY_PASSWORD: ${{ secrets.PGONE_RELEASE_KEY_PASSWORD }}
     steps:
       - name: Require all signing credentials and exact immutable source
         env:
           EXPECTED_SHA: ${{ inputs.expected_main_sha }}
+          PGONE_RELEASE_KEYSTORE_B64: ${{ secrets.PGONE_RELEASE_KEYSTORE_B64 }}
+          PGONE_RELEASE_STORE_PASSWORD: ${{ secrets.PGONE_RELEASE_STORE_PASSWORD }}
+          PGONE_RELEASE_KEY_ALIAS: ${{ secrets.PGONE_RELEASE_KEY_ALIAS }}
+          PGONE_RELEASE_KEY_PASSWORD: ${{ secrets.PGONE_RELEASE_KEY_PASSWORD }}
         shell: bash
         run: |
           set -euo pipefail
@@ -85,6 +84,11 @@ jobs:
         run: gradle :app:assembleRelease --stacktrace
 
       - name: Sign only with the existing production certificate and verify output
+        env:
+          PGONE_RELEASE_KEYSTORE_B64: ${{ secrets.PGONE_RELEASE_KEYSTORE_B64 }}
+          PGONE_RELEASE_STORE_PASSWORD: ${{ secrets.PGONE_RELEASE_STORE_PASSWORD }}
+          PGONE_RELEASE_KEY_ALIAS: ${{ secrets.PGONE_RELEASE_KEY_ALIAS }}
+          PGONE_RELEASE_KEY_PASSWORD: ${{ secrets.PGONE_RELEASE_KEY_PASSWORD }}
         shell: bash
         run: |
           set -euo pipefail
@@ -111,6 +115,8 @@ jobs:
           "$TOOLS/aapt" dump badging "$APK" > signed-output/package-report.txt
           grep -q "package: name='com.safehouse.pg'" signed-output/package-report.txt
           grep -q "application-label:'PGOne'" signed-output/package-report.txt
+          grep -q "versionCode='52'" signed-output/package-report.txt
+          grep -q "versionName='5.1.0'" signed-output/package-report.txt
           if grep -q "application-debuggable" signed-output/package-report.txt; then
             echo "::error::Debuggable APK rejected."
             exit 1
