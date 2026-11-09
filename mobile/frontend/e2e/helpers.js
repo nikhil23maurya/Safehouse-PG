@@ -40,6 +40,7 @@ export async function setup(page) {
     }),
   );
   await page.goto("/");
+  if (await page.getByRole("button", { name: "I already have an account" }).isVisible()) await page.getByRole("button", { name: "I already have an account" }).click();
   return { ...fixtures, errors };
 }
 export async function login(page, role = "OWNER") {

@@ -10,7 +10,9 @@ const types = {
   ".js": "application/javascript",
   ".css": "text/css",
   ".woff2": "font/woff2",
+  ".ttf": "font/ttf",
   ".txt": "text/plain",
+  ".webp": "image/webp",
 };
 http
   .createServer(async (req, res) => {
@@ -18,7 +20,7 @@ http
       req.url?.split("?")[0] === "/"
         ? "index.html"
         : req.url?.split("?")[0].slice(1);
-    if (!["index.html", "app.js", "app.css", "InterVariable.woff2", "Inter-OFL.txt"].includes(name)) {
+    if (!["index.html", "app.js", "app.css", "InterVariable.woff2", "Inter-OFL.txt", "ManropeVariable.ttf", "Manrope-OFL.txt", ...["hero", "property", "ready", "payments"].map(x => `onboarding-${x}.webp`)].includes(name)) {
       res.writeHead(404).end();
       return;
     }

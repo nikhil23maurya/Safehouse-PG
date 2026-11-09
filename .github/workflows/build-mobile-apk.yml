@@ -86,7 +86,7 @@ jobs:
         run: |
           SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' | sort -V | tail -n 1)"
           test -n "$SDKMANAGER"
-          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.1.0"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
@@ -105,11 +105,11 @@ jobs:
           APK="mobile/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$APK"
           unzip -t "$APK" > diagnostics/apk/zip-integrity.txt
-          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose --print-certs "$APK" > diagnostics/apk/signature.txt
-          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > diagnostics/apk/package.txt
+          "$ANDROID_HOME/build-tools/35.1.0/apksigner" verify --verbose --print-certs "$APK" > diagnostics/apk/signature.txt
+          "$ANDROID_HOME/build-tools/35.1.0/aapt" dump badging "$APK" > diagnostics/apk/package.txt
           grep -q "name='com.safehouse.pg.testing'" diagnostics/apk/package.txt
           SOURCE_SHA="$(git rev-parse HEAD)"
-          NAME="PGOne-5.0.1-testing-${SOURCE_SHA:0:12}.apk"
+          NAME="PGOne-5.1.0-testing-${SOURCE_SHA:0:12}.apk"
           cp "$APK" "diagnostics/apk/$NAME"
           (cd diagnostics/apk && sha256sum "$NAME" > "$NAME.sha256")
           printf 'commit=%s\nrun_id=%s\nkind=debug/testing\napplication_id=com.safehouse.pg.testing\n' "$SOURCE_SHA" "$GITHUB_RUN_ID" > diagnostics/apk/build-provenance.txt

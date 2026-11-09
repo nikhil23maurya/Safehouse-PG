@@ -159,6 +159,11 @@ public class MobileJourneyTest {
         instrumentation.runOnMainSync(() -> web = findWeb(activity.getWindow().getDecorView()));
         assertNotNull("WebView did not initialize", web);
         ((MainActivity)activity).providerQr = new ProviderQr(uri -> QrTestImages.poster(QrTestImages.PAYLOAD));
+        await("document.querySelector('[data-route=login]') || document.querySelector('[data-form=login]')");
+        if ("true".equals(js("Boolean(document.querySelector('[data-route=login]'))"))) {
+            screenshot("00-welcome");
+            js("document.querySelector('[data-route=login]').click()");
+        }
         await("document.querySelector('[data-form=login]')");
         String fixtures = read(instrumentation.getContext().getAssets().open("fixtures.js"));
         instrumentation.runOnMainSync(() -> {
@@ -180,7 +185,9 @@ public class MobileJourneyTest {
         });
         // Reload with fixtures prefixed before the production API client captures fetch.
         instrumentation.runOnMainSync(() -> { web.clearCache(true); web.reload(); });
-        await("window.__nativeFixtures&&document.querySelector('[data-form=login]')");
+        await("window.__nativeFixtures && (document.querySelector('[data-route=login]') || document.querySelector('[data-form=login]'))");
+        if ("true".equals(js("Boolean(document.querySelector('[data-route=login]'))"))) js("document.querySelector('[data-route=login]').click()");
+        await("document.querySelector('[data-form=login]')");
         screenshot("01-login");
         js("document.querySelector('[name=password]').focus()");
         instrumentation.runOnMainSync(() -> { web.requestFocus(); ((android.view.inputmethod.InputMethodManager)target.getSystemService(Context.INPUT_METHOD_SERVICE)).showSoftInput(web, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT); });

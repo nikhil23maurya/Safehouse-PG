@@ -16,8 +16,9 @@ export const state = {
   property: null,
   properties: [],
   student: null,
+  platform: null,
   period: currentPeriod(),
-  route: { name: "login", params: {} },
+  route: { name: "welcome", params: {} },
   pendingPayment: null,
   authEpoch: 0,
 };

@@ -56,6 +56,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
     private View splashView;
     private FrameLayout hostView;
     private SessionVault sessionVault;
+    private PhoneSignIn phoneSignIn;
     ProviderQr providerQr = new ProviderQr(ProviderQr::load);
     private final java.util.concurrent.atomic.AtomicBoolean upiOpening = new java.util.concurrent.atomic.AtomicBoolean();
     private boolean pageReady = false;
@@ -80,6 +81,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         registerFcmReceiver();
         handleNotificationIntent(getIntent(), false);
         sessionVault = new SessionVault(this);
+        phoneSignIn = new PhoneSignIn(this, (attempt, type, value) -> callJs("window.PGOnePhoneEvent && window.PGOnePhoneEvent(" + q(attempt) + "," + q(type) + "," + q(value) + ");"));
         hostView = new FrameLayout(this);
         hostView.setBackgroundColor(Color.WHITE);
         splashView = buildSplash();
@@ -155,10 +157,10 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                     }
                 }
                 String name = path.substring("/assets/".length());
-                if (!("index.html".equals(name) || "app.js".equals(name) || "app.css".equals(name) || "InterVariable.woff2".equals(name) || "Inter-OFL.txt".equals(name))) return missingAsset();
+                if (!("index.html".equals(name) || "app.js".equals(name) || "app.css".equals(name) || "InterVariable.woff2".equals(name) || "Inter-OFL.txt".equals(name) || "ManropeVariable.ttf".equals(name) || "Manrope-OFL.txt".equals(name) || name.matches("onboarding-(hero|property|ready|payments)\\.webp"))) return missingAsset();
                 try {
-                    String mime = name.endsWith(".js") ? "application/javascript" : name.endsWith(".css") ? "text/css" : name.endsWith(".woff2") ? "font/woff2" : name.endsWith(".txt") ? "text/plain" : "text/html";
-                    return new WebResourceResponse(mime, name.endsWith(".woff2") ? null : "UTF-8", 200, "OK", java.util.Collections.singletonMap("Cache-Control", "no-cache"), getAssets().open(name));
+                    String mime = name.endsWith(".webp") ? "image/webp" : name.endsWith(".js") ? "application/javascript" : name.endsWith(".css") ? "text/css" : name.endsWith(".ttf") ? "font/ttf" : name.endsWith(".woff2") ? "font/woff2" : name.endsWith(".txt") ? "text/plain" : "text/html";
+                    return new WebResourceResponse(mime, (name.endsWith(".woff2") || name.endsWith(".ttf") || name.endsWith(".webp")) ? null : "UTF-8", 200, "OK", java.util.Collections.singletonMap("Cache-Control", "no-cache"), getAssets().open(name));
                 } catch (Exception ignored) { return missingAsset(); }
             }
 
@@ -322,6 +324,13 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
     }
 
     public final class NativeBridge {
+        @JavascriptInterface public String getPackageId() { return getPackageName(); }
+        @JavascriptInterface public void startPhoneSignIn(String config, String number, String attempt, boolean resend) { runOnUiThread(() -> phoneSignIn.start(config, number, attempt, resend)); }
+        @JavascriptInterface public void verifyPhoneCode(String code, String attempt) { runOnUiThread(() -> phoneSignIn.verify(code, attempt)); }
+        @JavascriptInterface public void cancelPhoneSignIn() { runOnUiThread(() -> phoneSignIn.cancel()); }
+        @JavascriptInterface public void openLegalLink(String url) { runOnUiThread(() -> {
+            try { Uri target = Uri.parse(url); if ("https".equals(target.getScheme()) && target.getHost() != null && target.getUserInfo() == null) startActivity(new Intent(Intent.ACTION_VIEW, target)); } catch (Exception ignored) { Toast.makeText(MainActivity.this, "This link is unavailable", Toast.LENGTH_SHORT).show(); }
+        }); }
         @JavascriptInterface public boolean prefersReducedMotion() {
             return android.provider.Settings.Global.getFloat(getContentResolver(), android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f;
         }

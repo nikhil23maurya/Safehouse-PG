@@ -12,6 +12,9 @@ import { createTokenPair, hashPassword, verifyPassword, verifyRazorpayCheckoutSi
 import { ensureInvoices, getOwnerProperty, getStudentProfile } from "./rent.js";
 import { createRazorpayOrder, createRentUpiQr, fetchRentUpiQr, fetchCapturedQrPayments } from "./razorpay.js";
 import { streamReceiptPdf } from "./receipts.js";
+import { platformRouter } from "./platform/router.js";
+import { platformWorkspaceBridge } from "./platform/bridge.js";
+import { processSubscriptionWebhook } from "./platform/billing.js";
 import {
   datePartsInTimeZone,
   invoiceTotal,
@@ -174,7 +177,13 @@ app.post("/api/webhooks/razorpay", express.raw({ type: "application/json", limit
   res.json({ ok: true });
 });
 
+app.post("/api/platform-webhooks/subscriptions", express.raw({ type: "application/json", limit: "1mb" }), async (req, res) => {
+  await processSubscriptionWebhook(req.body, req.header("x-razorpay-signature") || "", req.header("x-razorpay-event-id"));
+  res.json({ ok: true });
+});
+app.use(platformWorkspaceBridge);
 app.use(express.json({ limit: "1mb" }));
+app.use("/api/platform", platformRouter);
 
 const loginLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: "draft-8", legacyHeaders: false });
 

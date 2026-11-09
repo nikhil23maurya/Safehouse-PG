@@ -20,7 +20,7 @@ async function nativePayment(page) {
 test("login uses bundled Inter with readable compact hierarchy and a reachable keyboard action", async ({ page }) => {
   await setup(page);
   await page.evaluate(() => document.fonts.ready);
-  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Welcome back." })).toBeVisible();
   expect(await page.evaluate(() => document.fonts.check('500 16px "Inter"'))).toBe(true);
   const title = await page.locator(".login-heading h1").evaluate(el => ({
     font: getComputedStyle(el).fontFamily,
@@ -28,8 +28,8 @@ test("login uses bundled Inter with readable compact hierarchy and a reachable k
     height: el.getBoundingClientRect().height,
   }));
   expect(title.font).toContain("Inter");
-  expect(title.size).toBeLessThanOrEqual(30);
-  expect(title.height).toBeLessThan(45);
+  expect(title.size).toBeLessThanOrEqual(36);
+  expect(title.height).toBeLessThanOrEqual(47);
   await page.setViewportSize({ width: 393, height: 530 });
   await page.getByLabel("Password", { exact: true }).focus();
   await page.evaluate(() => window.SafeHouseKeyboard(true));

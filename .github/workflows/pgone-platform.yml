@@ -1,0 +1,39 @@
+name: Verify PGOne Platform
+on:
+  pull_request:
+    paths: ['src/**', 'prisma/**', 'tests/**', '.github/workflows/pgone-platform.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  platform:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: pgone_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/pgone_test
+      JWT_ACCESS_SECRET: isolated-ci-platform-access-32-characters
+      JWT_REFRESH_SECRET: isolated-ci-platform-refresh-32-characters
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.13.0'
+      - run: npm install --no-audit --no-fund
+      - run: npm run build
+      - name: Verify backward-compatible migrations on isolated PostgreSQL
+        run: npx prisma migrate deploy
+      - name: Verify platform success, failure and isolation
+        run: node --import tsx --test tests/platform.test.ts tests/platform.integration.test.ts

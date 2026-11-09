@@ -8,6 +8,9 @@ const out = path.resolve(here, "../app/src/main/assets");
 await mkdir(out, { recursive: true });
 await copyFile(path.join(here, "src/assets/fonts/InterVariable.woff2"), path.join(out, "InterVariable.woff2"));
 await copyFile(path.join(here, "src/assets/fonts/OFL.txt"), path.join(out, "Inter-OFL.txt"));
+await copyFile(path.join(here, "src/assets/fonts/ManropeVariable.ttf"), path.join(out, "ManropeVariable.ttf"));
+await copyFile(path.join(here, "src/assets/fonts/Manrope-OFL.txt"), path.join(out, "Manrope-OFL.txt"));
+for (const name of ["hero", "property", "ready", "payments"]) await copyFile(path.join(here, `src/assets/onboarding/${name}.webp`), path.join(out, `onboarding-${name}.webp`));
 await build({
   absWorkingDir: here,
   entryPoints: ["src/main.js"],
@@ -25,7 +28,7 @@ await build({
   );
 });
 const css = await Promise.all(
-  ["tokens", "components", "screens"].map((name) =>
+  ["tokens", "components", "screens", "platform"].map((name) =>
     readFile(path.join(here, `src/styles/${name}.css`), "utf8"),
   ),
 );
