@@ -131,5 +131,6 @@ test("merchant endpoints reject unauthenticated requests, another owner and unco
   for(const [path,body] of [["profile",profile],["bank",bank],["onboarding-link",{}],["recheck",{}]] as const)
     assert.equal((await fetch(`${url}/${path}`,{method:"POST",headers:foreign,body:JSON.stringify(body)})).status,403);
   const own={...foreign,authorization:`Bearer ${platformPair(a.account).accessToken}`};
-  assert.equal((await fetch(`${url}/bank`,{method:"POST",headers:own,body:JSON.stringify({...bank,consent:false})})).status,400);
+  assert.equal((await fetch(`${url}/bank`,{method:"POST",headers:own,body:JSON.stringify({...bank,consent:false})})).status,402,
+    "an unpaid new owner cannot submit merchant bank details by calling the API directly");
 });
