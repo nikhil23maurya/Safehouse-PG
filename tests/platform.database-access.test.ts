@@ -23,7 +23,7 @@ test("all application tables deny direct public Data API roles while the backend
     assert.equal(table.relforcerowsecurity,false,`${table.relname}: do not change owner bypass`);
     assert.equal(table.owner_role,table.backend_role);
     for(const role of ["anon","authenticated","pgone_public_probe"]){
-      const result=await pool.query(`SELECT bool_or(has_table_privilege($1,format('public.%I',$2),p)) AS permitted
+      const result=await pool.query(`SELECT bool_or(has_table_privilege($1::name,format('public.%I',$2::text),p)) AS permitted
         FROM unnest(ARRAY['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) p`,[role,table.relname]);
       assert.equal(result.rows[0].permitted,false,`${role} must have no direct privileges on ${table.relname}`);
     }
