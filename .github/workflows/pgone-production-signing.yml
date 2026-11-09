@@ -1,0 +1,136 @@
+name: Sign PGOne Production APK — original certificate only
+
+on:
+  workflow_dispatch:
+    inputs:
+      expected_main_sha:
+        description: 'Exact reviewed main commit SHA to build and sign'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  signed-release:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: production-signing
+    env:
+      PGONE_RELEASE_KEYSTORE_B64: ${{ secrets.PGONE_RELEASE_KEYSTORE_B64 }}
+      PGONE_RELEASE_STORE_PASSWORD: ${{ secrets.PGONE_RELEASE_STORE_PASSWORD }}
+      PGONE_RELEASE_KEY_ALIAS: ${{ secrets.PGONE_RELEASE_KEY_ALIAS }}
+      PGONE_RELEASE_KEY_PASSWORD: ${{ secrets.PGONE_RELEASE_KEY_PASSWORD }}
+    steps:
+      - name: Require all signing credentials and exact immutable source
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in PGONE_RELEASE_KEYSTORE_B64 PGONE_RELEASE_STORE_PASSWORD PGONE_RELEASE_KEY_ALIAS PGONE_RELEASE_KEY_PASSWORD; do
+            if [[ -z "${!key:-}" ]]; then
+              echo "::error::Original PGOne production signing credentials are missing. Cannot issue an upgrade-compatible release."
+              exit 1
+            fi
+          done
+          if ! [[ "${{ inputs.expected_main_sha }}" =~ ^[a-f0-9]{40}$ ]]; then
+            echo "::error::Expected source SHA must be exactly 40 hex characters."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Reject wrong source revision
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_main_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ACTUAL_SHA="$(git rev-parse HEAD)"
+          if [[ "$ACTUAL_SHA" != "$EXPECTED_SHA" ]]; then
+            echo "::error::main has moved. Review the new revision before signing."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.13.0'
+          cache: npm
+          cache-dependency-path: mobile/frontend/package-lock.json
+      - name: Test and bundle maintained frontend
+        working-directory: mobile/frontend
+        run: |
+          npm ci
+          npm test
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install matching Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="$(find "$ANDROID_HOME/cmdline-tools" -type f -path '*/bin/sdkmanager' | sort -V | tail -n 1)"
+          test -n "$SDKMANAGER"
+          "$SDKMANAGER" --install "platforms;android-35" "build-tools;35.0.0"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+      - name: Assemble non-debug production package
+        working-directory: mobile
+        run: gradle :app:assembleRelease --stacktrace
+
+      - name: Sign only with the existing production certificate and verify output
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          TOOLS="$ANDROID_HOME/build-tools/35.0.0"
+          UNSIGNED="mobile/app/build/outputs/apk/release/app-release-unsigned.apk"
+          KEYSTORE="$RUNNER_TEMP/pgone-original-production-signing.p12"
+          mkdir -p signed-output
+          test -s "$UNSIGNED"
+          trap 'rm -f "$KEYSTORE"' EXIT
+          printf '%s' "$PGONE_RELEASE_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          test -s "$KEYSTORE"
+          "$TOOLS/zipalign" -f -p 4 "$UNSIGNED" "$RUNNER_TEMP/pgone-aligned.apk"
+          "$TOOLS/apksigner" sign \
+            --ks "$KEYSTORE" \
+            --ks-key-alias "$PGONE_RELEASE_KEY_ALIAS" \
+            --ks-pass env:PGONE_RELEASE_STORE_PASSWORD \
+            --key-pass env:PGONE_RELEASE_KEY_PASSWORD \
+            --v4-signing-enabled false \
+            --out signed-output/PGOne-v5.1.0-production.apk \
+            "$RUNNER_TEMP/pgone-aligned.apk"
+          APK="signed-output/PGOne-v5.1.0-production.apk"
+          "$TOOLS/apksigner" verify --verbose --print-certs "$APK" > signed-output/signature-report.txt
+          "$TOOLS/aapt" dump badging "$APK" > signed-output/package-report.txt
+          grep -q "package: name='com.safehouse.pg'" signed-output/package-report.txt
+          grep -q "application-label:'PGOne'" signed-output/package-report.txt
+          if grep -q "application-debuggable" signed-output/package-report.txt; then
+            echo "::error::Debuggable APK rejected."
+            exit 1
+          fi
+          # Must be the exact public signing certificate of the 5.0.0/5.0.1
+          # production installations. A newly generated key must NEVER pass.
+          EXPECTED_CERT="d2073d76b14bfaab99922bad4bde54e3d1f904fd294bf3e776bcd3354f4a95e0"
+          FOUND_CERT="$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' signed-output/signature-report.txt | tr '[:upper:]' '[:lower:]' | tr -d '\r' | head -n 1)"
+          if [[ "$FOUND_CERT" != "$EXPECTED_CERT" ]]; then
+            echo "::error::Signature differs from the existing PGOne production signing certificate. Refusing release."
+            exit 1
+          fi
+          "$TOOLS/zipalign" -c -v 4 "$APK" > signed-output/zipalign-check.txt
+          unzip -t "$APK" > signed-output/zip-integrity.txt
+          (cd signed-output && sha256sum PGOne-v5.1.0-production.apk > SHA256SUMS)
+          printf 'commit=%s\npackage=com.safehouse.pg\nversionName=5.1.0\nkind=release-signed\ncertificate_sha256=%s\n' \
+            "$(git rev-parse HEAD)" "$FOUND_CERT" > signed-output/build-provenance.txt
+
+      - name: Upload verified production-signed APK for controlled acceptance
+        uses: actions/upload-artifact@v4
+        with:
+          name: PGOne-production-signed-${{ github.sha }}
+          path: signed-output/
+          if-no-files-found: error
+          retention-days: 14
