@@ -15,3 +15,5 @@ mobile/frontend/playwright-report/
 mobile/frontend/test-results/
 mobile/frontend/visual-evidence/
 mobile/app/src/androidTest/assets/
+web/billing/dist/
+web/billing/screenshots/

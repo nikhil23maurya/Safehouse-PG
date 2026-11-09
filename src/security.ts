@@ -11,7 +11,8 @@ export async function hashPassword(password: string) {
   return `scrypt$${salt.toString("base64url")}$${derived.toString("base64url")}`;
 }
 
-export async function verifyPassword(password: string, stored: string) {
+export async function verifyPassword(password: string, stored: string | null) {
+  if (!stored) return false;
   const [algo, saltText, hashText] = stored.split("$");
   if (algo !== "scrypt" || !saltText || !hashText) return false;
   const salt = Buffer.from(saltText, "base64url");

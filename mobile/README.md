@@ -1,6 +1,6 @@
 # PGOne Android app
 
-> PGOne is a mobile-first PG and hostel management product for property owners and residents. **The Android client has been rebranded; the backend, APIs and payment settlement logic are intentionally unchanged.**
+> PGOne is a mobile-first PG and hostel management product for property owners and residents. The premium onboarding expansion adds isolated platform APIs and verified phone-identity support behind disabled-by-default feature flags. Existing rent settlement and legacy account access are preserved. See [activation and remaining provider gates](../docs/platform/ACTIVATION.md).
 
 ## App identity
 
@@ -38,7 +38,7 @@ Browser tests require Playwright's Chromium browser (`npx playwright install chr
 
 GitHub Actions: **Build PGOne Android APK** (`.github/workflows/build-mobile-apk.yml`). A push to `main` that changes the mobile source triggers frontend and Android validation. Successful runs upload a commit-specific `PGOne-testing-APK-<sha>` artifact.
 
-The artifact contains `PGOne-5.0.0-testing-<sha>.apk`, checksum, Android package metadata and signing diagnostics. **This is a debug/testing build**, not a release-signed production APK. It installs separately from a release package. GitHub artifact download may require repository access.
+The artifact contains `PGOne-5.1.0-testing-<sha>.apk`, checksum, Android package metadata and signing diagnostics. **This is a debug/testing build**, not a release-signed production APK. It installs separately from a release package. GitHub artifact download may require repository access.
 
 ## User journeys
 

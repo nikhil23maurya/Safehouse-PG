@@ -1,0 +1,42 @@
+[
+  {
+    "name": "hero",
+    "file": "hero.webp",
+    "width": 1000,
+    "height": 1500,
+    "bytes": 232492,
+    "sha256": "43ef1a3d1b0b6b04e47fbb2c68636e99b30bf27065cfa5d47dd46d034c441184",
+    "source": "exec-818b96f6-12b4-4e30-9c88-267391c37242.png",
+    "provenance": "Original built-in image generation, 2026-11-09; no runtime generation"
+  },
+  {
+    "name": "property",
+    "file": "property.webp",
+    "width": 720,
+    "height": 720,
+    "bytes": 78496,
+    "sha256": "09a7b1eaac41bf439443b3381ce3c1ac617a66f8f3b366e339de075b901daf2d",
+    "source": "exec-23ab8109-6fa1-46fc-b657-a8e084f48b47.png",
+    "provenance": "Original built-in image generation, 2026-11-09; no runtime generation"
+  },
+  {
+    "name": "ready",
+    "file": "ready.webp",
+    "width": 720,
+    "height": 720,
+    "bytes": 78850,
+    "sha256": "c7500974f762492c39e79d129901ecdefed1ae767eedbeedd76e963360eab7f4",
+    "source": "exec-2d71c360-c96e-4152-bdc8-aff4698c0ab9.png",
+    "provenance": "Original built-in image generation, 2026-11-09; no runtime generation"
+  },
+  {
+    "name": "payments",
+    "file": "payments.webp",
+    "width": 1000,
+    "height": 667,
+    "bytes": 51200,
+    "sha256": "5b9a57c25c76c9661a7ae05b8629e17647c69563c850976fd79ef6a299b5f444",
+    "source": "exec-502444a1-7f57-43c1-a5d5-8a664fa2412b.png",
+    "provenance": "Original built-in image generation, 2026-11-09; no runtime generation"
+  }
+]

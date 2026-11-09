@@ -159,6 +159,13 @@ public class MobileJourneyTest {
         instrumentation.runOnMainSync(() -> web = findWeb(activity.getWindow().getDecorView()));
         assertNotNull("WebView did not initialize", web);
         ((MainActivity)activity).providerQr = new ProviderQr(uri -> QrTestImages.poster(QrTestImages.PAYLOAD));
+        await("document.querySelector('[data-route=phone]') || document.querySelector('[data-form=login]')");
+        if ("true".equals(js("Boolean(document.querySelector('[data-route=phone]'))"))) {
+            screenshot("00-welcome");
+            js("document.querySelector('[data-route=phone][data-params*=SIGN_IN]').click()");
+            await("document.querySelector('[data-route=login]')");
+            js("document.querySelector('[data-route=login]').click()");
+        }
         await("document.querySelector('[data-form=login]')");
         String fixtures = read(instrumentation.getContext().getAssets().open("fixtures.js"));
         instrumentation.runOnMainSync(() -> {
@@ -180,7 +187,13 @@ public class MobileJourneyTest {
         });
         // Reload with fixtures prefixed before the production API client captures fetch.
         instrumentation.runOnMainSync(() -> { web.clearCache(true); web.reload(); });
-        await("window.__nativeFixtures&&document.querySelector('[data-form=login]')");
+        await("window.__nativeFixtures && (document.querySelector('[data-route=phone]') || document.querySelector('[data-form=login]'))");
+        if ("true".equals(js("Boolean(document.querySelector('[data-route=phone]'))"))) {
+            js("document.querySelector('[data-route=phone][data-params*=SIGN_IN]').click()");
+            await("document.querySelector('[data-route=login]')");
+            js("document.querySelector('[data-route=login]').click()");
+        }
+        await("document.querySelector('[data-form=login]')");
         screenshot("01-login");
         js("document.querySelector('[name=password]').focus()");
         instrumentation.runOnMainSync(() -> { web.requestFocus(); ((android.view.inputmethod.InputMethodManager)target.getSystemService(Context.INPUT_METHOD_SERVICE)).showSoftInput(web, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT); });
@@ -305,6 +318,32 @@ public class MobileJourneyTest {
         resumeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         instrumentation.runOnMainSync(() -> target.startActivity(resumeIntent));
         await("document.getElementById('app').dataset.screen==='studentHome'"); screenshot("26-warm-resume");
+        js("document.querySelector('[data-route=profile]').click()");
+        await("document.querySelector('[data-action=logout]')");
+        js("document.querySelector('[data-action=logout]').click()");
+        await("document.querySelector('[data-action=dialog-confirm]')");
+        js("document.querySelector('[data-action=dialog-confirm]').click()");
+        await("document.querySelector('[data-form=login]')");
+        js("window.__platformFixtureEnabled=true");
+        go("phone", "{mode:'SIGN_UP'}"); screenshot("40-phone");
+        js("document.querySelector('[name=phone]').value='9123456789';document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));");
+        await("document.getElementById('app').dataset.screen==='otp' && document.querySelector('.otp-status').textContent.includes('sent')"); screenshot("41-otp");
+        js("document.querySelector('[name=code]').value='123456';document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));");
+        await("document.getElementById('app').dataset.screen==='chooseRole'"); screenshot("42-roles");
+        js("document.querySelector('[data-role=OWNER]').click()");
+        await("document.querySelector('[data-form=setupProfile]')"); screenshot("43-owner-profile");
+        js("document.querySelector('[name=fullName]').value='Rahul Sharma';document.querySelector('[name=email]').value='rahul@example.test';document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));");
+        await("document.querySelector('[data-form=setupProperty]')"); screenshot("44-create-pg");
+        js("document.querySelector('[name=name]').value='Maple House';document.querySelector('[name=city]').value='Bengaluru';document.querySelector('[name=approximateRooms]').value='12';document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));");
+        await("document.getElementById('app').dataset.screen==='setupReady'"); screenshot("45-ready");
+        assertEquals("A PG must be created only once", "1", js("window.__platformFixtures.propertiesCreated"));
+        go("workspaces", "{}"); screenshot("46-workspaces");
+        go("subscription", "{}"); screenshot("47-plan");
+        assertEquals("No external purchase funnel in Android", "true", js("![...document.querySelectorAll('button,a')].some(e=>/buy|subscribe|pay now|upgrade/i.test(e.textContent))"));
+        go("merchant", "{}"); screenshot("48-merchant");
+        assertEquals("No premature bank/KYC collection", "0", js("document.querySelectorAll('input').length"));
+        go("invitations", "{}"); screenshot("49-invitations");
+        go("joinWorkspace", "{}"); screenshot("50-join-pg");
         instrumentation.runOnMainSync(() -> activity.finish());
     }
 }

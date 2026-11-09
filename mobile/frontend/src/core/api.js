@@ -144,7 +144,7 @@ export function createApiClient({
         if (!refreshFlight || refreshFlight.epoch !== snapshot.epoch) {
           const promise = (async () => {
             const result = await raw(
-              "/api/auth/refresh",
+              snapshot.tokens.kind === "PLATFORM" ? "/api/platform/refresh" : "/api/auth/refresh",
               {
                 method: "POST",
                 body: { refreshToken: snapshot.tokens.refreshToken },
