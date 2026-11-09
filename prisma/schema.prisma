@@ -133,6 +133,8 @@ model PgOrganisation {
   invitations PgInvitation[]
   subscriptions PgSubscription[]
   merchant PgMerchantAccount?
+  planOrders PgPlanOrder[]
+  planReceipts PgPlanReceipt[]
   @@index([ownerAccountId])
 }
 
@@ -236,6 +238,52 @@ model PgProviderEvent {
   eventType String
   processedAt DateTime @default(now())
   @@unique([provider, eventKey])
+}
+
+// Owner-initiated monthly payments. Never create a recurring mandate.
+model PgPlanOrder {
+  id String @id @default(cuid())
+  organisationId String
+  requestKey String
+  receiptReference String @unique
+  providerOrderId String? @unique
+  providerKeyId String
+  amountPaise Int @default(24900)
+  taxPaise Int
+  currency String @default("INR")
+  status String @default("CREATING")
+  open Boolean @default(true)
+  signatureVerifiedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organisation PgOrganisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  receipt PgPlanReceipt?
+  @@unique([id, organisationId])
+  @@unique([organisationId, requestKey])
+  @@index([organisationId, open])
+}
+
+model PgPlanReceipt {
+  id String @id @default(cuid())
+  organisationId String
+  orderId String @unique
+  providerPaymentId String @unique
+  receiptNumber String @unique
+  amountPaise Int
+  taxPaise Int
+  refundedPaise Int @default(0)
+  currency String @default("INR")
+  status String @default("CAPTURED")
+  paidAt DateTime
+  periodStart DateTime
+  periodEnd DateTime
+  anchorDay Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  organisation PgOrganisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+  order PgPlanOrder @relation(fields: [orderId, organisationId], references: [id, organisationId], onDelete: Restrict)
+  @@unique([orderId, organisationId])
+  @@index([organisationId, periodEnd])
 }
 
 model PgMerchantAccount {

@@ -109,6 +109,8 @@ async function platform(page) {
         entitled: false,
         legacyAccess: false,
         configured: false,
+        mode: "MANUAL_MONTHLY",
+        recurring: false,
         tax: null,
         subscription: null,
       };
@@ -271,6 +273,8 @@ test("phone onboarding, real controls, saved property and restored workspace", a
   await capture("ready");
   expect(fixture.propertiesCreated).toBe(1);
   await go(page, "subscription");
+  await expect(page.getByText("one-time monthly payment · no auto-debit", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cancel renewal", exact: true })).toHaveCount(0);
   await capture("plan");
   await expect(
     page.getByRole("button", { name: /buy|subscribe|pay now|upgrade/i }),

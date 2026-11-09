@@ -2,27 +2,23 @@ import type { Request } from "express";
 import crypto from "node:crypto";
 import { assert } from "../errors.js";
 import { prisma } from "../db.js";
-import { platformConfig, platformEnabled } from "./config.js";
+import { platformConfig, subscriptionCredentials } from "./config.js";
 import {
-  billingConfigured,
   reconcileSubscription,
   subscriptionStatus,
 } from "./billing.js";
 import { atomic, audit, ownerOrganisation } from "./service.js";
+import { manualCheckoutEnabled } from "./plan-payments.js";
 
 export function customWebBillingEnabled() {
-  return (
-    platformEnabled() &&
-    platformConfig.PGONE_CUSTOM_WEB_BILLING_ENABLED === "true" &&
-    billingConfigured()
-  );
+  return manualCheckoutEnabled();
 }
 export function requireBillingOrigin(req: Request) {
   assert(
     customWebBillingEnabled(),
     503,
     "CUSTOM_BILLING_UNAVAILABLE",
-    "Custom subscription authorisation is awaiting provider activation.",
+    "One-time monthly payments need provider configuration.",
   );
   assert(
     req.header("origin") ===
@@ -59,14 +55,15 @@ export async function verifyAuthorisation(
   const sub = await prisma.pgSubscription.findFirst({
     where: { organisationId, current: true },
   });
+  const credentials = subscriptionCredentials();
   assert(
     sub?.providerSubscriptionId &&
-      platformConfig.PGONE_SUBSCRIPTION_KEY_SECRET &&
+      credentials &&
       authorisationSignature(
         input.paymentId,
         sub.providerSubscriptionId,
         input.signature,
-        platformConfig.PGONE_SUBSCRIPTION_KEY_SECRET,
+        credentials.keySecret,
       ),
     400,
     "INVALID_AUTHORISATION",

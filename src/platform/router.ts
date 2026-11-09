@@ -8,6 +8,7 @@ import {
   platformEnabled,
   PLAN,
   STAFF_PERMISSIONS,
+  subscriptionCredentials,
 } from "./config.js";
 import { phoneConfig, verifyPhoneIdentity } from "./identity.js";
 import {
@@ -30,7 +31,6 @@ import {
 } from "./invitations.js";
 import {
   cancelSubscription,
-  createSubscription,
   reconcileSubscription,
   recoverSubscriptionCreation,
   subscriptionStatus,
@@ -41,6 +41,7 @@ import {
   requireBillingOrigin,
   verifyAuthorisation,
 } from "./web-billing.js";
+import { createPlanOrder, manualPlanStatus, recheckPlanPayments, verifyPlanPayment } from "./plan-payments.js";
 
 export const platformRouter = express.Router();
 const limited = rateLimit({
@@ -68,10 +69,11 @@ platformRouter.get("/config", (req, res) => {
     customWebBilling: {
       enabled: customWebBillingEnabled(),
       keyId: customWebBillingEnabled()
-        ? platformConfig.PGONE_SUBSCRIPTION_KEY_ID
+        ? subscriptionCredentials()!.keyId
         : null,
     },
     plan: PLAN,
+    billingMode: "MANUAL_MONTHLY",
     deploymentCommit: process.env.RENDER_GIT_COMMIT || null,
     androidBilling: "CONSUMPTION_ONLY",
     legal: {
@@ -87,39 +89,23 @@ platformRouter.post(
     requireBillingOrigin(req);
     const { account } = await session(req);
     const organisationId = id.parse(req.params.id);
-    const consent = z
-      .object({
-        accepted: z.literal(true),
-        amountPaise: z.literal(24900),
-        cycles: z.number().int().positive(),
-      })
-      .parse(req.body);
-    assert(
-      consent.cycles === platformConfig.PGONE_SUBSCRIPTION_CYCLES,
-      409,
-      "MANDATE_CHANGED",
-      "The mandate details changed. Refresh and review them again.",
-    );
     await ownerOrganisation(account.id, organisationId);
-    await atomic((tx) =>
-      audit(
-        tx,
-        account.id,
-        organisationId,
-        "SUBSCRIPTION_CONSENT_RECORDED",
-        organisationId,
-        {
-          amountPaise: consent.amountPaise,
-          cycles: consent.cycles,
-          interval: "month",
-          terms: platformConfig.PGONE_TERMS_URL!,
-          privacy: platformConfig.PGONE_PRIVACY_URL!,
-        },
-      ),
-    );
-    res.json(await createSubscription(account.id, organisationId));
+    assert(false, 410, "RECURRING_PURCHASE_REMOVED", "PGOne uses a fresh one-time payment each month. Refresh the billing website.");
   },
 );
+platformRouter.post("/organisations/:id/plan/orders", limited, async (req, res) => {
+  requireBillingOrigin(req);
+  const { account } = await session(req);
+  const input = z.object({ accepted: z.literal(true), amountPaise: z.literal(24900),
+    recurring: z.literal(false), requestKey: z.string().min(16).max(100) }).parse(req.body);
+  res.json(await createPlanOrder(account.id, id.parse(req.params.id), input.requestKey));
+});
+platformRouter.post("/organisations/:id/plan/orders/:orderId/verify", limited, async (req, res) => {
+  requireBillingOrigin(req);
+  const { account } = await session(req);
+  const input = z.object({ paymentId: z.string().regex(/^pay_[a-zA-Z0-9]+$/), signature: z.string().regex(/^[a-fA-F0-9]{64}$/) }).parse(req.body);
+  res.json(await verifyPlanPayment(account.id, id.parse(req.params.id), id.parse(req.params.orderId), input));
+});
 platformRouter.post(
   "/organisations/:id/subscription/authorisation",
   limited,
@@ -425,7 +411,7 @@ platformRouter.get("/organisations/:id/members", async (req, res) => {
 });
 platformRouter.get("/organisations/:id/subscription", async (req, res) => {
   const { account } = await session(req);
-  res.json(await subscriptionStatus(account.id, id.parse(req.params.id)));
+  res.json(await manualPlanStatus(account.id, id.parse(req.params.id)));
 });
 platformRouter.post(
   "/organisations/:id/subscription/recheck",
@@ -438,7 +424,7 @@ platformRouter.post(
     if (sub && !sub.providerSubscriptionId)
       sub = await recoverSubscriptionCreation(sub.id);
     if (sub?.providerSubscriptionId) await reconcileSubscription(sub.id);
-    res.json(await subscriptionStatus(account.id, org.id));
+    res.json(await recheckPlanPayments(account.id, org.id));
   },
 );
 platformRouter.post(

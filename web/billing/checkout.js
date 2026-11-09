@@ -1,5 +1,5 @@
 /** Official Razorpay Web Custom SDK. This file is never bundled into Android. */
-export class CustomUpiAuthorisation {
+export class CustomUpiPayment {
   constructor({ Razorpay, keyId, onSigned, onUncertain }) {
     this.sdk = new Razorpay({ key: keyId });
     this.busy = false;
@@ -10,7 +10,7 @@ export class CustomUpiAuthorisation {
     this.sdk.on("payment.error", () => {
       this.busy = false;
       onUncertain(
-        "The payment app could not confirm authorisation. Refresh status before trying again.",
+        "The payment app could not confirm payment. Refresh status before trying again.",
       );
     });
   }
@@ -43,15 +43,15 @@ export class CustomUpiAuthorisation {
     );
     return results.filter((r) => r.status === "fulfilled").map((r) => r.value);
   }
-  authorise({ subscriptionId, contact, email, app }) {
+  pay({ orderId, contact, email, app }) {
     if (this.busy) return false;
     if (
-      !/^sub_[a-zA-Z0-9]+$/.test(subscriptionId) ||
+      !/^order_[a-zA-Z0-9]+$/.test(orderId) ||
       !/^[6-9]\d{9}$/.test(contact) ||
       !["gpay", "phonepe", "paytm", "bhim"].includes(app)
     )
       throw new Error(
-        "Review the subscription and your verified mobile number first.",
+        "Review this one-time payment and your mobile number first.",
       );
     this.busy = true;
     try {
@@ -59,7 +59,7 @@ export class CustomUpiAuthorisation {
         {
           amount: 24900,
           currency: "INR",
-          subscription_id: subscriptionId,
+          order_id: orderId,
           method: "upi",
           contact,
           email,

@@ -17,6 +17,7 @@ import { platformWorkspaceBridge } from "./platform/bridge.js";
 import { processSubscriptionWebhook } from "./platform/billing.js";
 import { billingWebRouter } from "./platform/web-static.js";
 import { legalRouter } from "./platform/legal.js";
+import { processPlanWebhook } from "./platform/plan-payments.js";
 import {
   datePartsInTimeZone,
   invoiceTotal,
@@ -181,6 +182,10 @@ app.post("/api/webhooks/razorpay", express.raw({ type: "application/json", limit
 
 app.post("/api/platform-webhooks/subscriptions", express.raw({ type: "application/json", limit: "1mb" }), async (req, res) => {
   await processSubscriptionWebhook(req.body, req.header("x-razorpay-signature") || "", req.header("x-razorpay-event-id"));
+  res.json({ ok: true });
+});
+app.post("/api/platform-webhooks/plan-payments", express.raw({ type: "application/json", limit: "1mb" }), async (req, res) => {
+  await processPlanWebhook(req.body, req.header("x-razorpay-signature") || "", req.header("x-razorpay-event-id"));
   res.json({ ok: true });
 });
 app.use(platformWorkspaceBridge);

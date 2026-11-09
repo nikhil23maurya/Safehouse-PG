@@ -1,7 +1,7 @@
 name: Verify PGOne Platform
 on:
   pull_request:
-    paths: ['src/**', 'prisma/**', 'tests/**', 'web/billing/**', 'package.json', '.github/workflows/pgone-platform.yml']
+    paths: ['src/**', 'prisma/**', 'tests/**', 'web/billing/**', 'package.json', 'scripts/pgone-payment-preflight.mjs', '.github/workflows/pgone-platform.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -33,7 +33,9 @@ jobs:
           node-version: '24.13.0'
       - run: npm install --no-audit --no-fund
       - run: npm run build
+      - name: Check read-only payment preflight
+        run: node --check scripts/pgone-payment-preflight.mjs
       - name: Verify backward-compatible migrations on isolated PostgreSQL
         run: npx prisma migrate deploy
       - name: Verify platform success, failure and isolation
-        run: node --import tsx --test tests/platform.test.ts tests/platform.integration.test.ts tests/platform.public.test.ts
+        run: node --import tsx --test tests/platform.test.ts tests/platform.integration.test.ts tests/platform.public.test.ts tests/platform.credentials.test.ts tests/platform.plan-period.test.ts tests/platform.plan-payments.integration.test.ts

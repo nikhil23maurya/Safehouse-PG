@@ -12,7 +12,7 @@ import {
   validateForm,
   showFormError,
 } from "../../mobile/frontend/src/components/forms.js";
-import { CustomUpiAuthorisation, loadCustomSdk } from "./checkout.js";
+import { CustomUpiPayment, loadCustomSdk } from "./checkout.js";
 
 const state = { tokens: null, user: null, authEpoch: 0, property: null };
 let config,
@@ -54,7 +54,7 @@ function resetPayment() {
 }
 function page(title, description, content) {
   clearInterval(countdown);
-  root.innerHTML = `<main class="onboarding-page royal-page web-billing"><header class="onboarding-top">${brand()}${state.tokens ? button("Sign out", { action: "logout", kind: "text-button" }) : ""}</header><div class="royal-intro"><span class="royal-kicker">YOUR PGONE SUBSCRIPTION</span><h1>${esc(title)}</h1><span class="gold-rule"></span><p>${esc(description)}</p></div>${content}<p class="legal-copy">${config?.legal?.terms ? `<a href="${esc(config.legal.terms)}" target="_blank" rel="noopener noreferrer">Terms</a>` : ""} · ${config?.legal?.privacy ? `<a href="${esc(config.legal.privacy)}" target="_blank" rel="noopener noreferrer">Privacy Policy</a>` : ""}</p></main>`;
+  root.innerHTML = `<main class="onboarding-page royal-page web-billing"><header class="onboarding-top">${brand()}${state.tokens ? button("Sign out", { action: "logout", kind: "text-button" }) : ""}</header><div class="royal-intro"><span class="royal-kicker">YOUR PGONE PLAN</span><h1>${esc(title)}</h1><span class="gold-rule"></span><p>${esc(description)}</p></div>${content}<p class="legal-copy">${config?.legal?.terms ? `<a href="${esc(config.legal.terms)}" target="_blank" rel="noopener noreferrer">Terms</a>` : ""} · ${config?.legal?.privacy ? `<a href="${esc(config.legal.privacy)}" target="_blank" rel="noopener noreferrer">Privacy Policy</a>` : ""}</p></main>`;
 }
 function login() {
   flowGeneration++;
@@ -176,6 +176,7 @@ async function status(recheck = false) {
   if (epoch !== state.authEpoch || organisationId !== org) return;
   data = result;
   resetPayment();
+  message("");
   renderPlan();
 }
 function renderPlan() {
@@ -183,7 +184,7 @@ function renderPlan() {
   page(
     "More calm. Every month.",
     "One simple plan for your PG workspaces.",
-    `<div class="royal-plan"><span class="plan-name">PGOne</span><div class="plan-price">₹249<small>/ month</small></div><p>INR · final price, inclusive of applicable tax</p><ul><li>${icon("check")}Rooms & residents</li><li>${icon("check")}Rent records & receipts</li><li>${icon("check")}Owner-approved team access</li></ul></div>${notice(subscribed ? (data.legacyAccess ? "Your existing workspace access is preserved." : "Your access is active for the confirmed paid period.") : data.subscription ? `Current status: ${data.subscription.status.replaceAll("_", " ")}. Refresh before authorising another payment.` : "No subscription has been activated yet.")}${data.subscription?.periodEnd ? `<p class="legal-copy">Current period ends ${date(data.subscription.periodEnd)}</p>` : ""}${!subscribed && config.customWebBilling?.enabled && data.renewalCycles ? `<form data-form="prepare" novalidate><div class="form-error" role="alert"></div>${!account.phoneE164 ? field("contact", "Mobile number for the payment mandate", { required: true, attrs: 'inputmode="tel" pattern="[6-9][0-9]{9}" maxlength="10"' }) : ""}${field("email", "Payment contact email", { type: "email", required: true, value: account.email || "", attrs: 'autocomplete="email"' })}<label class="billing-consent"><input name="consent" type="checkbox" required><span>I authorise ₹249 every month for ${data.renewalCycles} monthly cycles, starting with the first ₹249 payment. I can cancel future renewals. The final monthly price includes applicable tax.</span></label>${button("Prepare UPI authorisation", { type: "submit", kind: "primary block" })}</form><div data-payment-apps></div>` : !subscribed ? notice("Subscription purchases are awaiting merchant activation. No payment will be initiated.") : ""}${button("Refresh payment status", { action: "refresh", kind: "secondary block" })}${data.subscription && !data.subscription.cancelAtPeriodEnd ? button("Cancel future renewal", { action: "cancel", kind: "text-button" }) : ""}<p class="legal-copy">Payments are authorised through Razorpay’s official Custom SDK and your UPI app. PGOne never asks for your UPI PIN or card details.</p>${data.subscription?.payments?.length ? `<h2 class="royal-section-title">Payment records</h2>${data.subscription.payments.map((p) => `<div class="billing-record"><strong>₹${(p.amountPaise / 100).toFixed(2)}</strong><span>${date(p.paidAt)} · ${esc(p.receiptNumber)}</span>${p.refundedPaise ? `<small>Refunded ₹${(p.refundedPaise / 100).toFixed(2)}</small>` : ""}</div>`).join("")}` : ""}`,
+    `<div class="royal-plan"><span class="plan-name">PGOne</span><div class="plan-price">₹249<small>/ month</small></div><p>One-time payment · one calendar month · no auto-debit</p><ul><li>${icon("check")}Rooms & residents</li><li>${icon("check")}Rent records & receipts</li><li>${icon("check")}Owner-approved team access</li></ul></div>${notice(subscribed ? (data.legacyAccess ? "Your existing workspace access is preserved." : "Your access is active for the confirmed paid period.") : "Make a fresh ₹249 payment to activate one calendar month of PGOne.")}${data.accessEnd ? `<p class="legal-copy">Access until ${date(data.accessEnd)}. An early renewal adds a month after this date.</p>` : ""}${!data.legacyAccess && config.customWebBilling?.enabled && data.mode === "MANUAL_MONTHLY" ? `<form data-form="prepare" novalidate><div class="form-error" role="alert"></div>${!account.phoneE164 ? field("contact", "Mobile number for this payment", { required: true, attrs: 'inputmode="tel" pattern="[6-9][0-9]{9}" maxlength="10"' }) : ""}${field("email", "Payment contact email", { type: "email", required: true, value: account.email || "", attrs: 'autocomplete="email"' })}<label class="billing-consent"><input name="consent" type="checkbox" required><span>I agree to pay ₹249 once for one calendar month, including applicable tax. Each renewal needs a fresh payment. No recurring mandate or automatic debit.</span></label>${button(subscribed ? "Renew for ₹249" : "Pay ₹249 for one month", { type: "submit", kind: "primary block" })}</form><div data-payment-apps></div>` : !subscribed ? notice("Monthly payments are awaiting merchant configuration. No payment will be initiated.") : ""}${button("Refresh payment status", { action: "refresh", kind: "secondary block" })}${data.legacySubscription?.provider && !data.legacySubscription.cancelAtPeriodEnd ? button("Cancel previous auto-renewal", { action: "cancel", kind: "text-button" }) : ""}<p class="legal-copy">Payments use Razorpay’s official Custom SDK and your UPI app. PGOne never asks for your UPI PIN or card details.</p>${data.subscription?.payments?.length ? `<h2 class="royal-section-title">Payment records</h2>${data.subscription.payments.map((p) => `<div class="billing-record"><strong>₹${(p.amountPaise / 100).toFixed(2)}</strong><span>${date(p.paidAt)} · ${esc(p.receiptNumber)}</span>${p.refundedPaise ? `<small>Refunded ₹${(p.refundedPaise / 100).toFixed(2)}</small>` : `<small>Access ${date(p.periodStart)} – ${date(p.periodEnd)}</small>`}</div>`).join("")}` : ""}`,
   );
 }
 async function prepare(values) {
@@ -197,14 +198,15 @@ async function prepare(values) {
   };
   const Razorpay = await loadCustomSdk();
   current();
-  adapter = new CustomUpiAuthorisation({
+  let paymentOrder;
+  adapter = new CustomUpiPayment({
     Razorpay,
     keyId: config.customWebBilling.keyId,
     onSigned: async (response) => {
       if (state.authEpoch !== epoch) return;
       try {
         const result = await api(
-          `/api/platform/organisations/${organisationId}/subscription/authorisation`,
+          `/api/platform/organisations/${organisationId}/plan/orders/${paymentOrder.id}/verify`,
           {
             method: "POST",
             body: {
@@ -219,8 +221,8 @@ async function prepare(values) {
         renderPlan();
         message(
           data.entitled
-            ? "Your subscription payment is verified."
-            : "Authorisation received. Payment is still being verified; refresh status shortly.",
+            ? "Your monthly payment is verified."
+            : "Payment is still being verified; refresh status shortly. No extra payment is needed.",
         );
       } catch (error) {
         message(error.message);
@@ -231,17 +233,24 @@ async function prepare(values) {
   apps = await adapter.availableApps();
   if (!apps.length)
     throw new Error(
-      "No supported UPI app is available here. Open this page in your mobile browser with a supported recurring-payment UPI app.",
+      "No supported UPI app is available here. Open this page in your mobile browser with a supported UPI app.",
     );
   current();
+  const requestKey = crypto.randomUUID();
   authorisation = await api(
-    `/api/platform/organisations/${organisationId}/subscription/authorise`,
+    `/api/platform/organisations/${organisationId}/plan/orders`,
     {
       method: "POST",
-      body: { accepted: true, amountPaise: 24900, cycles: data.renewalCycles },
+      body: { accepted: true, amountPaise: 24900, recurring: false, requestKey },
     },
   );
   current();
+  if (!authorisation.payable) {
+    await status();
+    message("This payment is already processed. Review your access and receipt before starting another renewal.");
+    return;
+  }
+  paymentOrder = authorisation;
   authorisation.contact =
     account.phoneE164?.replace(/^\+91/, "") || values.contact;
   authorisation.email = values.email;
@@ -350,8 +359,8 @@ document.addEventListener("click", async (event) => {
     }
     if (action === "authorise" && !processing) {
       processing = true;
-      adapter.authorise({
-        subscriptionId: authorisation.subscriptionId,
+      adapter.pay({
+        orderId: authorisation.orderId,
         contact: authorisation.contact,
         email: authorisation.email,
         app: b.dataset.app,
@@ -360,7 +369,7 @@ document.addEventListener("click", async (event) => {
         el.disabled = true;
       });
       message(
-        "Complete authorisation in your UPI app, then refresh payment status here.",
+        "Complete this one-time payment in your UPI app, then refresh payment status here.",
       );
     }
   } catch (error) {

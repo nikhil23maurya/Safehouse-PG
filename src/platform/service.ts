@@ -13,7 +13,12 @@ export async function atomic<T>(
         isolationLevel: "Serializable",
       });
     } catch (error: any) {
-      if (attempt >= 3 || !["P2034", "P2002"].includes(error.code)) throw error;
+      const retryable = ["P2034", "P2002"].includes(error.code) ||
+        ["40001", "40P01"].includes(error.cause?.originalCode);
+      if (attempt >= 3 || !retryable) throw error;
+      // Prisma's PostgreSQL adapter can surface commit conflicts directly.
+      // Only database work inside this transaction retries, never provider calls.
+      await new Promise(resolve => setTimeout(resolve, (attempt + 1) * 10));
     }
   }
 }
