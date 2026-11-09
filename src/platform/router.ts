@@ -455,9 +455,19 @@ platformRouter.post(
     res.json(await subscriptionStatus(account.id, String(req.params.id)));
   },
 );
-platformRouter.use("/organisations/:id/merchant", (_req,res,next) => {
-  res.setHeader("Cache-Control","no-store");
-  next();
+platformRouter.use("/organisations/:id/merchant", async (req,res,next) => {
+  try {
+    res.setHeader("Cache-Control","no-store");
+    // Payment account activation is a post-subscription action for new owners.
+    // A direct API POST cannot bypass the same rule applied in mobile navigation.
+    if (req.method !== "GET") {
+      const { account } = await session(req);
+      const org = await ownerOrganisation(account.id, id.parse(req.params.id));
+      assert(await entitlement(org.id), 402, "SUBSCRIPTION_REQUIRED",
+        "Activate your ₹249 PGOne plan before submitting merchant or bank verification.");
+    }
+    next();
+  } catch (error) { next(error); }
 });
 platformRouter.get("/organisations/:id/merchant", async (req, res) => {
   const { account } = await session(req);
