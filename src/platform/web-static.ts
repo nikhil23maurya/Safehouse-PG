@@ -17,6 +17,10 @@ const files = new Set([
   "onboarding-payments.webp",
 ]);
 billingWebRouter.get(["/", "/:filename"], async (req, res) => {
+  if (!req.params.filename && req.originalUrl.split("?")[0] === req.baseUrl) {
+    res.redirect(308, `${req.baseUrl}/`);
+    return;
+  }
   const file = String(req.params.filename || "index.html");
   if (!files.has(file))
     throw new AppError(404, "NOT_FOUND", "Billing asset not found.");

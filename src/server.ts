@@ -186,7 +186,6 @@ app.post("/api/platform-webhooks/subscriptions", express.raw({ type: "applicatio
 app.use(platformWorkspaceBridge);
 app.use(express.json({ limit: "1mb" }));
 app.use("/api/platform", platformRouter);
-app.get("/billing", (_req, res) => res.redirect(308, "/billing/"));
 app.use("/billing", billingWebRouter);
 app.use("/legal", legalRouter);
 
