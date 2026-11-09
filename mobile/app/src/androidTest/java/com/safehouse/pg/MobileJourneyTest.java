@@ -354,11 +354,11 @@ public class MobileJourneyTest {
         go("merchant", "{}"); screenshot("48-merchant");
         assertEquals("No premature bank/KYC collection", "0", js("document.querySelectorAll('input').length"));
         js("window.__platformFixtures.merchant.enabled=true");
-        go("merchantProfile", "{}"); screenshot("48b-merchant-profile");
-        js("document.querySelector('[name=website]').value='https://example.test/pg';document.querySelector('[name=businessType]').value='Individual';document.querySelector('[name=businessModel]').value='B2C';document.querySelector('[name=consent]').checked=true;document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));");
-        await("document.getElementById('app').dataset.screen==='merchantBank'"); screenshot("48c-merchant-bank");
-        assertEquals("Bank number remains masked", "true", js("document.querySelector('[name=accountNumber]').type==='password'"));
-        assertEquals("No bank account in session vault", "true", js("!SafeHouseNative.getSession().includes('accountNumber')"));
+        go("merchantProfile", "{}"); screenshot("48b-razorpay-owner-profile");
+        js("document.querySelector('[name=businessType]').value='individual';document.querySelector('[name=pan]').value='ABCDE1234F';document.querySelector('[name=vpa]').value='rahul@okhdfcbank';document.querySelector('[name=consent]').checked=true;document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));");
+        await("document.getElementById('app').dataset.screen==='merchant'"); screenshot("48c-razorpay-kyc-pending");
+        assertEquals("PAN never stored in local session vault", "true", js("!SafeHouseNative.getSession().includes('ABCDE1234F')"));
+        assertEquals("UPI destination never stored in session vault", "true", js("!SafeHouseNative.getSession().includes('rahul@okhdfcbank')"));
         go("invitations", "{}"); screenshot("49-invitations");
         go("joinWorkspace", "{}"); screenshot("50-join-pg");
         instrumentation.runOnMainSync(() -> activity.finish());
