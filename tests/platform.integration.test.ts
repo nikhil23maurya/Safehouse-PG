@@ -340,8 +340,28 @@ test("isolated database: creation retries, invitations, access revocation and te
   assert.equal(view.status, 200);
   assert.equal(view.body.property.id, p.propertyId);
   assert.equal(view.body.occupancy.activeResidents, 0);
-  assert.equal((await request("/api/platform/organisations/foreign/subscription/authorise", ownerTokens.accessToken, { accepted: true, amountPaise: 24900, cycles: 12 })).status, 403);
-  const badOrigin = await fetch(`http://127.0.0.1:${port}/api/platform/organisations/${p.organisationId}/subscription/authorise`, { method: "POST", headers: { authorization: `Bearer ${ownerTokens.accessToken}`, origin: "https://unapproved.example.test", "content-type": "application/json" }, body: JSON.stringify({ accepted: true, amountPaise: 24900, cycles: 12 }) });
+  assert.equal(
+    (
+      await request(
+        "/api/platform/organisations/foreign/subscription/authorise",
+        ownerTokens.accessToken,
+        { accepted: true, amountPaise: 24900, cycles: 12 },
+      )
+    ).status,
+    403,
+  );
+  const badOrigin = await fetch(
+    `http://127.0.0.1:${port}/api/platform/organisations/${p.organisationId}/subscription/authorise`,
+    {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${ownerTokens.accessToken}`,
+        origin: "https://unapproved.example.test",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ accepted: true, amountPaise: 24900, cycles: 12 }),
+    },
+  );
   assert.equal(badOrigin.status, 403);
   const unused = await createInvitation(a.id, {
     organisationId: p.organisationId,
@@ -362,6 +382,15 @@ test("isolated database: creation retries, invitations, access revocation and te
   await assert.rejects(() => accountSession(staffTokens.accessToken), {
     code: "MEMBERSHIP_REVOKED",
   });
+  assert.equal(
+    (await accountSession(staffTokens.accessToken, "access", true)).membership,
+    null,
+  );
+  assert.equal(
+    (await request("/api/platform/session", staffTokens.accessToken)).status,
+    200,
+    "revocation must still allow choosing another authorised workspace",
+  );
   await request("/api/platform/logout", platformPair(a).accessToken, {});
   await assert.rejects(
     () => accountSession(ownerTokens.refreshToken, "refresh"),

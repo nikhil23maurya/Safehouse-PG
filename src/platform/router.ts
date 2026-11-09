@@ -54,6 +54,8 @@ const code = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 async function session(req: Request) {
   return accountSession(
     (req.header("authorization") || "").replace(/^Bearer /, ""),
+    "access",
+    true,
   );
 }
 
@@ -157,7 +159,11 @@ platformRouter.post("/refresh", limited, async (req, res) => {
   const { refreshToken } = z
     .object({ refreshToken: z.string().max(8192) })
     .parse(req.body);
-  const { account, membership } = await accountSession(refreshToken, "refresh");
+  const { account, membership } = await accountSession(
+    refreshToken,
+    "refresh",
+    true,
+  );
   res.json({ tokens: platformPair(account, membership?.id || null) });
 });
 platformRouter.get("/session", async (req, res) => {

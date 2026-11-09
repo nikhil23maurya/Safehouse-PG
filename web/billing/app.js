@@ -29,6 +29,7 @@ let config,
   sentAt = 0,
   countdown,
   processing = false;
+let flowGeneration = 0;
 const root = document.getElementById("app");
 const api = createApiClient({
   getState: () => state,
@@ -56,6 +57,7 @@ function page(title, description, content) {
   root.innerHTML = `<main class="onboarding-page royal-page web-billing"><header class="onboarding-top">${brand()}${state.tokens ? button("Sign out", { action: "logout", kind: "text-button" }) : ""}</header><div class="royal-intro"><span class="royal-kicker">YOUR PGONE SUBSCRIPTION</span><h1>${esc(title)}</h1><span class="gold-rule"></span><p>${esc(description)}</p></div>${content}<p class="legal-copy">${config?.legal?.terms ? `<a href="${esc(config.legal.terms)}" target="_blank" rel="noopener noreferrer">Terms</a>` : ""} · ${config?.legal?.privacy ? `<a href="${esc(config.legal.privacy)}" target="_blank" rel="noopener noreferrer">Privacy Policy</a>` : ""}</p></main>`;
 }
 function login() {
+  flowGeneration++;
   if (!config?.enabled)
     return page(
       "A little more patience.",
@@ -88,18 +90,22 @@ async function firebase() {
   await sdk.setPersistence(auth.value, sdk.inMemoryPersistence);
 }
 async function sendCode(number) {
+  const generation = flowGeneration;
   if (Date.now() - sentAt < 60000)
     throw new Error("Please wait one minute before requesting another code.");
   await firebase();
+  if (generation !== flowGeneration) return;
   recaptcha?.clear();
   recaptcha = new auth.sdk.RecaptchaVerifier(auth.value, "recaptcha", {
     size: "normal",
   });
-  confirmation = await auth.sdk.signInWithPhoneNumber(
+  const nextConfirmation = await auth.sdk.signInWithPhoneNumber(
     auth.value,
     `+91${number}`,
     recaptcha,
   );
+  if (generation !== flowGeneration) return;
+  confirmation = nextConfirmation;
   phone = number;
   sentAt = Date.now();
   showCode();
@@ -123,10 +129,12 @@ function showCode() {
   }, 500);
 }
 async function session(tokens) {
+  const generation = ++flowGeneration;
   state.tokens = tokens;
   state.authEpoch++;
   resetPayment();
   const snapshot = await api("/api/platform/session");
+  if (generation !== flowGeneration) return;
   account = snapshot.account;
   state.user = snapshot.user;
   const organisations = [
@@ -246,6 +254,7 @@ document.addEventListener("submit", async (event) => {
   if (!form.matches("[data-form]")) return;
   event.preventDefault();
   if (form.dataset.busy || !validateForm(form)) return;
+  const generation = flowGeneration;
   form.dataset.busy = "true";
   const submit = form.querySelector('[type="submit"]');
   submit.disabled = true;
@@ -254,13 +263,14 @@ document.addEventListener("submit", async (event) => {
     if (form.dataset.form === "phone") await sendCode(values.phone);
     if (form.dataset.form === "otp") {
       const result = await confirmation.confirm(values.code);
+      if (generation !== flowGeneration) return;
       const exchange = await api("/api/platform/phone", {
         public: true,
         method: "POST",
         body: { idToken: await result.user.getIdToken(true) },
       });
       await auth.sdk.signOut(auth.value);
-      await session(exchange.tokens);
+      if (generation === flowGeneration) await session(exchange.tokens);
     }
     if (form.dataset.form === "email") {
       const legacy = await api("/api/auth/login", {
@@ -268,12 +278,13 @@ document.addEventListener("submit", async (event) => {
         method: "POST",
         body: values,
       });
+      if (generation !== flowGeneration) return;
       const linked = await api("/api/platform/link-legacy", {
         public: true,
         method: "POST",
         body: { legacyAccessToken: legacy.tokens.accessToken },
       });
-      await session(linked.tokens);
+      if (generation === flowGeneration) await session(linked.tokens);
     }
     if (form.dataset.form === "prepare") await prepare(values);
   } catch (error) {
@@ -301,6 +312,7 @@ document.addEventListener("click", async (event) => {
     }
     if (action === "logout") {
       state.authEpoch++;
+      flowGeneration++;
       try {
         await api("/api/platform/logout", { method: "POST" });
       } finally {
@@ -330,6 +342,7 @@ document.addEventListener("click", async (event) => {
     }
     if (action === "resend") await sendCode(phone);
     if (action === "changeNumber") {
+      flowGeneration++;
       confirmation = null;
       recaptcha?.clear();
       await auth?.sdk.signOut(auth.value);

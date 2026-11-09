@@ -38,6 +38,7 @@ export async function audit(
 export async function accountSession(
   token: string,
   type: "access" | "refresh" = "access",
+  accountOnlyFallback = false,
 ) {
   const claims = platformClaims(token, type);
   const account = await prisma.pgAccount.findUnique({
@@ -62,7 +63,7 @@ export async function accountSession(
       })
     : null;
   assert(
-    !claims.membershipId || membership,
+    accountOnlyFallback || !claims.membershipId || membership,
     403,
     "MEMBERSHIP_REVOKED",
     "Your access to this workspace has changed.",
@@ -351,8 +352,9 @@ export async function createProperty(
     });
     if (prior) {
       assert(
-        (!input.organisationId || prior.organisationId === input.organisationId) &&
-        prior.property.name === input.name &&
+        (!input.organisationId ||
+          prior.organisationId === input.organisationId) &&
+          prior.property.name === input.name &&
           prior.city === input.city &&
           (prior.approximateRooms ?? null) === (input.approximateRooms ?? null),
         409,
