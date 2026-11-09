@@ -81,6 +81,8 @@ export function createPlatformFixtures() {
           entitled: false,
           legacyAccess: false,
           configured: false,
+          mode: "MANUAL_MONTHLY",
+          recurring: false,
           tax: null,
           subscription: null,
         };

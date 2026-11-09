@@ -2,9 +2,8 @@ import type { Request } from "express";
 import crypto from "node:crypto";
 import { assert } from "../errors.js";
 import { prisma } from "../db.js";
-import { platformConfig, platformEnabled, subscriptionCredentials } from "./config.js";
+import { platformConfig, subscriptionCredentials } from "./config.js";
 import {
-  billingConfigured,
   reconcileSubscription,
   subscriptionStatus,
 } from "./billing.js";

@@ -5,7 +5,7 @@ import { AppError, assert } from "../errors.js";
 import { PLAN, platformConfig, platformEnabled, subscriptionCredentials, taxBreakdown } from "./config.js";
 import { atomic, audit, ownerOrganisation } from "./service.js";
 import { subscriptionStatus, webhookSignature } from "./billing.js";
-import { indiaDay, nextCalendarMonth } from "./plan-period.js";
+import { indiaDay, nextCalendarMonth, paidAccessChain } from "./plan-period.js";
 
 export const planWebhookSecret = () => platformConfig.PGONE_SUBSCRIPTION_WEBHOOK_SECRET || config.RAZORPAY_WEBHOOK_SECRET;
 export const manualBillingConfigured = () => Boolean(subscriptionCredentials() && planWebhookSecret() &&
@@ -126,15 +126,16 @@ export async function reconcilePlanOrder(id: string, provider = new RazorpayPlan
       }
       return;
     }
-    const previous = await tx.pgPlanReceipt.findFirst({
-      where: { organisationId: local.organisationId, status: "CAPTURED", refundedPaise: 0, periodEnd: { gt: now } }, orderBy: { periodEnd: "desc" },
+    const previous = await tx.pgPlanReceipt.findMany({
+      where: { organisationId: local.organisationId, status: "CAPTURED", refundedPaise: 0, periodEnd: { gt: now } },
     });
     // Preserve an actual previously paid recurring period during the transition.
-    const recurring = await tx.pgBillingPayment.findFirst({ where: { subscription: { organisationId: local.organisationId },
-      status: "CAPTURED", refundedPaise: 0, periodEnd: { gt: now } }, orderBy: { periodEnd: "desc" } });
-    const priorEnd = previous?.periodEnd && (!recurring || previous.periodEnd >= recurring.periodEnd) ? previous.periodEnd : recurring?.periodEnd;
-    const start = priorEnd && priorEnd > now ? priorEnd : now;
-    const anchorDay = previous && priorEnd?.getTime() === previous.periodEnd.getTime() ? previous.anchorDay : indiaDay(start);
+    const recurring = await tx.pgBillingPayment.findMany({ where: { subscription: { organisationId: local.organisationId },
+      status: "CAPTURED", refundedPaise: 0, periodEnd: { gt: now } } });
+    const chain = paidAccessChain(now, [...previous, ...recurring.map(p => ({ ...p, anchorDay: indiaDay(p.periodEnd) }))]);
+    assert(!chain.gap || payment.amount_refunded > 0, 409, "PLAN_PERIOD_REVIEW_REQUIRED", "A refunded period has left a gap before a future paid month. Contact support before adding another month; existing receipts are preserved.");
+    const start = chain.end;
+    const anchorDay = chain.anchorDay;
     const end = nextCalendarMonth(start, anchorDay);
     const refunded = payment.amount_refunded ?? 0;
     receipt = await tx.pgPlanReceipt.create({ data: {
@@ -164,6 +165,10 @@ export async function createPlanOrder(accountId: string, organisationId: string,
     if (prior) return { local: prior, created: false };
     const open = await tx.pgPlanOrder.findFirst({ where: { organisationId, open: true } });
     if (open) return { local: open, created: false };
+    const future = await tx.pgPlanReceipt.findMany({ where: { organisationId, status: "CAPTURED", refundedPaise: 0, periodEnd: { gt: new Date() } } });
+    const oldPaid = await tx.pgBillingPayment.findMany({ where: { subscription: { organisationId }, status: "CAPTURED", refundedPaise: 0, periodEnd: { gt: new Date() } } });
+    assert(!paidAccessChain(new Date(), [...future, ...oldPaid.map(p => ({ ...p, anchorDay: indiaDay(p.periodEnd) }))]).gap,
+      409, "PLAN_PERIOD_REVIEW_REQUIRED", "A refund left a gap before a future paid month. Contact support before making another payment.");
     const local = await tx.pgPlanOrder.create({ data: { organisationId, requestKey, receiptReference: reference,
       providerKeyId: credentials.keyId, amountPaise: 24900, taxPaise: tax.taxPaise } });
     await audit(tx, accountId, organisationId, "PLAN_ONE_TIME_PAYMENT_REQUESTED", local.id, {

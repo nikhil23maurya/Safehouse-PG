@@ -14,3 +14,16 @@ export function nextCalendarMonth(start: Date, anchorDay = indiaDay(start)) {
   return new Date(Date.UTC(year, month, Math.min(anchorDay, lastDay),
     local.getUTCHours(), local.getUTCMinutes(), local.getUTCSeconds(), local.getUTCMilliseconds()) - INDIA_OFFSET);
 }
+
+export function paidAccessChain(now: Date, periods: Array<{ periodStart: Date; periodEnd: Date; anchorDay: number }>) {
+  let end = now, anchorDay = indiaDay(now);
+  let active = false, gap = false;
+  for (const period of [...periods].sort((a,b) => a.periodStart.getTime() - b.periodStart.getTime())) {
+    if (period.periodEnd <= now) continue;
+    if (period.periodStart > end) { gap = true; break; }
+    if (period.periodEnd > end) {
+      active = true; end = period.periodEnd; anchorDay = period.anchorDay;
+    }
+  }
+  return { end, anchorDay, active, gap };
+}

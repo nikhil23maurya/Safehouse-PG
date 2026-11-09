@@ -2,6 +2,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import express from "express";
+import { ZodError } from "zod";
 Object.assign(process.env, {
   PGONE_PLATFORM_ENABLED: "true", PGONE_CUSTOM_WEB_BILLING_ENABLED: "true",
   PGONE_SUBSCRIPTION_KEY_ID: "test-unit-key", PGONE_SUBSCRIPTION_KEY_SECRET: "test-unit-secret",
@@ -18,7 +19,7 @@ const { RazorpayPlanOrders, createPlanOrder, reconcilePlanOrder, verifyPlanPayme
   manualPlanStatus, processPlanWebhook } = await import("../src/platform/plan-payments.js");
 const app = express();
 app.use(express.json());app.use("/api/platform",platformRouter);
-app.use((e:any,_req:any,res:any,_next:any)=>res.status(e.statusCode||500).json({error:{code:e.code,message:e.message}}));
+app.use((e:any,_req:any,res:any,_next:any)=>res.status(e instanceof ZodError ? 400 : e.statusCode||500).json({error:{code:e.code,message:e.message}}));
 const server=app.listen(0,"127.0.0.1");
 await new Promise<void>(resolve=>server.on("listening",resolve));
 const base=`http://127.0.0.1:${(server.address() as any).port}`;
@@ -102,6 +103,7 @@ test("one capture grants a calendar month once; early renewal, immutable periods
   const sig=crypto.createHmac("sha256","test-unit-webhook").update(raw).digest("hex"),eventId=crypto.randomUUID();
   await processPlanWebhook(raw,sig,eventId,mock.provider);await processPlanWebhook(raw,sig,eventId,mock.provider);
   assert.equal(await entitlement(organisationId),false,"refund revokes its period without pulling a future paid period forward");
+  await assert.rejects(()=>createPlanOrder(account.id,organisationId,crypto.randomUUID(),mock.provider),{code:"PLAN_PERIOD_REVIEW_REQUIRED"});
   assert.equal(await prisma.pgProviderEvent.count({where:{provider:"RAZORPAY_PLAN",eventKey:eventId}}),1);
   auth.amount_refunded=0;await reconcilePlanOrder(first.id,mock.provider);
   assert.equal((await prisma.pgPlanReceipt.findUniqueOrThrow({where:{orderId:first.id}})).refundedPaise,100,"a stale snapshot cannot reverse a refund");
@@ -123,6 +125,9 @@ test("lost order responses recover without duplicates; cross-owner and unapprove
   const body=JSON.stringify({accepted:true,recurring:false,amountPaise:24900,requestKey:crypto.randomUUID()});
   assert.equal((await fetch(`${base}/api/platform/organisations/${organisationId}/plan/orders`,{method:"POST",headers,body})).status,403);
   assert.equal((await fetch(`${base}/api/platform/organisations/${organisationId}/plan/orders`,{method:"POST",headers:{authorization:`Bearer ${platformPair(account).accessToken}`,"content-type":"application/json"},body})).status,403);
+  const ownHeaders={...headers,authorization:`Bearer ${platformPair(account).accessToken}`};
+  assert.equal((await fetch(`${base}/api/platform/organisations/${organisationId}/subscription/authorise`,{method:"POST",headers:ownHeaders,body:JSON.stringify({accepted:true,amountPaise:24900,cycles:12})})).status,410,"outdated checkout must never create a recurring mandate");
+  assert.equal((await fetch(`${base}/api/platform/organisations/${organisationId}/plan/orders`,{method:"POST",headers:ownHeaders,body:JSON.stringify({accepted:true,recurring:true,amountPaise:24900,requestKey:crypto.randomUUID()})})).status,400,"schema rejects recurring consent before any provider call");
   assert.equal(await prisma.pgSubscription.count({where:{organisationId}}),0,"manual purchases never create a recurring subscription");
   assert.ok(await prisma.pgAudit.count({where:{organisationId,action:"PLAN_ORDER_RECOVERED"}}));
 });

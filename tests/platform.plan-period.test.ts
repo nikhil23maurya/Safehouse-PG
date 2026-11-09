@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
-import { indiaDay, nextCalendarMonth } from "../src/platform/plan-period.js";
+import { indiaDay, nextCalendarMonth, paidAccessChain } from "../src/platform/plan-period.js";
 process.env.DATABASE_URL ||= "postgresql://ci:ci@127.0.0.1:5432/pgone_test";
 process.env.JWT_ACCESS_SECRET ||= "unit-test-access-key-32-characters-long";
 process.env.JWT_REFRESH_SECRET ||= "unit-test-refresh-key-32-characters-long";
@@ -23,6 +23,16 @@ test("one-time signature uses server order | payment; a recurring signature cann
   assert.equal(orderSignature("order_A", "pay_A", sign("order_A|pay_A"), "secret"), true);
   for (const value of [sign("pay_A|order_A"), sign("order_B|pay_A"), sign("pay_A|sub_A"), "0".repeat(64)])
     assert.equal(orderSignature("order_A", "pay_A", value, "secret"), false);
+});
+
+test("renewal follows contiguous paid months and holds gaps without shifting other paid receipts", () => {
+  const now = new Date("2027-01-31T10:00:00+05:30");
+  const feb = nextCalendarMonth(now,31), march=nextCalendarMonth(feb,31), april=nextCalendarMonth(march,31);
+  const first={periodStart:now,periodEnd:feb,anchorDay:31}, second={periodStart:feb,periodEnd:march,anchorDay:31};
+  assert.equal(paidAccessChain(now,[second,first]).end.toISOString(),march.toISOString());
+  assert.equal(paidAccessChain(now,[second]).gap,true,"a refund must not advance a future month");
+  assert.equal(paidAccessChain(now,[first,{periodStart:march,periodEnd:april,anchorDay:31}]).end.toISOString(),feb.toISOString());
+  assert.equal(paidAccessChain(new Date(april.getTime()+1),[first,second]).active,false);
 });
 
 test("provider capture must match the immutable order, workspace, price, currency and time", () => {
