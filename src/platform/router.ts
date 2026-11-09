@@ -42,7 +42,7 @@ import {
   requireBillingOrigin,
   verifyAuthorisation,
 } from "./web-billing.js";
-import { createPlanOrder, manualPlanStatus, recheckPlanPayments, verifyPlanPayment } from "./plan-payments.js";
+import { createPlanOrder, manualBillingConfigured, manualPlanStatus, recheckPlanPayments, verifyPlanPayment } from "./plan-payments.js";
 import { beginMerchantSetup, merchantProfileInput, merchantBankInput, submitMerchantBank, merchantOnboardingLink, syncMerchantRecord } from "./cashfree-merchant.js";
 
 export const platformRouter = express.Router();
@@ -77,7 +77,10 @@ platformRouter.get("/config", (req, res) => {
     plan: PLAN,
     billingMode: "MANUAL_MONTHLY",
     deploymentCommit: process.env.RENDER_GIT_COMMIT || null,
-    androidBilling: "CONSUMPTION_ONLY",
+    // Sideloaded internal test APK only. Google Play builds must not bypass Play Billing.
+    androidBilling: packageId === "com.safehouse.pg.testing"
+      ? (platformEnabled() && manualBillingConfigured() ? "CUSTOM_UPI_INTENT" : "NOT_CONFIGURED")
+      : "CONSUMPTION_ONLY",
     legal: {
       terms: platformConfig.PGONE_TERMS_URL || null,
       privacy: platformConfig.PGONE_PRIVACY_URL || null,
@@ -95,6 +98,24 @@ platformRouter.post(
     assert(false, 410, "RECURRING_PURCHASE_REMOVED", "PGOne uses a fresh one-time payment each month. Refresh the billing website.");
   },
 );
+// The Android testing package can initiate its one-time PGOne fee using
+// the native Razorpay Custom UPI Intent SDK. Production Play distribution
+// remains consumption-only unless approved alternative billing is enrolled.
+// This origin check is defence-in-depth; paid access always depends on Razorpay
+// HMAC/captured-payment verification plus owner membership binding.
+function requireAndroidTestingCheckout(req: Request) {
+  assert(platformEnabled() && manualBillingConfigured(), 503, "ANDROID_BILLING_NOT_CONFIGURED",
+    "PGOne's Razorpay payment setup is not activated on this server.");
+  assert(req.header("origin") === "https://appassets.androidplatform.net",
+    403, "ANDROID_BILLING_ORIGIN", "This payment must start within the PGOne testing app.");
+}
+platformRouter.post("/organisations/:id/plan/android/orders", limited, async (req, res) => {
+  requireAndroidTestingCheckout(req);
+  const { account } = await session(req);
+  const input = z.object({ accepted: z.literal(true), amountPaise: z.literal(24900),
+    recurring: z.literal(false), requestKey: z.string().min(16).max(100) }).parse(req.body);
+  res.json(await createPlanOrder(account.id, id.parse(req.params.id), input.requestKey));
+});
 platformRouter.post("/organisations/:id/plan/orders", limited, async (req, res) => {
   requireBillingOrigin(req);
   const { account } = await session(req);
