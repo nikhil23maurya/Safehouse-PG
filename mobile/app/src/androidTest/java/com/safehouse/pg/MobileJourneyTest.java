@@ -342,6 +342,12 @@ public class MobileJourneyTest {
         assertEquals("No external purchase funnel in Android", "true", js("![...document.querySelectorAll('button,a')].some(e=>/buy|subscribe|pay now|upgrade/i.test(e.textContent))"));
         go("merchant", "{}"); screenshot("48-merchant");
         assertEquals("No premature bank/KYC collection", "0", js("document.querySelectorAll('input').length"));
+        js("window.__platformFixtures.merchant.enabled=true");
+        go("merchantProfile", "{}"); screenshot("48b-merchant-profile");
+        js("document.querySelector('[name=website]').value='https://example.test/pg';document.querySelector('[name=businessType]').value='Individual';document.querySelector('[name=businessModel]').value='B2C';document.querySelector('[name=consent]').checked=true;document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));");
+        await("document.getElementById('app').dataset.screen==='merchantBank'"); screenshot("48c-merchant-bank");
+        assertEquals("Bank number remains masked", "true", js("document.querySelector('[name=accountNumber]').type==='password'"));
+        assertEquals("No bank account in session vault", "true", js("!SafeHouseNative.getSession().includes('accountNumber')"));
         go("invitations", "{}"); screenshot("49-invitations");
         go("joinWorkspace", "{}"); screenshot("50-join-pg");
         instrumentation.runOnMainSync(() -> activity.finish());

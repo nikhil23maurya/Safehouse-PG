@@ -11,6 +11,7 @@ export function createPlatformFixtures() {
   const memberships = [];
   let selected = null;
   let propertiesCreated = 0;
+  const merchant = { enabled: false, started: false, bank: null };
   const tokens = () => ({
     kind: "PLATFORM",
     accessToken: `pg1.test.${selected || "account"}`,
@@ -31,11 +32,18 @@ export function createPlatformFixtures() {
     },
   });
   return {
+    merchant,
     get propertiesCreated() {
       return propertiesCreated;
     },
     handler(url, body) {
       const path = new URL(url).pathname;
+      if (path.includes("/merchant/")) {
+        if (!merchant.enabled) throw new Error("Synthetic merchant feature is disabled");
+        if (path.endsWith("/profile")) merchant.started = true;
+        if (path.endsWith("/bank")) merchant.bank = { last4: body.accountNumber.slice(-4), status: "SUBMITTED" };
+        return { status: "KYC_REQUIRED" };
+      }
       if (path.endsWith("/config"))
         return {
           enabled: true,
@@ -88,11 +96,14 @@ export function createPlatformFixtures() {
         };
       if (path.endsWith("/merchant"))
         return {
-          status: "NOT_CONNECTED",
+          status: merchant.started ? "KYC_REQUIRED" : "NOT_CONNECTED",
           bank: null,
+          bankSubmission: merchant.bank,
+          setupStarted: merchant.started,
+          environment: "LIVE",
           message:
             "Online payment setup is awaiting payment-provider activation.",
-          onboardingAvailable: false,
+          onboardingAvailable: merchant.enabled,
         };
       if (path.endsWith("/invitations")) return { invitations: [] };
       if (path.endsWith("/members")) return { members: [] };

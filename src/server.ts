@@ -18,6 +18,7 @@ import { processSubscriptionWebhook } from "./platform/billing.js";
 import { billingWebRouter } from "./platform/web-static.js";
 import { legalRouter } from "./platform/legal.js";
 import { processPlanWebhook } from "./platform/plan-payments.js";
+import { processMerchantWebhook } from "./platform/cashfree-merchant.js";
 import { logPaymentPreflight } from "./platform/payment-preflight.js";
 import {
   datePartsInTimeZone,
@@ -190,10 +191,18 @@ app.post("/api/platform-webhooks/plan-payments", express.raw({ type: "applicatio
   res.json({ ok: true });
 });
 app.use(platformWorkspaceBridge);
+app.post("/api/platform-webhooks/merchant", express.raw({ type: "application/json", limit: "1mb" }), async (req,res) => {
+  await processMerchantWebhook(req.body, req.header("x-webhook-timestamp") || req.header("x-cashfree-timestamp") || "", req.header("x-webhook-signature") || req.header("x-cashfree-signature") || "");
+  res.json({ok:true});
+});
 app.use(express.json({ limit: "1mb" }));
 app.use("/api/platform", platformRouter);
 app.use("/billing", billingWebRouter);
 app.use("/legal", legalRouter);
+app.get("/merchant-return", (_req,res) => {
+  res.setHeader("Cache-Control","no-store"); res.setHeader("Referrer-Policy","no-referrer");
+  res.type("html").send('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>PGOne · Check owner setup</title><body><main><h1>Return to PGOne</h1><p>Refresh owner payment setup to check the latest Cashfree status. Returning here does not confirm KYC approval or activate rent collection.</p></main></body></html>');
+});
 
 const loginLimiter = rateLimit({ windowMs: 15 * 60_000, limit: 20, standardHeaders: "draft-8", legacyHeaders: false });
 

@@ -295,6 +295,10 @@ model PgMerchantAccount {
   bankReference String?
   bankLast4 String?
   bankVerificationStatus String @default("NOT_STARTED")
+  profileFingerprint String?
+  creationState String @default("NOT_STARTED")
+  bankSubmissionFingerprint String?
+  providerEnvironment String?
   requirements Json?
   verifiedAt DateTime?
   updatedAt DateTime @updatedAt

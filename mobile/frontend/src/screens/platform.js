@@ -419,8 +419,8 @@ export async function merchantScreen(ctx) {
         [
           "wallet",
           "Settlement bank account",
-          data.bank
-            ? `Account ending ${data.bank.last4}`
+          data.bankSubmission
+            ? `Last submitted account ending ${data.bankSubmission.last4}. Cashfree confirms verification.`
             : "Linked directly through the approved provider.",
         ],
         [
@@ -435,9 +435,57 @@ export async function merchantScreen(ctx) {
         )
         .join(
           "",
-        )}</div>${notice(data.message)}${badge(data.status.replaceAll("_", " "))}${primary("Refresh setup status", { action: "reload", glyph: "refresh" })}<p class="legal-copy">Rent collection and your PGOne subscription are separate. Provider approval is required before new online collection can start.</p>`,
+        )}</div>${notice(data.message)}${data.environment === "TEST" ? notice("Sandbox merchant setup. This is not live approval or rent collection.") : ""}${badge(data.status.replaceAll("_", " "))}${data.onboardingAvailable && !data.setupStarted ? primary("Set up owner payment account", { route: "merchantProfile", glyph: "arrow" }) : ""}${data.onboardingAvailable && data.setupStarted && data.status !== "APPROVED" ? `${button("Add settlement bank account", { route: "merchantBank", kind: "secondary block" })}${primary("Complete secure KYC", { action: "merchantKyc", glyph: "shield" })}` : ""}${primary("Refresh setup status", { action: "merchantRefresh", glyph: "refresh" })}<p class="legal-copy">Owner rent collection and your PGOne monthly fee are separate. No payment or merchant approval is inferred from returning to this screen.</p>`,
       "profile",
     ),
+    async action(name) {
+      if (name === "merchantRefresh") {
+        if (data.setupStarted && data.onboardingAvailable)
+          await ctx.api(`/api/platform/organisations/${org.id}/merchant/recheck`, { method: "POST" });
+        return ctx.reload();
+      }
+      if (name === "merchantKyc") {
+        if (!ctx.native.has("openMerchantOnboarding")) throw new Error("Secure in-app KYC needs the updated Android app.");
+        const link = await ctx.api(`/api/platform/organisations/${org.id}/merchant/onboarding-link`, { method: "POST" });
+        ctx.native.call("openMerchantOnboarding", link.url);
+      }
+    },
+  };
+}
+export async function merchantProfileScreen(ctx) {
+  const org = organisation(ctx.snapshot);
+  if (!org) throw new Error("Select your owner workspace first.");
+  const data = await ctx.api(`/api/platform/organisations/${org.id}/merchant`);
+  if (!data.onboardingAvailable) throw new Error(data.message);
+  const account = ctx.snapshot.platform.account;
+  return {
+    ...page("Owner payment account", `${intro("RENT. DIRECTLY TO YOU.", "Your business, connected.", "Create your own Cashfree merchant profile. Your PGOne fee and residents’ rent remain separate.")}${form("merchantProfile", `${field("name", "Business or PG name", {required:true,value:org.name,attrs:'maxlength="120"'})}${field("legalName", "Legal name", {required:true,value:account.fullName,help:"Use the name on your business or individual documents.",attrs:'maxlength="150"'})}${field("email", "Merchant contact email", {required:true,type:"email",value:account.email||"",help:"Cashfree sends account verification to this address.",attrs:'autocomplete="email" maxlength="254"'})}${field("website", "Business website or booking page", {required:true,type:"url",placeholder:"https://",help:"Use a real public page for your own business.",attrs:'maxlength="500"'})}${field("businessType", "Business type", {required:true,options:[["","Select your business type"],...["Individual","Proprietorship","LLP","Partnership","Private Limited","Public Limited","Trust","Society","NGO","Hindu Undivided Family (HUF)","Association of Persons (AOP)","Body of Individuals (BOI)","Local Authority","Artificial Juridical Person","Government"].map(v=>[v,v])]})}${field("businessModel", "Customers", {required:true,options:[["","Select your customer type"],["B2C","Individuals / residents"],["B2B","Businesses"],["Both","Both"]]})}<label class="merchant-consent"><input name="consent" type="checkbox" required> I authorise PGOne to submit these details to Cashfree for my merchant account and receive its onboarding status.</label>`,"Create merchant profile")}<p class="legal-copy">Cashfree verifies the account. No bank or KYC approval is created by this form.</p>`, "merchant"),
+    async submit(_name, el) {
+      const values = formValues(el);
+      await ctx.api(`/api/platform/organisations/${org.id}/merchant/profile`, {method:"POST",body:{...values,consent:el.elements.consent.checked}});
+      ctx.markSaved();
+      await ctx.navigate("merchantBank");
+    },
+  };
+}
+export async function merchantBankScreen(ctx) {
+  const org = organisation(ctx.snapshot);
+  if (!org) throw new Error("Select your owner workspace first.");
+  const data = await ctx.api(`/api/platform/organisations/${org.id}/merchant`);
+  if (!data.onboardingAvailable || !data.setupStarted) throw new Error("Complete the merchant profile before bank setup.");
+  const uncertain = ["SUBMITTING","CHECKING"].includes(data.bankSubmission?.status);
+  const blocked = uncertain || data.status === "APPROVED";
+  const masked = (name,label) => `<label class="field"><span class="field-label">${label}</span><input type="password" name="${name}" aria-label="${label}" required inputmode="numeric" autocomplete="off" maxlength="34" pattern="[0-9]{6,34}"><span class="field-error" id="field-${name}-error"></span></label>`;
+  return {
+    ...page("Settlement bank",`${intro("YOUR RENT. YOUR BANK.", "Where rent belongs.", "Submit your settlement bank details directly to Cashfree. PGOne keeps only the last four digits.")}${data.bankSubmission ? notice(`Last submission: account ending ${data.bankSubmission.last4}. Status: ${data.bankSubmission.status.replaceAll("_"," ")}. This is not bank verification.`) : ""}${blocked ? notice(uncertain ? "The earlier submission needs provider confirmation. Use secure KYC to review it; do not submit the bank again." : "This merchant is approved. Bank changes need Cashfree’s approved change process.") : form("merchantBank",`${masked("accountNumber","Account number")}${masked("confirmAccountNumber","Confirm account number")}${field("ifsc","IFSC code",{required:true,attrs:'autocomplete="off" maxlength="11" pattern="[A-Za-z]{4}0[A-Za-z0-9]{6}"',placeholder:"ABCD0123456"})}<label class="merchant-consent"><input name="consent" type="checkbox" required> I authorise submitting this account to Cashfree as my settlement destination for verification.</label>`,"Submit bank details")}${button("Continue to secure KYC",{route:"merchant",kind:"secondary block"})}<p class="legal-copy">Never enter a UPI PIN or internet-banking password here. Cashfree performs verification and can request additional information.</p>`,"merchant"),
+    async submit(_name,el) {
+      const values=formValues(el);
+      if (values.accountNumber !== values.confirmAccountNumber) throw new Error("Account numbers must match.");
+      await ctx.api(`/api/platform/organisations/${org.id}/merchant/bank`,{method:"POST",body:{...values,ifsc:values.ifsc.toUpperCase(),consent:el.elements.consent.checked}});
+      el.reset();
+      ctx.markSaved();
+      await ctx.navigate("merchant");
+    },
   };
 }
 export async function invitationsScreen(ctx) {
