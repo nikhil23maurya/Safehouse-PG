@@ -10,6 +10,14 @@ export const platformConfig = z
     PGONE_CASHFREE_EMBEDDED_ENABLED: z.enum(["true", "false"]).default("false"),
     PGONE_CASHFREE_PARTNER_API_KEY: optional,
     PGONE_CASHFREE_ENV: z.enum(["LIVE", "TEST"]).default("LIVE"),
+    // PGOne's own ₹249 collections use its merchant credentials; never a PG owner's.
+    PGONE_CASHFREE_BILLING_ENABLED: z.enum(["true", "false"]).default("false"),
+    PGONE_CASHFREE_PG_ENV: z.enum(["LIVE", "TEST"]).default("TEST"),
+    PGONE_CASHFREE_PG_CLIENT_ID: optional,
+    PGONE_CASHFREE_PG_CLIENT_SECRET: optional,
+    PGONE_CASHFREE_PUBLIC_API_ORIGIN: z.string().url().startsWith("https://").optional(),
+    // Different approval from SaaS billing; only owner-bound Embedded collections.
+    PGONE_CASHFREE_RENT_ENABLED: z.enum(["true", "false"]).default("false"),
     PGONE_FIREBASE_TESTING_APP_ID: optional,
     PGONE_FIREBASE_WEB_APP_ID: optional,
     PGONE_FIREBASE_WEB_API_KEY: optional,
