@@ -36,6 +36,8 @@ jobs:
       - name: Check read-only payment preflight
         run: node --check scripts/pgone-payment-preflight.mjs
       - name: Verify backward-compatible migrations on isolated PostgreSQL
-        run: npx prisma migrate deploy
+        run: |
+          node tests/platform.database-access.setup.mjs
+          npx prisma migrate deploy
       - name: Verify platform success, failure and isolation
-        run: node --import tsx --test tests/platform.test.ts tests/platform.integration.test.ts tests/platform.public.test.ts tests/platform.credentials.test.ts tests/platform.plan-period.test.ts tests/platform.plan-payments.integration.test.ts tests/platform.payment-preflight.test.ts tests/platform.merchant.test.ts tests/platform.merchant.integration.test.ts
+        run: node --import tsx --test tests/platform.test.ts tests/platform.integration.test.ts tests/platform.public.test.ts tests/platform.credentials.test.ts tests/platform.plan-period.test.ts tests/platform.plan-payments.integration.test.ts tests/platform.payment-preflight.test.ts tests/platform.database-access.test.ts tests/platform.merchant.test.ts tests/platform.merchant.integration.test.ts
