@@ -43,6 +43,7 @@ import {
   verifyAuthorisation,
 } from "./web-billing.js";
 import { createPlanOrder, manualPlanStatus, recheckPlanPayments, verifyPlanPayment } from "./plan-payments.js";
+import { cashfreeBillingEnabled, createCashfreePlanOrder, refreshCashfreePlanPayments } from "./cashfree-plan.js";
 import { beginMerchantSetup, merchantProfileInput, merchantBankInput, submitMerchantBank, merchantOnboardingLink, syncMerchantRecord } from "./cashfree-merchant.js";
 
 export const platformRouter = express.Router();
@@ -69,10 +70,14 @@ platformRouter.get("/config", (req, res) => {
     phone: phoneConfig(packageId),
     googleEnabled: false,
     customWebBilling: {
-      enabled: customWebBillingEnabled(),
-      keyId: customWebBillingEnabled()
+      enabled: !cashfreeBillingEnabled() && customWebBillingEnabled(),
+      keyId: !cashfreeBillingEnabled() && customWebBillingEnabled()
         ? subscriptionCredentials()!.keyId
         : null,
+    },
+    cashfreeWebBilling: {
+      enabled: cashfreeBillingEnabled(),
+      environment: platformConfig.PGONE_CASHFREE_PG_ENV === "LIVE" ? "production" : "sandbox",
     },
     plan: PLAN,
     billingMode: "MANUAL_MONTHLY",
@@ -95,7 +100,20 @@ platformRouter.post(
     assert(false, 410, "RECURRING_PURCHASE_REMOVED", "PGOne uses a fresh one-time payment each month. Refresh the billing website.");
   },
 );
+platformRouter.post("/organisations/:id/cashfree/plan/orders", limited, async (req, res) => {
+  requireBillingOrigin(req);
+  const { account } = await session(req);
+  const input = z.object({ accepted: z.literal(true), amountPaise: z.literal(24900),
+    recurring: z.literal(false), requestKey: z.string().min(16).max(100) }).parse(req.body);
+  res.json(await createCashfreePlanOrder(account.id, id.parse(req.params.id), input.requestKey));
+});
+platformRouter.post("/organisations/:id/cashfree/plan/recheck", limited, async (req, res) => {
+  requireBillingOrigin(req);
+  const { account } = await session(req);
+  res.json(await refreshCashfreePlanPayments(account.id, id.parse(req.params.id)));
+});
 platformRouter.post("/organisations/:id/plan/orders", limited, async (req, res) => {
+  assert(!cashfreeBillingEnabled(), 410, "USE_CASHFREE", "New PGOne payments are now provided by Cashfree.");
   requireBillingOrigin(req);
   const { account } = await session(req);
   const input = z.object({ accepted: z.literal(true), amountPaise: z.literal(24900),
@@ -444,7 +462,9 @@ platformRouter.post(
     if (sub && !sub.providerSubscriptionId)
       sub = await recoverSubscriptionCreation(sub.id);
     if (sub?.providerSubscriptionId) await reconcileSubscription(sub.id);
-    res.json(await recheckPlanPayments(account.id, org.id));
+    const razorpay = await recheckPlanPayments(account.id, org.id);
+    if (cashfreeBillingEnabled()) return res.json(await refreshCashfreePlanPayments(account.id, org.id));
+    res.json(razorpay);
   },
 );
 platformRouter.post(
