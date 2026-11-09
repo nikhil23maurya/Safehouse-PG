@@ -393,35 +393,22 @@ export async function merchantScreen(ctx) {
   const org = organisation(ctx.snapshot);
   if (!org) throw new Error("Select your owner workspace first.");
   const data = await ctx.api(`/api/platform/organisations/${org.id}/merchant`);
+  const ready = data.collectionEnabled === true;
   return {
     ...page(
-      "Online rent payments",
-      `<div class="payments-art">${image("payments")}</div>${intro("YOUR RENT. YOUR ACCOUNT.", "Payments, beautifully connected.", "Receive rent through your approved payment account.")}<div class="merchant-checklist">${[
-        [
-          "building",
-          "Business details",
-          "Required fields depend on your approved provider.",
-        ],
-        [
-          "wallet",
-          "Settlement bank account",
-          data.bankSubmission
-            ? `Last submitted account ending ${data.bankSubmission.last4}. Cashfree confirms verification.`
-            : "Linked directly through the approved provider.",
-        ],
-        [
-          "shield",
-          "Identity verification",
-          "Your provider confirms KYC and activation.",
-        ],
-      ]
-        .map(
-          ([glyph, title, text]) =>
-            `<div>${icon(glyph)}<span><strong>${title}</strong><small>${esc(text)}</small></span></div>`,
-        )
-        .join(
-          "",
-        )}</div>${notice(data.message)}${data.environment === "TEST" ? notice("Sandbox merchant setup. This is not live approval or rent collection.") : ""}${badge(data.status.replaceAll("_", " "))}${data.onboardingAvailable && !data.setupStarted ? primary("Set up owner payment account", { route: "merchantProfile", glyph: "arrow" }) : ""}${data.onboardingAvailable && data.setupStarted && data.status !== "APPROVED" ? `${button("Add settlement bank account", { route: "merchantBank", kind: "secondary block" })}${primary("Complete secure KYC", { action: "merchantKyc", glyph: "shield" })}` : ""}${primary("Refresh setup status", { action: "merchantRefresh", glyph: "refresh" })}<p class="legal-copy">Owner rent collection and your PGOne monthly fee are separate. No payment or merchant approval is inferred from returning to this screen.</p>`,
+      "Rent settlement account",
+      `<div class="payments-art">${image("payments")}</div>${intro("YOUR RENT. YOUR ACCOUNT.", "Razorpay, linked to your PG.", "Residents' rent and your ₹249 PGOne subscription stay separate.")}<div class="merchant-checklist">${[
+        ["building", "Your own linked account", "A separate Razorpay Route account for this property owner."],
+        ["wallet", "UPI settlement destination", "An active UPI ID verified against your legal beneficiary name."],
+        ["shield", "Provider approval", "Razorpay must activate Route and confirm your settlement destination."],
+      ].map(([glyph, title, body]) => `<div>${icon(glyph)}<span><strong>${title}</strong><small>${esc(body)}</small></span></div>`).join("")}</div>
+      ${notice(data.message)}
+      ${data.environment === "TEST" ? notice("Sandbox status cannot activate production rent collection.") : ""}
+      <div class="subscription-state">${badge(ready ? "ROUTED PAYMENTS ENABLED" : data.status.replaceAll("_", " "), ready ? "green" : "neutral")}</div>
+      ${data.onboardingAvailable && !data.setupStarted ? primary("Set up Razorpay owner account", { route: "merchantProfile", glyph: "arrow" }) : ""}
+      ${data.onboardingAvailable && data.setupStarted && !ready ? notice("Your linked account exists. Razorpay must confirm its product and settlement verification.") : ""}
+      ${primary("Refresh verification status", { action: "merchantRefresh", glyph: "refresh" })}
+      <p class="legal-copy">A Razorpay payment being captured is not proof the owner has received bank settlement. Route approval, transfer processing and linked-bank/UPI settlement are separate states. PGOne never asks for a UPI PIN.</p>`,
       "profile",
     ),
     async action(name) {
@@ -430,11 +417,6 @@ export async function merchantScreen(ctx) {
           await ctx.api(`/api/platform/organisations/${org.id}/merchant/recheck`, { method: "POST" });
         return ctx.reload();
       }
-      if (name === "merchantKyc") {
-        if (!ctx.native.has("openMerchantOnboarding")) throw new Error("Secure in-app KYC needs the updated Android app.");
-        const link = await ctx.api(`/api/platform/organisations/${org.id}/merchant/onboarding-link`, { method: "POST" });
-        ctx.native.call("openMerchantOnboarding", link.url);
-      }
     },
   };
 }
@@ -442,37 +424,46 @@ export async function merchantProfileScreen(ctx) {
   const org = organisation(ctx.snapshot);
   if (!org) throw new Error("Select your owner workspace first.");
   const data = await ctx.api(`/api/platform/organisations/${org.id}/merchant`);
-  if (!data.onboardingAvailable) throw new Error(data.message);
+  if (!data.onboardingAvailable) return page("Razorpay Route approval needed",
+    `${intro("ACCOUNT VERIFICATION", "Your rent deserves the right account.", esc(data.message))}${button("Back to settlement status", { route: "merchant", kind: "secondary block" })}`, "merchant");
   const account = ctx.snapshot.platform.account;
   return {
-    ...page("Owner payment account", `${intro("RENT. DIRECTLY TO YOU.", "Your business, connected.", "Create your own Cashfree merchant profile. Your PGOne fee and residents’ rent remain separate.")}${form("merchantProfile", `${field("name", "Business or PG name", {required:true,value:org.name,attrs:'maxlength="120"'})}${field("legalName", "Legal name", {required:true,value:account.fullName,help:"Use the name on your business or individual documents.",attrs:'maxlength="150"'})}${field("email", "Merchant contact email", {required:true,type:"email",value:account.email||"",help:"Cashfree sends account verification to this address.",attrs:'autocomplete="email" maxlength="254"'})}${field("website", "Business website or booking page", {required:true,type:"url",placeholder:"https://",help:"Use a real public page for your own business.",attrs:'maxlength="500"'})}${field("businessType", "Business type", {required:true,options:[["","Select your business type"],...["Individual","Proprietorship","LLP","Partnership","Private Limited","Public Limited","Trust","Society","NGO","Hindu Undivided Family (HUF)","Association of Persons (AOP)","Body of Individuals (BOI)","Local Authority","Artificial Juridical Person","Government"].map(v=>[v,v])]})}${field("businessModel", "Customers", {required:true,options:[["","Select your customer type"],["B2C","Individuals / residents"],["B2B","Businesses"],["Both","Both"]]})}<label class="merchant-consent"><input name="consent" type="checkbox" required> I authorise PGOne to submit these details to Cashfree for my merchant account and receive its onboarding status.</label>`,"Create merchant profile")}<p class="legal-copy">Cashfree verifies the account. No bank or KYC approval is created by this form.</p>`, "merchant"),
+    ...page("Razorpay owner account",
+      `${intro("VERIFIED OWNER COLLECTION", "Where your rent belongs.", "Create a linked UPI settlement account with Razorpay Route.")}${form("razorpayRoute", `
+        ${field("legalName", "Legal PAN and UPI account-holder name", { required: true, value: account.fullName,
+          help: "Must match the name Razorpay verifies for this UPI ID.", attrs: 'maxlength="200"' })}
+        ${field("email", "Owner email", { required: true, type: "email", value: account.email || "",
+          attrs: 'autocomplete="email" maxlength="254"' })}
+        ${field("businessType", "Business type", { required: true, options: [["", "Select your business type"],
+          ["individual", "Individual"], ["proprietorship", "Proprietorship"],
+          ["partnership", "Partnership"], ["private_limited", "Private limited"]] })}
+        <label class="field"><span class="field-label">PAN number</span>
+          <input name="pan" aria-label="PAN number" required autocomplete="off" maxlength="10"
+            pattern="[A-Za-z]{5}[0-9]{4}[A-Za-z]" autocapitalize="characters">
+          <small>Submitted securely for Razorpay verification; not retained by PGOne.</small></label>
+        ${field("vpa", "Owner settlement UPI ID", { required: true, placeholder: "owner@bank",
+          help: "Rent transfers can only use the UPI ID belonging to the verified beneficiary.", attrs: 'autocomplete="off" maxlength="100"' })}
+        <label class="merchant-consent"><input name="consent" type="checkbox" required>
+          I authorise PGOne to submit my PAN, UPI ID, legal name and contact details to Razorpay for a linked settlement account. I understand provider verification and settlement timing are separate.</label>
+      `, "Verify with Razorpay")}${button("Back to settlement status", { route: "merchant", kind: "secondary block" })}<p class="legal-copy">This is Razorpay Route onboarding, not the ₹249 subscription. No UPI PIN, bank password or Aadhaar OTP is requested by PGOne.</p>`,
+      "merchant",
+    ),
     async submit(_name, el) {
       const values = formValues(el);
-      await ctx.api(`/api/platform/organisations/${org.id}/merchant/profile`, {method:"POST",body:{...values,consent:el.elements.consent.checked}});
-      ctx.markSaved();
-      await ctx.navigate("merchantBank");
-    },
-  };
-}
-export async function merchantBankScreen(ctx) {
-  const org = organisation(ctx.snapshot);
-  if (!org) throw new Error("Select your owner workspace first.");
-  const data = await ctx.api(`/api/platform/organisations/${org.id}/merchant`);
-  if (!data.onboardingAvailable || !data.setupStarted) throw new Error("Complete the merchant profile before bank setup.");
-  const uncertain = ["SUBMITTING","CHECKING"].includes(data.bankSubmission?.status);
-  const blocked = uncertain || data.status === "APPROVED";
-  const masked = (name,label) => `<label class="field"><span class="field-label">${label}</span><input type="password" name="${name}" aria-label="${label}" required inputmode="numeric" autocomplete="off" maxlength="34" pattern="[0-9]{6,34}"><span class="field-error" id="field-${name}-error"></span></label>`;
-  return {
-    ...page("Settlement bank",`${intro("YOUR RENT. YOUR BANK.", "Where rent belongs.", "Submit your settlement bank details directly to Cashfree. PGOne keeps only the last four digits.")}${data.bankSubmission ? notice(`Last submission: account ending ${data.bankSubmission.last4}. Status: ${data.bankSubmission.status.replaceAll("_"," ")}. This is not bank verification.`) : ""}${blocked ? notice(uncertain ? "The earlier submission needs provider confirmation. Use secure KYC to review it; do not submit the bank again." : "This merchant is approved. Bank changes need Cashfree’s approved change process.") : form("merchantBank",`${masked("accountNumber","Account number")}${masked("confirmAccountNumber","Confirm account number")}${field("ifsc","IFSC code",{required:true,attrs:'autocomplete="off" maxlength="11" pattern="[A-Za-z]{4}0[A-Za-z0-9]{6}"',placeholder:"ABCD0123456"})}<label class="merchant-consent"><input name="consent" type="checkbox" required> I authorise submitting this account to Cashfree as my settlement destination for verification.</label>`,"Submit bank details")}${button("Continue to secure KYC",{route:"merchant",kind:"secondary block"})}<p class="legal-copy">Never enter a UPI PIN or internet-banking password here. Cashfree performs verification and can request additional information.</p>`,"merchant"),
-    async submit(_name,el) {
-      const values=formValues(el);
-      if (values.accountNumber !== values.confirmAccountNumber) throw new Error("Account numbers must match.");
-      await ctx.api(`/api/platform/organisations/${org.id}/merchant/bank`,{method:"POST",body:{...values,ifsc:values.ifsc.toUpperCase(),consent:el.elements.consent.checked}});
+      const body = {...values, pan: values.pan.toUpperCase(), vpa: values.vpa.toLowerCase(),
+        consent: el.elements.consent.checked};
+      await ctx.api(`/api/platform/organisations/${org.id}/merchant/route/onboard`,
+        { method: "POST", body });
       el.reset();
       ctx.markSaved();
       await ctx.navigate("merchant");
     },
   };
+}
+export async function merchantBankScreen(ctx) {
+  return page("Settlement destination",
+    `${intro("RAZORPAY ROUTE", "Your linked UPI account.", "Bank account collection through the former Cashfree setup has been retired. Razorpay verifies the owner settlement destination.")}${button("Manage Razorpay settlement", { route: "merchant", kind: "primary block" })}`,
+    "merchant");
 }
 export async function invitationsScreen(ctx) {
   const org = organisation(ctx.snapshot);

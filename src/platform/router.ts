@@ -43,7 +43,7 @@ import {
   verifyAuthorisation,
 } from "./web-billing.js";
 import { createPlanOrder, manualPlanStatus, recheckPlanPayments, verifyPlanPayment } from "./plan-payments.js";
-import { beginMerchantSetup, merchantProfileInput, merchantBankInput, submitMerchantBank, merchantOnboardingLink, syncMerchantRecord } from "./cashfree-merchant.js";
+import { onboardRazorpayRoute, routeOnboardingInput, syncRazorpayRoute } from "./razorpay-route.js";
 
 export const platformRouter = express.Router();
 const limited = rateLimit({
@@ -473,30 +473,27 @@ platformRouter.get("/organisations/:id/merchant", async (req, res) => {
   const { account } = await session(req);
   res.json(await merchantStatus(account.id, id.parse(req.params.id)));
 });
-platformRouter.post("/organisations/:id/merchant/profile", limited, async (req,res) => {
+platformRouter.post("/organisations/:id/merchant/route/onboard", limited, async (req,res) => {
   const { account } = await session(req);
   const organisationId = id.parse(req.params.id);
-  await beginMerchantSetup(account.id, organisationId, merchantProfileInput.parse(req.body));
-  res.json(await merchantStatus(account.id,organisationId));
+  await onboardRazorpayRoute(account.id, organisationId, routeOnboardingInput.parse(req.body));
+  res.json(await merchantStatus(account.id, organisationId));
 });
-platformRouter.post("/organisations/:id/merchant/bank", limited, async (req,res) => {
-  const { account } = await session(req);
-  const organisationId = id.parse(req.params.id);
-  await submitMerchantBank(account.id,organisationId,merchantBankInput.parse(req.body));
-  res.json(await merchantStatus(account.id,organisationId));
-});
-platformRouter.post("/organisations/:id/merchant/onboarding-link", limited, async (req,res) => {
-  const { account } = await session(req);
-  res.setHeader("Cache-Control","no-store");
-  res.setHeader("Referrer-Policy","no-referrer");
-  res.json(await merchantOnboardingLink(account.id,id.parse(req.params.id)));
-});
+// The former Cashfree endpoints must never move owner funds or collect bank details.
+for (const retired of ["profile", "bank", "onboarding-link"]) {
+  platformRouter.post(`/organisations/:id/merchant/${retired}`, limited, async (_req,res) => {
+    res.status(410).json({ error: {
+      code: "MERCHANT_PROVIDER_RETIRED",
+      message: "Cashfree onboarding is retired. Use Razorpay Route after platform approval.",
+    } });
+  });
+}
 platformRouter.post("/organisations/:id/merchant/recheck", limited, async (req,res) => {
   const { account } = await session(req);
   const organisationId = id.parse(req.params.id);
-  await ownerOrganisation(account.id,organisationId);
-  await syncMerchantRecord(organisationId);
-  res.json(await merchantStatus(account.id,organisationId));
+  await ownerOrganisation(account.id, organisationId);
+  await syncRazorpayRoute(organisationId);
+  res.json(await merchantStatus(account.id, organisationId));
 });
 platformRouter.get("/staff", async (req, res) => {
   const { membership } = await session(req);

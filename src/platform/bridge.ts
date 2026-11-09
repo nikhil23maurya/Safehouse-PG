@@ -33,10 +33,12 @@ export async function platformWorkspaceBridge(
     // The legacy provider account must never receive a new organisation's rent.
     assert(
       membership.organisation.legacyAccess ||
-        !(req.method === "POST" && path.startsWith("/api/student/payments/")),
+        !(req.method === "POST" && path.startsWith("/api/student/payments/")) ||
+        path === "/api/student/payments/order" ||
+        path === "/api/student/payments/verify",
       409,
       "MERCHANT_ACTIVATION_REQUIRED",
-      "Online rent collection is awaiting your owner's approved payment account. Contact your owner for payment arrangements.",
+      "Only a verified Razorpay Route order can collect new owners' rent. Fixed QR collection to PGOne's shared account is disabled.",
     );
     const owner = membership.role === "OWNER";
     assert(

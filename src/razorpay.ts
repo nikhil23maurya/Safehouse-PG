@@ -1,5 +1,6 @@
 import { config } from "./config.js";
 import { AppError } from "./errors.js";
+import { routeTransfer } from "./platform/razorpay-route.js";
 
 function authHeader() {
   if (!config.RAZORPAY_KEY_ID || !config.RAZORPAY_KEY_SECRET) {
@@ -8,7 +9,7 @@ function authHeader() {
   return `Basic ${Buffer.from(`${config.RAZORPAY_KEY_ID}:${config.RAZORPAY_KEY_SECRET}`).toString("base64")}`;
 }
 
-export async function createRazorpayOrder(input: { amountPaise: number; receipt: string; notes: Record<string, string> }) {
+export async function createRazorpayOrder(input: { amountPaise: number; receipt: string; notes: Record<string, string>; routeAccountId?: string }) {
   const response = await fetch("https://api.razorpay.com/v1/orders", {
     method: "POST",
     headers: {
@@ -19,12 +20,27 @@ export async function createRazorpayOrder(input: { amountPaise: number; receipt:
       amount: input.amountPaise,
       currency: "INR",
       receipt: input.receipt.slice(0, 40),
-      notes: input.notes
+      notes: input.notes,
+      ...(input.routeAccountId ? { partial_payment: false, transfers: [routeTransfer(input.routeAccountId, input.amountPaise)] } : {})
     })
   });
   const body = await response.json() as any;
   if (!response.ok) {
     throw new AppError(502, "RAZORPAY_ORDER_FAILED", body?.error?.description || "Could not create Razorpay order");
+  }
+  if (input.routeAccountId) {
+    // Never accept a new owner's rent against a normal PGOne merchant order.
+    // Only an order with the exact linked-account transfer may be returned to the resident.
+    const transfers = body?.transfers;
+    if (!Array.isArray(transfers) || transfers.length !== 1 ||
+      transfers[0]?.recipient !== input.routeAccountId ||
+      transfers[0]?.amount !== input.amountPaise ||
+      transfers[0]?.currency !== "INR" ||
+      body?.currency !== "INR" || body?.amount !== input.amountPaise ||
+      !/^order_[a-zA-Z0-9]+$/.test(body?.id || "")) {
+      throw new AppError(502, "ROUTE_ORDER_NOT_CONFIRMED",
+        "Razorpay has not confirmed the owner's exact transfer. Do not pay this order; contact support.");
+    }
   }
   return body as { id: string; amount: number; currency: string; receipt: string; status: string };
 }

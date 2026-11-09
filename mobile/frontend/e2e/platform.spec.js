@@ -189,16 +189,25 @@ async function phoneLogin(page) {
   ).toBeVisible();
 }
 
-test("owner merchant forms validate consent, keep bank data out of the vault and require provider KYC confirmation", async ({page}) => {
+test("Razorpay Route owner UPI setup requires verified SaaS access and provider approval", async ({page}) => {
   const fixture = await platform(page);
-  const merchant = {onboardingAvailable:true,setupStarted:false,status:"NOT_CONNECTED",environment:"LIVE",bank:null,bankSubmission:null,
-    collectionEnabled:false,message:"Complete your business profile and Cashfree KYC."};
-  let profiles=0,banks=0;
-  await page.route("**/api/platform/organisations/*/merchant**",async route=>{
-    const path=new URL(route.request().url()).pathname,body=route.request().postDataJSON()||{};
-    if(path.endsWith("/profile")){profiles++;expect(body.consent).toBe(true);merchant.setupStarted=true;merchant.status="KYC_REQUIRED";}
-    if(path.endsWith("/bank")){banks++;expect(body.consent).toBe(true);merchant.bankSubmission={last4:body.accountNumber.slice(-4),status:"SUBMITTED"};}
-    if(path.endsWith("/onboarding-link"))return route.fulfill({json:{url:"https://merchant.cashfree.com/merchantwebapp/validate/synthetic-token",expiresAt:new Date(Date.now()+3600000).toISOString()}});
+  const merchant = {
+    provider:"RAZORPAY_ROUTE", onboardingAvailable:true, setupStarted:false,
+    status:"NOT_CONNECTED", environment:"LIVE", bank:null,
+    collectionEnabled:false, message:"Razorpay Route account verification required.",
+  };
+  let onboardingCalls = 0;
+  await page.route("**/api/platform/organisations/*/merchant**", async route => {
+    const path = new URL(route.request().url()).pathname;
+    const body = route.request().postDataJSON() || {};
+    if (path.endsWith("/route/onboard")) {
+      onboardingCalls++;
+      expect(body.consent).toBe(true);
+      expect(body.pan).toBe("ABCDE1234F");
+      expect(body.vpa).toBe("rahul@okhdfcbank");
+      merchant.setupStarted = true;
+      merchant.status = "UNDER_REVIEW";
+    }
     return route.fulfill({json:merchant});
   });
   await phoneLogin(page);
@@ -210,51 +219,34 @@ test("owner merchant forms validate consent, keep bank data out of the vault and
   await page.getByLabel("City",{exact:true}).fill("Bengaluru");
   await page.getByRole("button",{name:"Create my PG"}).click();
   await expect(page).toHaveURL(/#subscription$/);
-  await expectActivationRedirect(page, "merchant"); // unpaid owners cannot enter KYC
-  fixture.activatePaid(); // Simulate a server-verified captured payment.
-  // Re-select the workspace to exchange an up-to-date server session.
+  await expectActivationRedirect(page,"merchant"); // unpaid owner blocked
+  fixture.activatePaid();
   await go(page,"workspaces");
   await page.getByRole("button",{name:/Maple House/}).click();
   await expect(page).toHaveURL(/#ownerHome$/);
   await go(page,"merchant");
-  await page.getByRole("button",{name:"Set up owner payment account"}).click();
-  await expect(page.getByLabel("Legal name")).toHaveValue("Rahul Sharma");
-  await fs.mkdir("visual-evidence/platform",{recursive:true});
-  await noOverflow(page);
-  await page.screenshot({path:"visual-evidence/platform/merchant-profile.png",fullPage:true});
-  await page.getByLabel("Business website or booking page").fill("https://example.test/maple-house");
-  await page.getByLabel("Business type",{exact:true}).selectOption("Individual");
-  await page.getByLabel("Customers",{exact:true}).selectOption("B2C");
-  await page.getByRole("button",{name:"Create merchant profile"}).click();
-  expect(profiles).toBe(0,"unchecked consent must prevent submission");
+  await expect(page.getByText(/Razorpay/).first()).toBeVisible();
+  await page.getByRole("button",{name:"Set up Razorpay owner account"}).click();
+  await expect(page).toHaveURL(/#merchantProfile$/);
+  await expect(page.getByLabel("Legal PAN and UPI account-holder name")).toHaveValue("Rahul Sharma");
+  await page.getByLabel("PAN number").fill("ABCDE1234F");
+  await page.getByLabel("Owner settlement UPI ID").fill("rahul@okhdfcbank");
+  await page.getByLabel("Business type").selectOption("individual");
+  await page.getByRole("button",{name:"Verify with Razorpay"}).click();
+  expect(onboardingCalls).toBe(0, "missing explicit consent must block provider submission");
   await page.getByRole("checkbox").check();
-  await page.getByRole("button",{name:"Create merchant profile"}).click();
-  await expect(page).toHaveURL(/#merchantBank$/);
-  expect(profiles).toBe(1);
-  await expect(page.getByLabel("Account number",{exact:true})).toHaveAttribute("type","password");
-  await noOverflow(page);
-  await page.screenshot({path:"visual-evidence/platform/merchant-bank.png",fullPage:true});
-  await page.getByLabel("Account number",{exact:true}).fill("123456789012");
-  await page.getByLabel("Confirm account number",{exact:true}).fill("123456789013");
-  await page.getByLabel("IFSC code").fill("ABCD0123456");
-  await page.getByRole("checkbox").check();
-  await page.getByRole("button",{name:"Submit bank details"}).click();
-  await expect(page.getByRole("alert")).toContainText("Account numbers must match");
-  expect(banks).toBe(0);
-  await page.getByLabel("Confirm account number",{exact:true}).fill("123456789012");
-  await page.getByRole("button",{name:"Submit bank details"}).click();
+  await page.getByRole("button",{name:"Verify with Razorpay"}).click();
   await expect(page).toHaveURL(/#merchant$/);
-  expect(banks).toBe(1);
-  const vault=JSON.stringify(await page.evaluate(()=>window.__platformVault));
-  expect(vault).not.toContain("123456789012");expect(vault).not.toContain("ABCD0123456");
-  await page.evaluate(()=>{window.SafeHouseNative.openMerchantOnboarding=url=>{window.__openedKyc=url;};});
-  await page.getByRole("button",{name:"Complete secure KYC"}).click();
-  await expect.poll(()=>page.evaluate(()=>window.__openedKyc)).toContain("https://merchant.cashfree.com/");
-  expect(merchant.status).toBe("KYC_REQUIRED");expect(merchant.collectionEnabled).toBe(false);
-  merchant.bankSubmission.status="CHECKING";
-  await go(page,"merchantBank");
-  await expect(page.getByText(/earlier submission needs provider confirmation/)).toBeVisible();
-  await expect(page.getByLabel("Account number",{exact:true})).toHaveCount(0);
+  expect(onboardingCalls).toBe(1);
+  expect(merchant.collectionEnabled).toBe(false, "a form or return must not enable rent");
+  const vault = JSON.stringify(await page.evaluate(()=>window.__platformVault));
+  expect(vault).not.toContain("ABCDE1234F");
+  expect(vault).not.toContain("rahul@okhdfcbank");
+  merchant.status = "APPROVED";
+  merchant.collectionEnabled = true;
+  await go(page,"workspaces");
+  await go(page,"merchant");
+  await expect(page.getByText("ROUTED PAYMENTS ENABLED")).toBeVisible();
 });
 
 test("sign-in never creates an unknown account without explicit confirmation or sends a second OTP", async ({ page }) => {
