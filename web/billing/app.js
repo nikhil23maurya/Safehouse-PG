@@ -233,7 +233,7 @@ async function prepare(values) {
   apps = await adapter.availableApps();
   if (!apps.length)
     throw new Error(
-      "No supported UPI app is available here. Open this page in your mobile browser with a supported UPI app.",
+      "UPI app launching is unavailable in this browser. Open this page in Chrome on your Android phone.",
     );
   current();
   const requestKey = crypto.randomUUID();

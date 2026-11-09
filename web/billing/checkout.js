@@ -1,8 +1,16 @@
+const APP_LABELS = {
+  any: "Choose a UPI app",
+  gpay: "Google Pay", phonepe: "PhonePe", paytm: "Paytm", bhim: "BHIM",
+  cred: "CRED", popclubapp: "POP", mobikwik: "MobiKwik", super_money: "super.money",
+  moneyview: "Moneyview", icici: "iMobile Pay", navi: "Navi", payzapp: "PayZapp",
+};
+
 /** Official Razorpay Web Custom SDK. This file is never bundled into Android. */
 export class CustomUpiPayment {
   constructor({ Razorpay, keyId, onSigned, onUncertain }) {
     this.sdk = new Razorpay({ key: keyId });
     this.busy = false;
+    this.appIds = new Set();
     this.sdk.on("payment.success", (value) => {
       this.busy = false;
       onSigned(value);
@@ -15,40 +23,30 @@ export class CustomUpiPayment {
     });
   }
   async availableApps() {
-    if (typeof this.sdk.checkPaymentAdapter !== "function") return [];
-    const apps = [
-      ["gpay", "Google Pay"],
-      ["phonepe", "PhonePe"],
-      ["paytm", "Paytm"],
-      ["bhim", "BHIM"],
-    ];
-    const results = await Promise.allSettled(
-      apps.map(async (app) => {
-        let timer;
-        try {
-          await Promise.race([
-            this.sdk.checkPaymentAdapter(app[0]),
-            new Promise((_, reject) => {
-              timer = setTimeout(
-                () => reject(new Error("App check timed out")),
-                8000,
-              );
-            }),
-          ]);
-          return app;
-        } finally {
-          clearTimeout(timer);
-        }
-      }),
-    );
-    return results.filter((r) => r.status === "fulfilled").map((r) => r.value);
+    this.appIds.clear();
+    if (typeof this.sdk.getSupportedUpiIntentApps !== "function") return [];
+    let timer;
+    try {
+      const supported = await Promise.race([
+        this.sdk.getSupportedUpiIntentApps(),
+        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error("UPI availability timed out")), 8000); }),
+      ]);
+      if (!Array.isArray(supported)) return [];
+      const valid = [...new Set(supported.filter(id => typeof id === "string" && Object.hasOwn(APP_LABELS, id)))];
+      // Android's supported `any` intent delegates installed-app selection to
+      // the device. A browser's supported-app list is not an installation scan.
+      const shown = valid.includes("any") ? ["any"] : valid;
+      this.appIds = new Set(shown);
+      return shown.map(id => [id, APP_LABELS[id]]);
+    } catch { return []; }
+    finally { clearTimeout(timer); }
   }
   pay({ orderId, contact, email, app }) {
     if (this.busy) return false;
     if (
       !/^order_[a-zA-Z0-9]+$/.test(orderId) ||
       !/^[6-9]\d{9}$/.test(contact) ||
-      !["gpay", "phonepe", "paytm", "bhim"].includes(app)
+      !this.appIds.has(app)
     )
       throw new Error(
         "Review this one-time payment and your mobile number first.",
