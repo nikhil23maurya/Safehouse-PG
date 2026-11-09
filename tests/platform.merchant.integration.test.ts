@@ -75,11 +75,11 @@ test("separate owners get separate merchant bindings; bank submission retains no
   assert.equal(JSON.stringify([stored,audits]).includes(bank.accountNumber),false);
   assert.equal(stored.bankLast4,"9012");assert.equal(stored.bankVerificationStatus,"SUBMITTED");
   const view=await merchantStatus(a.account.id,a.organisationId);
-  assert.equal(view.bank,null);assert.deepEqual(view.bankSubmission,{last4:"9012",status:"SUBMITTED"});
+  assert.equal(view.bank,null);assert.equal(view.bankSubmission,null,"retired Cashfree submissions must not be offered for reuse");
   assert.equal((view as any).bankSubmissionFingerprint,undefined);assert.equal((view as any).profileFingerprint,undefined);
   mock.stage(record.providerAccountRef!,"MIN_KYC_APPROVED");await syncMerchantRecord(a.organisationId,mock.provider);
   const approved=await merchantStatus(a.account.id,a.organisationId);
-  assert.equal(approved.status,"APPROVED");assert.ok(approved.verifiedAt);assert.equal(approved.collectionEnabled,false);
+  assert.equal(approved.status,"REVIEW_REQUIRED");assert.equal(approved.verifiedAt,null);assert.equal(approved.collectionEnabled,false);
   await assert.rejects(()=>submitMerchantBank(a.account.id,a.organisationId,bank,mock.provider),{code:"APPROVED_BANK_CHANGE_REVIEW"});
   mock.stage(record.providerAccountRef!,"MIN_KYC_REJECTED");await syncMerchantRecord(a.organisationId,mock.provider);
   assert.equal((await merchantStatus(a.account.id,a.organisationId)).verifiedAt,null);
@@ -96,7 +96,7 @@ test("lost merchant creation recovers the same ID; a lost bank response never tr
   assert.equal(mock.bankWrites,1);
   const link=await merchantOnboardingLink(a.account.id,a.organisationId,mock.provider);
   assert.match(link.url,/^https:\/\/merchant.cashfree.com\//);
-  assert.equal((await merchantStatus(a.account.id,a.organisationId)).status,"KYC_REQUIRED","a link or return never grants approval");
+  assert.equal((await merchantStatus(a.account.id,a.organisationId)).status,"REVIEW_REQUIRED","retired provider cannot grant approval");
   const audits=await prisma.pgAudit.findMany({where:{organisationId:a.organisationId}});
   assert.equal(JSON.stringify(audits).includes("synthetic-private-token"),false);
 });
@@ -109,12 +109,12 @@ test("signed notifications refetch status, deduplicate and cannot turn test appr
   const first=payload(1);
   await processMerchantWebhook(first,timestamp,sign(first),mock.provider);
   await processMerchantWebhook(first,timestamp,sign(first),mock.provider);
-  assert.equal((await merchantStatus(a.account.id,a.organisationId)).status,"KYC_REQUIRED","payload status is never the source of approval");
+  assert.equal((await merchantStatus(a.account.id,a.organisationId)).status,"REVIEW_REQUIRED","retired webhook cannot grant approval");
   const hash=crypto.createHash("sha256").update(first).digest("hex");
   assert.equal(await prisma.pgProviderEvent.count({where:{provider:"CASHFREE_MERCHANT",eventKey:hash}}),1);
   mock.stage(record.providerAccountRef!,"MIN_KYC_APPROVED");const second=payload(2);
   await processMerchantWebhook(second,timestamp,sign(second),mock.provider);
-  assert.equal((await merchantStatus(a.account.id,a.organisationId)).status,"APPROVED");
+  assert.equal((await merchantStatus(a.account.id,a.organisationId)).status,"REVIEW_REQUIRED");
   await assert.rejects(()=>processMerchantWebhook(payload(3),timestamp,"0".repeat(44),mock.provider),{code:"INVALID_MERCHANT_SIGNATURE"});
   await prisma.pgMerchantAccount.update({where:{organisationId:a.organisationId},data:{providerEnvironment:"TEST"}});
   await assert.rejects(()=>syncMerchantRecord(a.organisationId,mock.provider),{code:"MERCHANT_ENVIRONMENT_CHANGED"});
