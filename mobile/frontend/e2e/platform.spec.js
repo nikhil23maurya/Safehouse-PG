@@ -2,8 +2,8 @@ import { test, expect } from "@playwright/test";
 import { setup, go, noOverflow } from "./helpers.js";
 import fs from "node:fs/promises";
 
-async function platform(page) {
-  await page.addInitScript(() => {
+async function platform(page, { billing = false } = {}) {
+  await page.addInitScript((enableBilling) => {
     window.__platformVault = null;
     window.__phoneSends = 0;
     window.SafeHouseNative = {
@@ -30,8 +30,11 @@ async function platform(page) {
           100,
         ),
       cancelPhoneSignIn: () => {},
+      ...(enableBilling ? { openPlanRazorpayUpi: (raw) => {
+        window.__lastPlanOptions = JSON.parse(raw);
+      } } : {}),
     };
-  });
+  }, billing);
   const fixtures = await setup(page);
   const account = {
     id: "pg-account-1",
@@ -71,6 +74,7 @@ async function platform(page) {
     if (path.endsWith("/config"))
       data = {
         enabled: true,
+        androidBilling: billing ? "CUSTOM_UPI_INTENT" : "NOT_CONFIGURED",
         phone: { projectId: "synthetic-test-project" },
         legal: {
           terms: "https://example.test/terms",
@@ -109,13 +113,21 @@ async function platform(page) {
       data = {
         entitled: paid,
         legacyAccess: false,
-        configured: false,
+        configured: billing,
         mode: "MANUAL_MONTHLY",
         recurring: false,
         tax: null,
         subscription: null,
       };
-    else if (path.endsWith("/merchant"))
+    else if (path.endsWith("/plan/android/orders")) {
+       expect(billing).toBe(true);
+       expect(body).toMatchObject({ accepted:true, amountPaise:24900, recurring:false });
+       expect(body.requestKey.length).toBeGreaterThanOrEqual(16);
+       data = { id:"pg-plan-order-one", orderId:"order_SYNTHETIC001", keyId:"rzp_test_SYNTHETIC001",
+         amountPaise:24900, currency:"INR", recurring:false, payable:true };
+     } else if (path.endsWith("/subscription/recheck")) {
+       data = { entitled: paid };
+     } else if (path.endsWith("/merchant"))
       data = {
         status: "NOT_CONNECTED",
         bank: null,
@@ -157,6 +169,7 @@ async function platform(page) {
       return propertiesCreated;
     },
     activatePaid() { paid = true; },
+    get entitled() { return paid; },
   };
 }
 async function expectActivationRedirect(page, name) {
@@ -188,6 +201,35 @@ async function phoneLogin(page) {
     page.getByRole("heading", { name: "A place for everyone." }),
   ).toBeVisible();
 }
+
+test("₹249 Razorpay UPI checkout starts inside app and only captured provider payment unlocks dashboard", async ({page}) => {
+  const fixture = await platform(page, { billing: true });
+  await phoneLogin(page);
+  await page.getByRole("button",{name:"I manage a PG",exact:false}).click();
+  await page.getByLabel("Full name").fill("Rahul Sharma");
+  await page.getByLabel("Email address").fill("rahul@example.test");
+  await page.getByRole("button",{name:"Continue",exact:true}).click();
+  await page.getByLabel("PG name").fill("Maple House");
+  await page.getByLabel("City",{exact:true}).fill("Bengaluru");
+  await page.getByRole("button",{name:"Create my PG"}).click();
+  await expect(page).toHaveURL(/#subscription$/);
+  const pay = page.getByRole("button",{name:"Pay ₹249 securely with UPI"});
+  await expect(pay).toBeVisible();
+  await pay.click();
+  await expect.poll(()=>page.evaluate(()=>window.__lastPlanOptions)).toMatchObject({
+    key:"rzp_test_SYNTHETIC001", order_id:"order_SYNTHETIC001",
+    amount:24900, currency:"INR", contact:"+919123456789", email:"rahul@example.test",
+  });
+  // SDK success alone cannot give dashboard entitlement.
+  await page.evaluate(()=>window.PGOnePlanPaymentResult("order_SYNTHETIC001","RETURNED_CHECK_PROVIDER"));
+  await expect(page).toHaveURL(/#subscription$/);
+  await expectActivationRedirect(page,"ownerHome");
+  expect(fixture.entitled).toBe(false);
+  fixture.activatePaid(); // Simulated provider-confirmed capture.
+  await page.getByRole("button",{name:"Check payment status"}).click();
+  await expect(page).toHaveURL(/#setupReady$/);
+  expect(fixture.entitled).toBe(true);
+});
 
 test("owner merchant forms validate consent, keep bank data out of the vault and require provider KYC confirmation", async ({page}) => {
   const fixture = await platform(page);
