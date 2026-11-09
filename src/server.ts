@@ -18,6 +18,7 @@ import { processSubscriptionWebhook } from "./platform/billing.js";
 import { billingWebRouter } from "./platform/web-static.js";
 import { legalRouter } from "./platform/legal.js";
 import { processPlanWebhook } from "./platform/plan-payments.js";
+import { logPaymentPreflight } from "./platform/payment-preflight.js";
 import {
   datePartsInTimeZone,
   invoiceTotal,
@@ -740,6 +741,7 @@ app.use((error: any, _req: Request, res: Response, _next: NextFunction) => {
 
 await bootstrapOwner();
 const server = app.listen(config.PORT, "0.0.0.0", () => console.log(`SafeHouse API listening on :${config.PORT}`));
+server.once("listening", () => { void logPaymentPreflight(); });
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {
