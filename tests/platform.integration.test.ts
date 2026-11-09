@@ -300,10 +300,19 @@ test("isolated database: creation retries, invitations, access revocation and te
   assert.equal((await request(`/api/platform/organisations/${other.organisationId}/subscription`, ownerTokens.accessToken)).status, 403);
 
   assert.equal(
+    (await request("/api/owner/probe", ownerTokens.accessToken)).status,
+    402,
+    "unpaid new workspace dashboard reads must be denied",
+  );
+  assert.equal(
     (await request("/api/owner/probe", ownerTokens.accessToken, {})).status,
     402,
     "unpaid new workspace writes must be denied",
   );
+  const ownerSession = await request("/api/platform/session", ownerTokens.accessToken);
+  assert.equal(ownerSession.status, 200);
+  assert.equal(ownerSession.body.memberships.find((m: any) => m.id === member.id)?.organisation.entitled, false,
+    "session must disclose the server-computed unpaid state, not a client flag");
   assert.equal(
     (
       await request(
