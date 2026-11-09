@@ -650,9 +650,15 @@ window.SafeHousePaymentError = () => {
   toast("Check payment status before trying again.");
   void payment.resume();
 };
+// The native Custom SDK returns a UPI-app result, never an entitlement.
+window.PGOnePlanPaymentError = (message) => {
+  toast(message || "UPI checkout could not open. Check payment status before retrying.", "error");
+  if (state.route?.name === "subscription") void revalidateOwnerActivation();
+};
 window.SafeHouseResume = () => {
   applyMotionPreference();
   if (screen?.paymentFlow) void payment.resume();
+  else if (state.route?.name === "subscription") void revalidateOwnerActivation();
   else if (state.tokens && state.user && !dirty && !submittedForms) {
     cache.clear();
     void render();
@@ -1069,6 +1075,16 @@ async function revalidateOwnerActivation() {
   activationRefreshInFlight = true;
   try {
     const previouslyPaid = ownerHasPaidAccess(state);
+    if (state.route.name === "subscription" &&
+        onboarding.config?.androidBilling === "CUSTOM_UPI_INTENT") {
+      const org = state.platform?.memberships?.find(m =>
+        m.id === state.platform?.membershipId)?.organisation;
+      if (org?.id) {
+        await api(`/api/platform/organisations/${org.id}/subscription/recheck`, {
+          method: "POST",
+        });
+      }
+    }
     await refreshPlatform(); // Backend calculates entitlements from captured payments.
     if (!ownerHasPaidAccess(state)) {
       // Expired/refunded access also revokes an already-open dashboard.
