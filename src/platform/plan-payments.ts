@@ -227,7 +227,7 @@ export async function verifyPlanPayment(accountId: string, organisationId: strin
 export async function recheckPlanPayments(accountId: string, organisationId: string, provider = new RazorpayPlanOrders()) {
   await ownerOrganisation(accountId, organisationId);
   const now = new Date();
-  const orders = await prisma.pgPlanOrder.findMany({ where: { organisationId, OR: [
+  const orders = await prisma.pgPlanOrder.findMany({ where: { organisationId, providerKeyId: { not: { startsWith: "cashfree:" } }, OR: [
     { open: true }, { receipt: { status: "CAPTURED", refundedPaise: 0, periodEnd: { gt: now } } },
   ] }, orderBy: { createdAt: "asc" }, take: 100 });
   for (const order of orders) await reconcilePlanOrder(order.id, provider);
@@ -247,7 +247,12 @@ export async function manualPlanStatus(accountId: string, organisationId: string
     if (accessEnd && payment.periodStart <= new Date(accessEnd) && payment.periodEnd > new Date(accessEnd)) accessEnd = payment.periodEnd;
   }
   return { ...base, entitled: base.entitled || Boolean(active), mode: "MANUAL_MONTHLY", recurring: false,
-    configured: manualBillingConfigured(), checkoutEnabled: manualCheckoutEnabled(), renewalCycles: null,
+    configured: manualBillingConfigured() || (platformConfig.PGONE_CASHFREE_BILLING_ENABLED === "true" &&
+      Boolean(platformConfig.PGONE_CASHFREE_PG_CLIENT_ID && platformConfig.PGONE_CASHFREE_PG_CLIENT_SECRET)),
+    checkoutEnabled: platformConfig.PGONE_CASHFREE_BILLING_ENABLED === "true"
+      ? (platformConfig.PGONE_CASHFREE_PG_ENV === "LIVE" &&
+         Boolean(platformConfig.PGONE_CASHFREE_PG_CLIENT_ID && platformConfig.PGONE_CASHFREE_PG_CLIENT_SECRET))
+      : manualCheckoutEnabled(), renewalCycles: null,
     accessEnd, pendingOrder: open ? { id: open.id, status: open.status } : null,
     // Keep old contracts/history in the response; never reinterpret them as new mandates.
     legacySubscription: base.subscription,
