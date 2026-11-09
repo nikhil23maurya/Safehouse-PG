@@ -11,6 +11,7 @@ export const platformConfig = z
     PGONE_CASHFREE_PARTNER_API_KEY: optional,
     PGONE_CASHFREE_ENV: z.enum(["LIVE", "TEST"]).default("LIVE"),
     PGONE_RAZORPAY_ROUTE_ENABLED: z.enum(["true", "false"]).default("false"),
+    PGONE_RAZORPAY_ROUTE_RENT_LIVE_ENABLED: z.enum(["true", "false"]).default("false"),
     PGONE_FIREBASE_TESTING_APP_ID: optional,
     PGONE_FIREBASE_WEB_APP_ID: optional,
     PGONE_FIREBASE_WEB_API_KEY: optional,
