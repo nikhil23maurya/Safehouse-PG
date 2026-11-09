@@ -335,6 +335,12 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
             return android.provider.Settings.Global.getFloat(getContentResolver(), android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f;
         }
         @JavascriptInterface public String getSession() { return sessionVault.load(); }
+        @JavascriptInterface public void openMerchantOnboarding(String url) { runOnUiThread(() -> {
+            if (!MerchantOnboardingActivity.allowedInitialUrl(url)) {
+                Toast.makeText(MainActivity.this,"The secure onboarding link could not be verified.",Toast.LENGTH_LONG).show(); return;
+            }
+            startActivity(new Intent(MainActivity.this,MerchantOnboardingActivity.class).putExtra("onboardingUrl",url));
+        }); }
         @JavascriptInterface public boolean saveSession(String value) { return sessionVault.save(value); }
         @JavascriptInterface public void ready() {
             runOnUiThread(() -> {

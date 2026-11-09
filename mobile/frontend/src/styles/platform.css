@@ -982,3 +982,6 @@
       #fbfcff 55%);
   z-index: -1;
 }
+
+.merchant-consent { display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: start; color: #344b76; font-size: 13px; line-height: 1.6; margin: 20px 0; }
+.merchant-consent input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: #1041c9; }

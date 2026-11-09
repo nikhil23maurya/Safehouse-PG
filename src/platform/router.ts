@@ -42,6 +42,7 @@ import {
   verifyAuthorisation,
 } from "./web-billing.js";
 import { createPlanOrder, manualPlanStatus, recheckPlanPayments, verifyPlanPayment } from "./plan-payments.js";
+import { beginMerchantSetup, merchantProfileInput, merchantBankInput, submitMerchantBank, merchantOnboardingLink, syncMerchantRecord } from "./cashfree-merchant.js";
 
 export const platformRouter = express.Router();
 const limited = rateLimit({
@@ -435,9 +436,38 @@ platformRouter.post(
     res.json(await subscriptionStatus(account.id, String(req.params.id)));
   },
 );
+platformRouter.use("/organisations/:id/merchant", (_req,res,next) => {
+  res.setHeader("Cache-Control","no-store");
+  next();
+});
 platformRouter.get("/organisations/:id/merchant", async (req, res) => {
   const { account } = await session(req);
   res.json(await merchantStatus(account.id, id.parse(req.params.id)));
+});
+platformRouter.post("/organisations/:id/merchant/profile", limited, async (req,res) => {
+  const { account } = await session(req);
+  const organisationId = id.parse(req.params.id);
+  await beginMerchantSetup(account.id, organisationId, merchantProfileInput.parse(req.body));
+  res.json(await merchantStatus(account.id,organisationId));
+});
+platformRouter.post("/organisations/:id/merchant/bank", limited, async (req,res) => {
+  const { account } = await session(req);
+  const organisationId = id.parse(req.params.id);
+  await submitMerchantBank(account.id,organisationId,merchantBankInput.parse(req.body));
+  res.json(await merchantStatus(account.id,organisationId));
+});
+platformRouter.post("/organisations/:id/merchant/onboarding-link", limited, async (req,res) => {
+  const { account } = await session(req);
+  res.setHeader("Cache-Control","no-store");
+  res.setHeader("Referrer-Policy","no-referrer");
+  res.json(await merchantOnboardingLink(account.id,id.parse(req.params.id)));
+});
+platformRouter.post("/organisations/:id/merchant/recheck", limited, async (req,res) => {
+  const { account } = await session(req);
+  const organisationId = id.parse(req.params.id);
+  await ownerOrganisation(account.id,organisationId);
+  await syncMerchantRecord(organisationId);
+  res.json(await merchantStatus(account.id,organisationId));
 });
 platformRouter.get("/staff", async (req, res) => {
   const { membership } = await session(req);
