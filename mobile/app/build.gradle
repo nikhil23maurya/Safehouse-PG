@@ -31,6 +31,8 @@ android {
 
 dependencies {
     implementation 'com.razorpay:checkout:1.6.40'
+    // Custom SDK opens UPI intent apps directly from the PGOne subscription screen.
+    implementation 'com.razorpay:customui:3.9.22'
     // SAFEHOUSE_NOTIFICATIONS_ANDROID_V1
     implementation platform('com.google.firebase:firebase-bom:34.17.0')
     implementation 'com.google.firebase:firebase-messaging'
