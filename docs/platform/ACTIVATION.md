@@ -32,18 +32,26 @@ The Android Play build remains consumption-only. The separate `/billing/` websit
 
 Uncertain order creation is held and recovered by its provider receipt reference. It is not blindly retried. Repeated callbacks, webhook delivery or parallel reconciliation cannot extend access twice. The webhook validates raw-body HMAC, deduplicates events and refetches provider state. A refund monotonically revokes that receipt's period; other paid periods are retained at their original dates. Existing legacy workspace access is unchanged.
 
-## Per-owner online rent collection
+## Per-owner online rent collection — Razorpay Route (not Cashfree)
 
-1. Apply for **Cashfree Embedded Payments** partner access. Explain that PG owners are separate merchants, each with a provider-approved settlement bank relationship. Obtain the supported sandbox onboarding API/SDK contract, authentication, webhook signing and settlement/routing permissions.
-2. Confirm the exact current provider-required business, bank and KYC fields, any hosted-document flow, required disclosures and all activation/rejection/suspension states. Do not paste bank account numbers/PAN/documents into this chat.
-3. Until access is approved the app shows **Not connected / awaiting activation**, collects no bank/KYC documents and cannot claim to verify a bank account. Its `collectionEnabled` stays false. Database status text alone cannot turn on collection.
-4. The existing legacy rent engine settles Razorpay QR payments. It has no approved per-owner Cashfree payment adapter. A new adapter must reconcile captured payments through the existing transactional settlement interface; changing that frozen engine requires an explicit integration decision. New organisations are blocked from starting legacy shared-account online rent payments.
-5. After the approved adapter exists, verify distinct-owner routing, bank confirmation, pending/additional-information/rejected/approved/suspended KYC, signed event replay and refunds/settlement in the provider sandbox. Existing legacy rent collection remains unchanged.
+Razorpay remains the sole payment provider. The one-time ₹249 owner subscription is collected into PGOne's authorised Razorpay merchant account. A resident's rent must be linked to **that property's individually verified Razorpay Route Linked Account**. These are different transactions and independent entitlement/settlement records.
+
+1. Apply to Razorpay for **Route linked-account onboarding, UPI VPA settlement and transfer-via-orders** for PGOne's exact platform/rent use case. Razorpay may have additional RBI eligibility requirements, turnover thresholds, due diligence, bank approvals and settlement limitations. Existing Razorpay Checkout credentials alone DO NOT grant Route access.
+2. Enable Route only after Razorpay has approved the parent account, and configure `PGONE_RAZORPAY_ROUTE_ENABLED=true` using the same parent merchant `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` used for rent collection. Keys must be live to process production rent; the flag is **false by default**. Never put secrets in source, issue threads or chat.
+3. For a paid owner, open `Rent settlement account`, enter real legal name, PAN, business type and owner UPI ID and explicitly consent. Razorpay validates the VPA holder name, then creates a Composite Linked Account with a deterministic reference and idempotency key. PGOne retains a fingerprint and verification status, **not** the PAN, full VPA or payment PIN.
+4. The backend reads the linked account directly from Razorpay, checks owner reference, Route product activation, an **active/verified** settlement destination, accepted provider terms, environment and linked-account status. Only then can an account be used as the recipient in a new PG's rent order.
+5. Rent orders for new properties are created with an exact, provider-confirmed **Route transfer** to that account for the full rent amount. A Razorpay order without an exact transfer is rejected and must never be shown to the resident. The existing fixed QR to the **shared PGOne merchant** stays blocked for new owners, even if the owner is subscribed. Legacy-property QR behaviour remains preserved.
+6. A captured resident payment is different from transfer processing and bank/UPI **settlement**. Do not claim bank credit from a Checkout callback or even from a payment capture. Link transfer and settlement reporting to the owner dashboard before promising settlement SLAs. VPA settlement can be faster subject to activation, individual limits and provider/bank operation; do not promise an unconditional 10-second transfer.
+7. Cashfree bank, KYC and webhook submission endpoints are retired (410). Historical records must remain audit-safe and never be silently activated as Razorpay recipients.
+
+**Release blocker:** Razorpay has not yet confirmed Route/UPI settlements access for this account and no live owner settlement has been verified. Until then, keep the feature disabled and avoid accepting new-owner online rent into PGOne's own account. End-to-end live tests must include the exact owner recipient, transfer reversal/refund, wrong-account, lost-response/idempotency, linked-account suspension, and settlement reconciliation.
+
+Relevant docs: [Razorpay Route](https://razorpay.com/route/), [Composite onboarding](https://tfs.np.razorpay.in/docs/api/payments/route/create-linked-account-composite), [Transfer via order](https://tfs.np.razorpay.in/docs/api/payments/route/create-transfers-orders).
 
 ## Migration and release order
 
 - Review `prisma/migrations/20261109090000_pgone_platform/migration.sql` against a staging clone and take the normal database backup. It adds platform tables/indexes/check constraints and relaxes `User.email/passwordHash` to nullable for real phone-only actors. Existing values, financial tables and enum values are retained.
-- The existing Render start command runs `prisma migrate deploy` on its configured database. Main promotion includes this additive production migration under the user's release authorisation. Review the managed database recovery/backup policy before deployment. Do not roll back to old application code after creating phone-only actors without checking nullable-field compatibility.
+- Review `prisma/migrations/20261109210000_razorpay_route_rent_binding/migration.sql` on the same staging clone. It adds a nullable immutable Route recipient binding for resident payment attempts; legacy records remain unchanged.\n- The existing Render start command runs `prisma migrate deploy` on its configured database. Main promotion includes this additive production migration under the user's release authorisation. Review the managed database recovery/backup policy before deployment. Do not roll back to old application code after creating phone-only actors without checking nullable-field compatibility.
 - Verify old password login, property permissions, resident management, invoices, manual payments, QR reconciliation, receipts and notifications alongside the new flows. The CI PostgreSQL instance is disposable and contains synthetic records only.
 - Publish neither a release nor real-payment activation from the testing APK alone. Managed signing, provider sandbox results, physical-device OTP/UPI/FCM and the release review remain required.
 
@@ -53,7 +61,7 @@ Uncertain order creation is held and recovered by its provider receipt reference
 - [Firebase server ID-token verification](https://firebase.google.com/docs/auth/admin/verify-id-tokens)
 - [Razorpay official Custom Checkout subscription documentation](https://github.com/razorpay/markdown-docs/blob/master/api/payments/subscriptions-custom.md)
 - [Razorpay Subscriptions API](https://razorpay.com/docs/api/payments/subscriptions/)
-- [Cashfree Embedded Payments](https://www.cashfree.com/embedded-payments/)
+- [Razorpay Route linked accounts](https://razorpay.com/route/)
 - [Google Play payments policy](https://support.google.com/googleplay/android-developer/answer/10281818)
 
 ## Separate web billing build
@@ -72,7 +80,7 @@ In the configured backend environment run:
 node --import tsx scripts/pgone-payment-preflight.mjs
 ```
 
-This reports the credential source, missing monthly-payment settings, webhook-secret availability and HTTP status of a read-only Razorpay Orders request. It never prints credentials or customer/order/payment records. No plan, mandate, payment, merchant or transfer is created. A successful read is not proof of Custom Checkout approval or payment acceptance. No provider subscription plan or mandate is required. `ownerMerchantOnboardingImplemented=false` explicitly identifies the remaining bank/KYC and owner-wise rent integration gap; configuration cannot enable code that is not implemented.
+This reports the credential source, missing monthly-payment settings, webhook-secret availability and HTTP status of a read-only Razorpay Orders request. It never prints credentials or customer/order/payment records. No plan, mandate, payment, merchant or transfer is created. A successful read is not proof of Custom Checkout approval or payment acceptance. No provider subscription plan or mandate is required. `ownerMerchantOnboardingImplemented=false` is a legacy preflight field; it does not assert that Razorpay Route is approved or that new-owner settlement is active. Check the separate Route eligibility and integration status before enabling collection.
 
 ## Exact production policy values and signing status
 
