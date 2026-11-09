@@ -1061,8 +1061,32 @@ window.addEventListener("beforeunload", (event) => {
 window.addEventListener("online", () => {
   if (screen?.paymentFlow) void payment.resume();
 });
+let activationRefreshInFlight = false;
+async function revalidateOwnerActivation() {
+  if (activationRefreshInFlight || dirty || submittedForms ||
+      !state.tokens || state.tokens.kind !== "PLATFORM" ||
+      state.user?.role !== "OWNER" || !state.platform?.membershipId) return;
+  activationRefreshInFlight = true;
+  try {
+    const previouslyPaid = ownerHasPaidAccess(state);
+    await refreshPlatform(); // Backend calculates entitlements from captured payments.
+    if (!ownerHasPaidAccess(state)) {
+      // Expired/refunded access also revokes an already-open dashboard.
+      if (guardedRoute(state.route.name) !== state.route.name)
+        await navigate("subscription", {}, { replace: true, force: true });
+    } else if (!previouslyPaid && state.route.name === "subscription") {
+      await navigate("setupReady", {}, { replace: true, force: true });
+    }
+  } catch {
+    // Do not invent activation on a network failure. Owner APIs remain gated.
+  } finally {
+    activationRefreshInFlight = false;
+  }
+}
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && screen?.paymentFlow) void payment.resume();
+  if (document.hidden) return;
+  if (screen?.paymentFlow) void payment.resume();
+  void revalidateOwnerActivation();
 });
 let nativeKeyboardOpen = false,
   keyboardFrame;
