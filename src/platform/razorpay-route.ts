@@ -52,7 +52,7 @@ export function routeAccountStage(remote: any, reference: string, expectedAccoun
     verifiedAt: active ? new Date() : null,
     verification: dest?.verification_status || "pending",
     settlementMethod: dest?.method || null,
-    collectionEnabled: Boolean(active && routeEnabled() && environment() === "LIVE"),
+    collectionEnabled: Boolean(active && routeEnabled() && platformConfig.PGONE_RAZORPAY_ROUTE_RENT_LIVE_ENABLED === "true" && environment() === "LIVE"),
   };
 }
 export class RazorpayRoute {
@@ -179,7 +179,7 @@ export async function onboardRazorpayRoute(accountId: string, organisationId: st
   return verified;
 }
 export async function verifiedRentDestination(organisationId: string, provider = new RazorpayRoute()) {
-  assert(routeEnabled() && environment() === "LIVE", 409, "ROUTE_NOT_ACTIVE",
+  assert(routeEnabled() && platformConfig.PGONE_RAZORPAY_ROUTE_RENT_LIVE_ENABLED === "true" && environment() === "LIVE", 409, "ROUTE_NOT_ACTIVE",
     "Owner-specific Razorpay Route is not activated for live rent collection.");
   const state = await syncRazorpayRoute(organisationId, provider);
   assert(state.collectionEnabled, 409, "ROUTE_SETTLEMENT_NOT_VERIFIED",
@@ -187,7 +187,7 @@ export async function verifiedRentDestination(organisationId: string, provider =
   return state.accountId;
 }
 export function routeTransfer(accountId: string, amountPaise: number) {
-  assert(accountPattern.test(accountId) && Number.isSafeInteger(amountPaise) && amountPaise >= 100,
+  assert(accountPattern.test(accountId) && Number.isSafeInteger(amountPaise) && amountPaise >= 100 && amountPaise <= 10000000,
     400, "ROUTE_TRANSFER_INVALID", "Invalid linked account or rent amount.");
   return { account: accountId, amount: amountPaise, currency: "INR", on_hold: false };
 }
