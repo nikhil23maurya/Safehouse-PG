@@ -88,7 +88,7 @@ export function otpScreen(ctx) {
   const result = {
     ...page(
       "Verify your number",
-      `${intro("A SECURE START", "Your number. Verified.", `Enter the six-digit code sent to ${onboarding.phone}.`)}<div class="otp-status" role="status">${onboarding.sentAt ? "Verification code sent." : "Requesting your code…"}</div>${form("otp", `<label class="field"><span class="field-label">Verification code</span><input class="otp-input" name="code" aria-label="Verification code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="— — — — — —"><span class="field-error" id="field-code-error"></span></label>`, "Verify & continue")}<div class="otp-actions">${button("Resend code", { action: "resend", kind: "secondary block", attrs: "disabled" })}<span data-countdown role="status"></span>${button("Change mobile number", { action: "changeNumber", kind: "text-button" })}</div><p class="legal-copy">Never share your verification code with anyone.</p>`,
+      `${intro("A SECURE START", "Verify your number.", `Enter the six-digit verification code for ${onboarding.phone}.`)}<div class="otp-status" role="status">${onboarding.sentAt ? "Verification code sent." : "Requesting your code…"}</div>${form("otp", `<label class="field"><span class="field-label">Verification code</span><input class="otp-input" name="code" aria-label="Verification code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" required placeholder="— — — — — —"><span class="field-error" id="field-code-error"></span></label>`, "Verify & continue")}<div class="otp-actions">${button("Resend code", { action: "resend", kind: "secondary block", attrs: "disabled" })}<span data-countdown role="status"></span>${button("Change mobile number", { action: "changeNumber", kind: "text-button" })}</div><p class="legal-copy">Never share your verification code with anyone.</p>`,
       "phone",
     ),
     mount() {
@@ -117,6 +117,8 @@ export function otpScreen(ctx) {
       if (type === "sent") {
         onboarding.sentAt = Date.now();
         if (label) label.textContent = "Verification code sent.";
+        const countdown = document.querySelector("[data-countdown]");
+        if (countdown) countdown.textContent = "Resend available in 60s";
       }
       if (type === "error") {
         if (label) label.textContent = value;
