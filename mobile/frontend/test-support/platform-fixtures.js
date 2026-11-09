@@ -41,10 +41,12 @@ export function createPlatformFixtures() {
     handler(url, body) {
       const path = new URL(url).pathname;
       if (path.includes("/merchant/")) {
-        if (!merchant.enabled) throw new Error("Synthetic merchant feature is disabled");
-        if (path.endsWith("/profile")) merchant.started = true;
-        if (path.endsWith("/bank")) merchant.bank = { last4: body.accountNumber.slice(-4), status: "SUBMITTED" };
-        return { status: "KYC_REQUIRED" };
+        if (!merchant.enabled) throw new Error("Synthetic Razorpay Route feature is disabled");
+        if (path.endsWith("/route/onboard")) {
+          if (!body.consent || !body.pan || !body.vpa) throw new Error("Provider onboarding must carry explicit consent and identity");
+          merchant.started = true;
+        }
+        return { status: "UNDER_REVIEW" };
       }
       if (path.endsWith("/config"))
         return {
@@ -98,13 +100,14 @@ export function createPlatformFixtures() {
         };
       if (path.endsWith("/merchant"))
         return {
-          status: merchant.started ? "KYC_REQUIRED" : "NOT_CONNECTED",
+          provider: "RAZORPAY_ROUTE",
+          status: merchant.started ? "UNDER_REVIEW" : "NOT_CONNECTED",
           bank: null,
-          bankSubmission: merchant.bank,
+          bankSubmission: null,
           setupStarted: merchant.started,
+          collectionEnabled: false,
           environment: "LIVE",
-          message:
-            "Online payment setup is awaiting payment-provider activation.",
+          message: "Razorpay Route requires provider verification.",
           onboardingAvailable: merchant.enabled,
         };
       if (path.endsWith("/invitations")) return { invitations: [] };
