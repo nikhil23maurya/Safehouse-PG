@@ -47,11 +47,11 @@ export function successfulCashfreePayment(payment: any, remote: any, local: Loca
     payment?.payment_currency === "INR" &&
     moneyPaise(payment?.payment_amount) === local.amountPaise &&
     typeof payment?.cf_payment_id !== "undefined" &&
-    /^\\d{1,40}$/.test(String(payment.cf_payment_id)) &&
+    /^\d{1,40}$/.test(String(payment.cf_payment_id)) &&
     Number.isFinite(Date.parse(payment.payment_time || payment.payment_completion_time || ""));
 }
 export function verifyCashfreeWebhook(raw: Buffer, timestamp: string, signature: string, secret: string) {
-  if (!/^\\d{10,13}$/.test(timestamp) || !/^[A-Za-z0-9+/]+={0,2}$/.test(signature)) return false;
+  if (!/^\d{10,13}$/.test(timestamp) || !/^[A-Za-z0-9+/]+={0,2}$/.test(signature)) return false;
   const now = Date.now(), epoch = Number(timestamp);
   if (Math.abs(now - (epoch < 1e12 ? epoch * 1000 : epoch)) > 10 * 60_000) return false;
   const expected = crypto.createHmac("sha256", secret).update(timestamp).update(raw).digest();
@@ -62,7 +62,7 @@ export class CashfreePG {
   constructor(private readonly fetcher: typeof fetch = fetch) {}
   async request(path: string, method = "GET", body?: object, idempotency?: string) {
     assert(cashfreeBillingConfigured(), 503, "CASHFREE_BILLING_NOT_CONFIGURED", "Cashfree PGOne billing is awaiting configuration.");
-    assert(/^\\/pg\\/orders(?:\\/[a-zA-Z0-9_-]+(?:\\/payments)?)?$/.test(path), 400, "CASHFREE_INVALID_PATH", "Invalid provider order path.");
+    assert(/^\/pg\/orders(?:\/[a-zA-Z0-9_-]+(?:\/payments)?)?$/.test(path), 400, "CASHFREE_INVALID_PATH", "Invalid provider order path.");
     const base = client().environment === "TEST" ? "https://sandbox.cashfree.com" : "https://api.cashfree.com";
     let response: Response;
     try {
@@ -97,7 +97,7 @@ export class CashfreePG {
       order_currency: "INR",
       customer_details: {
         customer_id: `pgo_${crypto.createHash("sha256").update(local.organisationId).digest("hex").slice(0,22)}`,
-        customer_phone: phone.replace(/^\\+91/, ""),
+        customer_phone: phone.replace(/^\+91/, ""),
         customer_name: customerName.slice(0, 100),
       },
       order_meta: {
@@ -141,10 +141,12 @@ export async function reconcileCashfreeOrder(id: string, organisationId: string,
   await atomic(async tx => {
     const existing = await tx.pgPlanReceipt.findUnique({ where: { orderId: local.id } });
     if (existing) {
-      assert(existing.providerPaymentId === paymentId && existing.amountPaise === PLAN.amountPaise &&
+      assert(existing.providerPaymentId === `cf_${paymentId}` && existing.amountPaise === PLAN.amountPaise &&
         existing.organisationId === local.organisationId, 409, "CASHFREE_RECEIPT_CONFLICT", "Existing receipt belongs to a different payment.");
       return;
     }
+    assert(paidAt.getTime() >= local.createdAt.getTime() - 300000 && paidAt.getTime() <= Date.now() + 30000,
+      409, "CASHFREE_PAYMENT_TIME_MISMATCH", "Payment timestamp does not match the order.");
     const now = new Date();
     const prior = await tx.pgPlanReceipt.findMany({ where: { organisationId: local.organisationId, status: "CAPTURED", refundedPaise: 0, periodEnd: { gt: now } } });
     const priorRecurring = await tx.pgBillingPayment.findMany({ where: { subscription: { organisationId: local.organisationId },
