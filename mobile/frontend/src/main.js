@@ -63,6 +63,7 @@ import {
   legalScreen,
 } from "./screens/platform.js";
 import { onboarding, platformStart } from "./platform/client.js";
+import { ownerActivationRoute, ownerHasPaidAccess } from "./platform/activation.js";
 
 const routes = {
   welcome: [welcomeScreen, null],
@@ -279,8 +280,13 @@ async function canLeave() {
 function guardedRoute(name) {
   if (!state.tokens || !state.user)
     return routes[name]?.[1] === null ? name : "welcome";
-  if (routes[name]?.[1] === "PLATFORM")
-    return state.tokens.kind === "PLATFORM" ? name : home();
+  if (routes[name]?.[1] === "PLATFORM") {
+    if (state.tokens.kind !== "PLATFORM") return home();
+    // Merchant setup is a post-payment task, never an unpaid bypass.
+    if (["merchant", "merchantProfile", "merchantBank"].includes(name) &&
+        !ownerHasPaidAccess(state)) return "subscription";
+    return name;
+  }
   if (
     state.tokens.kind === "PLATFORM" &&
     ["ACCOUNT", "STAFF"].includes(state.user.role)
@@ -300,7 +306,7 @@ function guardedRoute(name) {
     !["properties", "propertyForm", "password", "profile"].includes(name)
   )
     return "properties";
-  return name;
+  return ownerActivationRoute(state, name);
 }
 
 async function navigate(
@@ -720,6 +726,11 @@ function makeContext(snapshot, key) {
         ? { ...value, accountId: state.platform.account.id }
         : null;
       persist();
+    },
+    refreshPaidAccess: async () => {
+      // Re-read the signed-in workspace and its server-computed entitlement.
+      await refreshPlatform();
+      return ownerHasPaidAccess(state);
     },
     enablePlatform: async () => {
       if (state.pendingPayment)
