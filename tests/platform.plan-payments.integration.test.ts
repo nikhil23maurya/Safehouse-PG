@@ -16,7 +16,8 @@ const { entitlement } = await import("../src/platform/billing.js");
 const { platformPair } = await import("../src/platform/tokens.js");
 const { platformRouter } = await import("../src/platform/router.js");
 const { RazorpayPlanOrders, createPlanOrder, reconcilePlanOrder, verifyPlanPayment,
-  manualPlanStatus, processPlanWebhook } = await import("../src/platform/plan-payments.js");
+  manualPlanStatus, processPlanWebhook, manualBillingConfigured, manualCheckoutEnabled } = await import("../src/platform/plan-payments.js");
+const { config: backendConfig } = await import("../src/config.js");
 const app = express();
 app.use(express.json());app.use("/api/platform",platformRouter);
 app.use((e:any,_req:any,res:any,_next:any)=>res.status(e instanceof ZodError ? 400 : e.statusCode||500).json({error:{code:e.code,message:e.message}}));
@@ -65,6 +66,22 @@ async function manualOwner() {
   const property=await createProperty(account.id,{name:"Manual Billing House",city:"Pune",key:suffix});
   return {account,organisationId:property.organisationId};
 }
+
+test("production blocks order creation and capture reconciliation using non-live credentials",async()=>{
+  const {account,organisationId}=await manualOwner(),mock=manualProvider();
+  const order=await createPlanOrder(account.id,organisationId,crypto.randomUUID(),mock.provider);
+  mock.pay(order.orderId!);
+  const previous=backendConfig.NODE_ENV;
+  try {
+    backendConfig.NODE_ENV="production";
+    assert.equal(manualBillingConfigured(),false);assert.equal(manualCheckoutEnabled(),false);
+    await assert.rejects(()=>createPlanOrder(account.id,organisationId,crypto.randomUUID(),mock.provider),{code:"PLAN_PAYMENT_UNAVAILABLE"});
+    await assert.rejects(()=>reconcilePlanOrder(order.id,mock.provider),{code:"PLAN_KEY_MODE_NOT_LIVE"});
+    assert.equal(await prisma.pgPlanReceipt.count({where:{organisationId}}),0);
+    assert.equal(await entitlement(organisationId),false);
+    assert.equal(mock.creations,1);
+  } finally { backendConfig.NODE_ENV=previous; }
+});
 
 test("one capture grants a calendar month once; early renewal, immutable periods, signatures and refunds reconcile",async()=>{
   const {account,organisationId}=await manualOwner(),mock=manualProvider(),key=crypto.randomUUID();

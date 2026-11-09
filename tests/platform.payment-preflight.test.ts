@@ -55,3 +55,14 @@ test("provider rejection and outages remain diagnostic results without leaking e
   assert.equal(unavailable.providerOrderReadStatus, "UNAVAILABLE");
   assert.equal(JSON.stringify([rejected, unavailable]).includes("private"), false);
 });
+
+test("a successful provider read with test keys is explicitly blocked for production", async () => {
+  const report = await paymentPreflight(settings, {...credentials,keyId:"rzp_test_Synthetic123"},true,
+    async()=>new Response("private order data",{status:200}),{nodeEnv:"production"});
+  assert.equal(report.providerOrderReadStatus,200);
+  assert.equal(report.credentialMode,"TEST");
+  assert.equal(report.productionKeyRequired,true);
+  assert.equal(report.keyModeAllowed,false);
+  assert.equal(report.customCheckoutAcceptanceVerified,false);
+  assert.equal(JSON.stringify(report).includes("rzp_test_"),false);
+});

@@ -1,3 +1,5 @@
+import { paymentKeyMode, planPaymentKeyAllowed, requiresLivePaymentKey } from "./credentials.js";
+
 type Settings = {
   PGONE_TAX_BPS?: number;
   PGONE_BILLING_WEB_ORIGIN?: string;
@@ -18,11 +20,15 @@ export async function paymentPreflight(
   credentials: Credentials,
   webhookSecretAvailable: boolean,
   fetcher: typeof fetch = fetch,
+  context: { nodeEnv?: string; render?: string } = {},
 ) {
   const required = ["PGONE_TAX_BPS", "PGONE_BILLING_WEB_ORIGIN", "PGONE_TERMS_URL", "PGONE_PRIVACY_URL"] as const;
   const report = {
     configurationAvailable: true,
     credentialSource: credentials?.source || "UNAVAILABLE_OR_PARTIAL",
+    credentialMode: paymentKeyMode(credentials?.keyId),
+    productionKeyRequired: requiresLivePaymentKey(context),
+    keyModeAllowed: planPaymentKeyAllowed(credentials?.keyId, context),
     billingMode: "MANUAL_MONTHLY",
     recurring: false,
     webhookSecretAvailable,
@@ -52,7 +58,8 @@ export async function configuredPaymentPreflight() {
     import("./config.js"), import("../config.js"),
   ]);
   return paymentPreflight(platformConfig, subscriptionCredentials(),
-    Boolean(platformConfig.PGONE_SUBSCRIPTION_WEBHOOK_SECRET || config.RAZORPAY_WEBHOOK_SECRET));
+    Boolean(platformConfig.PGONE_SUBSCRIPTION_WEBHOOK_SECRET || config.RAZORPAY_WEBHOOK_SECRET), fetch,
+    { nodeEnv: config.NODE_ENV, render: process.env.RENDER });
 }
 
 // Invoked after the HTTP server is listening; provider outages never gate startup.
