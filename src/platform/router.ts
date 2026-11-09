@@ -42,7 +42,7 @@ import {
   requireBillingOrigin,
   verifyAuthorisation,
 } from "./web-billing.js";
-import { createPlanOrder, manualBillingConfigured, manualPlanStatus, recheckPlanPayments, verifyPlanPayment } from "./plan-payments.js";
+import { createPlanOrder, planProviderConfigured, manualPlanStatus, recheckPlanPayments, verifyPlanPayment } from "./plan-payments.js";
 import { beginMerchantSetup, merchantProfileInput, merchantBankInput, submitMerchantBank, merchantOnboardingLink, syncMerchantRecord } from "./cashfree-merchant.js";
 
 export const platformRouter = express.Router();
@@ -79,7 +79,7 @@ platformRouter.get("/config", (req, res) => {
     deploymentCommit: process.env.RENDER_GIT_COMMIT || null,
     // Sideloaded internal test APK only. Google Play builds must not bypass Play Billing.
     androidBilling: packageId === "com.safehouse.pg.testing"
-      ? (platformEnabled() && manualBillingConfigured() ? "CUSTOM_UPI_INTENT" : "NOT_CONFIGURED")
+      ? (platformEnabled() && planProviderConfigured() ? "CUSTOM_UPI_INTENT" : "NOT_CONFIGURED")
       : "CONSUMPTION_ONLY",
     legal: {
       terms: platformConfig.PGONE_TERMS_URL || null,
@@ -104,7 +104,7 @@ platformRouter.post(
 // This origin check is defence-in-depth; paid access always depends on Razorpay
 // HMAC/captured-payment verification plus owner membership binding.
 function requireAndroidTestingCheckout(req: Request) {
-  assert(platformEnabled() && manualBillingConfigured(), 503, "ANDROID_BILLING_NOT_CONFIGURED",
+  assert(platformEnabled() && planProviderConfigured(), 503, "ANDROID_BILLING_NOT_CONFIGURED",
     "PGOne's Razorpay payment setup is not activated on this server.");
   assert(req.header("origin") === "https://appassets.androidplatform.net",
     403, "ANDROID_BILLING_ORIGIN", "This payment must start within the PGOne testing app.");
