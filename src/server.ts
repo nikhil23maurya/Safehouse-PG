@@ -18,7 +18,7 @@ import { processSubscriptionWebhook } from "./platform/billing.js";
 import { billingWebRouter } from "./platform/web-static.js";
 import { legalRouter } from "./platform/legal.js";
 import { processPlanWebhook } from "./platform/plan-payments.js";
-import { processMerchantWebhook } from "./platform/cashfree-merchant.js";
+import { verifiedRentDestination } from "./platform/razorpay-route.js";
 import { logPaymentPreflight } from "./platform/payment-preflight.js";
 import {
   datePartsInTimeZone,
@@ -191,9 +191,9 @@ app.post("/api/platform-webhooks/plan-payments", express.raw({ type: "applicatio
   res.json({ ok: true });
 });
 app.use(platformWorkspaceBridge);
-app.post("/api/platform-webhooks/merchant", express.raw({ type: "application/json", limit: "1mb" }), async (req,res) => {
-  await processMerchantWebhook(req.body, req.header("x-webhook-timestamp") || req.header("x-cashfree-timestamp") || "", req.header("x-webhook-signature") || req.header("x-cashfree-signature") || "");
-  res.json({ok:true});
+app.post("/api/platform-webhooks/merchant", express.raw({ type: "application/json", limit: "1mb" }), (_req,res) => {
+  res.status(410).json({ error: { code: "CASHFREE_PROVIDER_RETIRED",
+    message: "Owner onboarding has moved to Razorpay Route." } });
 });
 app.use(express.json({ limit: "1mb" }));
 app.use("/api/platform", platformRouter);
@@ -603,6 +603,21 @@ student.get("/invoices", async (req, res) => {
 });
 
 
+async function routeOwnerForProperty(propertyId: string) {
+  const setup = await prisma.pgPropertySetup.findUnique({
+    where: { propertyId }, include: { organisation: true },
+  });
+  if (!setup || setup.organisation.legacyAccess) return null;
+  // Every new owner must be verified on Razorpay's server before payment creation.
+  return verifiedRentDestination(setup.organisationId);
+}
+async function isNewOwnerProperty(propertyId: string) {
+  const setup = await prisma.pgPropertySetup.findUnique({
+    where: { propertyId }, include: { organisation: { select: { legacyAccess: true } } },
+  });
+  return Boolean(setup && !setup.organisation.legacyAccess);
+}
+
 /**
  * SAFEHOUSE_UPI_QR_V1
  * Secure on-screen QR. No Razorpay hosted checkout is displayed by this flow.
@@ -610,6 +625,8 @@ student.get("/invoices", async (req, res) => {
  */
 student.post("/payments/upi-qr", async (req, res) => {
   const profile = await studentProfileOrThrow(req.authUser!.id);
+  assert(!(await isNewOwnerProperty(profile.propertyId)), 409, "ROUTE_QR_UNSUPPORTED",
+    "For this PG, use the verified Razorpay Route rent order. Shared merchant QR is disabled.");
   const { invoiceId } = z.object({ invoiceId: z.string().min(1) }).parse(req.body);
   const invoice = await prisma.rentInvoice.findFirst({ where: { id: invoiceId, studentId: profile.id } });
   assert(invoice, 404, "INVOICE_NOT_FOUND", "Invoice not found");
@@ -658,6 +675,7 @@ student.post("/payments/upi-qr", async (req, res) => {
 
 student.post("/payments/order", async (req, res) => {
   const profile = await studentProfileOrThrow(req.authUser!.id);
+  const routeAccountId = await routeOwnerForProperty(profile.propertyId);
   const { invoiceId } = z.object({ invoiceId: z.string().min(1) }).parse(req.body);
   const invoice = await prisma.rentInvoice.findFirst({ where: { id: invoiceId, studentId: profile.id } });
   assert(invoice, 404, "INVOICE_NOT_FOUND", "Invoice not found");
@@ -672,6 +690,12 @@ student.post("/payments/order", async (req, res) => {
   if (openAttempt?.providerOrderId.startsWith("qr_")) {
     throw new AppError(409, "UPI_QR_ALREADY_ACTIVE", "A QR payment is already active. Check its status before starting a new payment.");
   }
+  if (openAttempt) {
+    assert(routeAccountId
+      ? openAttempt.provider === "RAZORPAY_ROUTE" && openAttempt.routeAccountId === routeAccountId
+      : openAttempt.provider !== "RAZORPAY_ROUTE",
+      409, "RENT_DESTINATION_CHANGED", "The payment recipient changed. Do not reuse this order; contact support.");
+  }
   if (openAttempt?.status === "VERIFIED") {
     throw new AppError(409, "PAYMENT_PROCESSING", "A verified payment is waiting for Razorpay confirmation", { orderId: openAttempt.providerOrderId });
   }
@@ -685,10 +709,13 @@ student.post("/payments/order", async (req, res) => {
     const order = await createRazorpayOrder({
       amountPaise: remaining,
       receipt: `SH-${invoice.year}${String(invoice.month).padStart(2, "0")}-${invoice.id.slice(-12)}-${Date.now().toString().slice(-5)}`,
-      notes: { invoiceId: invoice.id, studentId: profile.id, propertyId: profile.propertyId }
+      notes: { invoiceId: invoice.id, studentId: profile.id, propertyId: profile.propertyId },
+      ...(routeAccountId ? { routeAccountId } : {}),
     });
     orderId = order.id;
-    await prisma.paymentAttempt.create({ data: { invoiceId: invoice.id, studentId: profile.id, providerOrderId: order.id, amountPaise: remaining } });
+    await prisma.paymentAttempt.create({ data: { invoiceId: invoice.id, studentId: profile.id,
+      providerOrderId: order.id, amountPaise: remaining,
+      provider: routeAccountId ? "RAZORPAY_ROUTE" : "RAZORPAY", routeAccountId } });
   }
 
   res.status(statusCode).json({
