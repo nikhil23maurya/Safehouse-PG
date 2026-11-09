@@ -49,7 +49,7 @@ test("only exact verified recipient amount and currency may be routed", () => {
   assert.deepEqual(routeTransfer("acc_ABC123456789", 750000),
     { account: "acc_ABC123456789", amount: 750000, currency: "INR", on_hold: false });
   for (const [account, amount] of [["other", 750000],["acc_ABC123456789", 0],
-    ["acc_ABC123456789", 149.1]]) {
+    ["acc_ABC123456789", 149.1],["acc_ABC123456789", 10000001]]) {
     assert.throws(() => routeTransfer(account as string, amount as number), {code:"ROUTE_TRANSFER_INVALID"});
   }
 });
