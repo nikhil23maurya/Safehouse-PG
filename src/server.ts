@@ -19,6 +19,7 @@ import { billingWebRouter } from "./platform/web-static.js";
 import { legalRouter } from "./platform/legal.js";
 import { processPlanWebhook } from "./platform/plan-payments.js";
 import { processMerchantWebhook } from "./platform/cashfree-merchant.js";
+import { processCashfreePlanWebhook } from "./platform/cashfree-plan.js";
 import { logPaymentPreflight } from "./platform/payment-preflight.js";
 import {
   datePartsInTimeZone,
@@ -188,6 +189,12 @@ app.post("/api/platform-webhooks/subscriptions", express.raw({ type: "applicatio
 });
 app.post("/api/platform-webhooks/plan-payments", express.raw({ type: "application/json", limit: "1mb" }), async (req, res) => {
   await processPlanWebhook(req.body, req.header("x-razorpay-signature") || "", req.header("x-razorpay-event-id"));
+  res.json({ ok: true });
+});
+// PGOne merchant-owned SaaS billing: distinct from all owner rent collections.
+app.post("/api/platform-webhooks/cashfree-plan", express.raw({ type: "application/json", limit: "1mb" }), async (req, res) => {
+  const body = Buffer.isBuffer(req.body) ? req.body : Buffer.from(req.body || "");
+  await processCashfreePlanWebhook(body, req.header("x-webhook-timestamp") || "", req.header("x-webhook-signature") || "");
   res.json({ ok: true });
 });
 app.use(platformWorkspaceBridge);
