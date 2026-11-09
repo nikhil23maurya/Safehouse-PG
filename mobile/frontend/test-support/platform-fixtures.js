@@ -11,6 +11,7 @@ export function createPlatformFixtures() {
   const memberships = [];
   let selected = null;
   let propertiesCreated = 0;
+  let paid = false;
   const merchant = { enabled: false, started: false, bank: null };
   const tokens = () => ({
     kind: "PLATFORM",
@@ -19,7 +20,7 @@ export function createPlatformFixtures() {
   });
   const snapshot = () => ({
     account,
-    memberships,
+    memberships: memberships.map((m) => ({...m, organisation: {...m.organisation, entitled: paid}})),
     membershipId: selected,
     property: selected ? memberships[0].property : null,
     student: null,
@@ -33,6 +34,7 @@ export function createPlatformFixtures() {
   });
   return {
     merchant,
+    activatePaid() { paid = true; },
     get propertiesCreated() {
       return propertiesCreated;
     },
@@ -86,7 +88,7 @@ export function createPlatformFixtures() {
       }
       if (path.endsWith("/subscription"))
         return {
-          entitled: false,
+          entitled: paid,
           legacyAccess: false,
           configured: false,
           mode: "MANUAL_MONTHLY",
