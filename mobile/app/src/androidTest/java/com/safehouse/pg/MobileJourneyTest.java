@@ -346,7 +346,7 @@ public class MobileJourneyTest {
         go("merchantProfile", "{}"); screenshot("48b-merchant-profile");
         js("document.querySelector('[name=website]').value='https://example.test/pg';document.querySelector('[name=businessType]').value='Individual';document.querySelector('[name=businessModel]').value='B2C';document.querySelector('[name=consent]').checked=true;document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));");
         await("document.getElementById('app').dataset.screen==='merchantBank'"); screenshot("48c-merchant-bank");
-        assertEquals("Bank number remains masked", "password", js("document.querySelector('[name=accountNumber]').type"));
+        assertEquals("Bank number remains masked", "true", js("document.querySelector('[name=accountNumber]').type==='password'"));
         assertEquals("No bank account in session vault", "true", js("!SafeHouseNative.getSession().includes('accountNumber')"));
         go("invitations", "{}"); screenshot("49-invitations");
         go("joinWorkspace", "{}"); screenshot("50-join-pg");
