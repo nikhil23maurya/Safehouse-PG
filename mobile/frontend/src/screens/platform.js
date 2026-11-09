@@ -137,6 +137,7 @@ export function otpScreen(ctx) {
     async action(name) {
       if (name === "changeNumber") {
         onboarding.attempt = "";
+        onboarding.exchangeAttempt = "";
         onboarding.sentAt = 0;
         ctx.native.call("cancelPhoneSignIn");
         return ctx.navigate("phone");
@@ -203,7 +204,7 @@ export function setupProfileScreen(ctx) {
   return {
     ...page(
       "Your profile",
-      `<div class="setup-hero">${intro("MAKE IT YOURS", owner ? "Set up your owner profile." : "Let’s get to know you.", "A few details for a more personal workspace.")}${image("property")}</div>${step(1, "Your profile")}${form("setupProfile", `${field("fullName", "Full name", { required: true, value: account.fullName, attrs: 'minlength="2" maxlength="100" autocomplete="name"', placeholder: "Your full name" })}${field("email", "Email address", { type: "email", value: account.email || "", placeholder: "Optional contact email", attrs: 'maxlength="254" autocomplete="email"', help: "Optional. This email is not verified for sign-in." })}${field("verifiedPhone", "Verified mobile number", { value: account.phoneE164 || "Linked existing account", attrs: 'readonly aria-readonly="true"' })}`)}<div class="quiet-note">${icon("shield")}<span>Your phone number is verified securely.</span></div>`,
+      `<div class="setup-hero">${intro("MAKE IT YOURS", owner ? "Set up your owner profile." : "Let’s get to know you.", "A few details for a more personal workspace.")}${image("property")}</div>${step(1, "Your profile")}${form("setupProfile", `${field("fullName", "Full name", { required: true, value: account.fullName, attrs: 'minlength="2" maxlength="100" autocomplete="name"', placeholder: "Your full name" })}${field("email", "Email address", { type: "email", value: account.email || "", placeholder: "Optional contact email", attrs: 'maxlength="254" autocomplete="email"', help: "Optional. This email is not verified for sign-in." })}${field("verifiedPhone", account.phoneE164 ? "Verified mobile number" : "Sign-in identity", { value: account.phoneE164 || "Linked existing account", attrs: 'readonly aria-readonly="true"' })}`)}<div class="quiet-note">${icon("shield")}<span>${account.phoneE164 ? "Your phone number is verified securely." : "Your existing account is linked securely."}</span></div>`,
       "chooseRole",
     ),
     async submit(_name, el) {
@@ -223,15 +224,35 @@ export function setupProfileScreen(ctx) {
   };
 }
 export function setupPropertyScreen(ctx) {
-  onboarding.propertyKey ||= requestId();
+  const draft = ctx.snapshot.onboardingDraft;
+  onboarding.propertyKey ||= draft?.key || requestId();
+  let saveTimer;
+  const saveDraft = (values) =>
+    ctx.saveOnboardingDraft({ key: onboarding.propertyKey, values });
   return {
     ...page(
       "Your first PG",
-      `<div class="setup-hero">${intro("A NEW BEGINNING", "Your PG starts here.", "Give your property a home in PGOne.")}${image("property")}</div>${step(2, "Your property")}${form("setupProperty", `${field("name", "PG name", { required: true, placeholder: "e.g. Maple House", attrs: 'minlength="2" maxlength="120" autocomplete="organization"' })}${field("city", "City", { required: true, placeholder: "e.g. Bengaluru", attrs: 'minlength="2" maxlength="100" autocomplete="address-level2"' })}${field("approximateRooms", "Approximate number of rooms", { type: "number", placeholder: "Optional", attrs: 'min="1" max="100000" inputmode="numeric"', help: "You can add the actual rooms in your workspace." })}`, "Create my PG")}<div class="quiet-note">${icon("check")}<span>You can update property details later.</span></div>`,
+      `<div class="setup-hero">${intro("A NEW BEGINNING", "Your PG starts here.", "Give your property a home in PGOne.")}${image("property")}</div>${step(2, "Your property")}${form("setupProperty", `${field("name", "PG name", { value: draft?.values?.name || "", required: true, placeholder: "e.g. Maple House", attrs: 'minlength="2" maxlength="120" autocomplete="organization"' })}${field("city", "City", { value: draft?.values?.city || "", required: true, placeholder: "e.g. Bengaluru", attrs: 'minlength="2" maxlength="100" autocomplete="address-level2"' })}${field("approximateRooms", "Approximate number of rooms", { value: draft?.values?.approximateRooms || "", type: "number", placeholder: "Optional", attrs: 'min="1" max="100000" inputmode="numeric"', help: "You can add the actual rooms in your workspace." })}`, "Create my PG")}<div class="quiet-note">${icon("check")}<span>You can update property details later.</span></div>`,
       "setupProfile",
     ),
+    input(_name, _el, form) {
+      clearTimeout(saveTimer);
+      const values = formValues(form);
+      saveTimer = setTimeout(() => {
+        try {
+          saveDraft(values);
+        } catch {
+          ctx.toast("Your draft could not be saved on this device.", "error");
+        }
+      }, 250);
+    },
+    unmount() {
+      clearTimeout(saveTimer);
+    },
     async submit(_name, el) {
       const values = formValues(el);
+      clearTimeout(saveTimer);
+      saveDraft(values);
       const body = {
         name: values.name,
         city: values.city,
@@ -248,6 +269,7 @@ export function setupPropertyScreen(ctx) {
         (m) => m.property.id === result.property.id && m.role === "OWNER",
       );
       ctx.markSaved();
+      ctx.saveOnboardingDraft(null);
       await ctx.selectWorkspace(member.id, "setupReady");
       onboarding.propertyKey = null;
     },
@@ -405,13 +427,16 @@ export async function invitationsScreen(ctx) {
   const list = await ctx.api(
     `/api/platform/organisations/${org.id}/invitations`,
   );
+  const { members = [] } = await ctx.api(
+    `/api/platform/organisations/${org.id}/members`,
+  );
   const { students = [] } = await ctx.api(
     `/api/owner/students?${ctx.periodQuery}`,
   );
   return {
     ...page(
       "Invite your people",
-      `${intro("BETTER TOGETHER", "The right people. The right access.", "Invite a resident or staff member to your PG.")}${form("createInvitation", `<label class="field"><span class="field-label">Invite as</span><select name="role"><option value="STAFF">Staff · occupancy access</option><option value="RESIDENT">Resident · their own records</option></select></label>${field("phone", "Mobile number", { required: true, attrs: 'inputmode="tel" pattern="[6-9][0-9]{9}" maxlength="10"', placeholder: "10-digit Indian number" })}<div data-invited-resident hidden>${field("studentId", "Resident", { options: [["", "Choose a resident"], ...students.filter((s) => s.status === "ACTIVE").map((s) => [s.id, `${s.name} � ${s.mobile}`])], help: "Add residents in Resident Management before inviting them." })}</div>`, "Create invitation")}<div data-invitation-result aria-live="polite"></div><h2 class="royal-section-title">Recent invitations</h2>${list.invitations.map((i) => `<div class="invitation-row"><span><strong>${esc(i.role)}</strong><small>Number ending ${esc(i.phoneLast4)}</small></span>${badge(i.status)}${i.status === "PENDING" ? button("Revoke", { action: "revoke", kind: "text-button", attrs: `data-id="${esc(i.id)}"` }) : ""}</div>`).join("") || '<p class="legal-copy">Your invitations will appear here.</p>'}`,
+      `${intro("BETTER TOGETHER", "The right people. The right access.", "Invite a resident or staff member to your PG.")}${form("createInvitation", `<label class="field"><span class="field-label">Invite as</span><select name="role"><option value="STAFF">Staff · occupancy access</option><option value="RESIDENT">Resident · their own records</option></select></label>${field("phone", "Mobile number", { required: true, attrs: 'inputmode="tel" pattern="[6-9][0-9]{9}" maxlength="10"', placeholder: "10-digit Indian number" })}<div data-invited-resident hidden>${field("studentId", "Resident", { options: [["", "Choose a resident"], ...students.filter((s) => s.status === "ACTIVE").map((s) => [s.id, `${s.name} / ${s.mobile}`])], help: "Add residents in Resident Management before inviting them." })}</div>`, "Create invitation")}<div data-invitation-result aria-live="polite"></div><h2 class="royal-section-title">Recent invitations</h2>${list.invitations.map((i) => `<div class="invitation-row"><span><strong>${esc(i.role)}</strong><small>Number ending ${esc(i.phoneLast4)}</small></span>${badge(i.status)}${i.status === "PENDING" ? button("Revoke", { action: "revoke", kind: "text-button", attrs: `data-id="${esc(i.id)}"` }) : ""}</div>`).join("") || '<p class="legal-copy">Your invitations will appear here.</p>'}<h2 class="royal-section-title">People with access</h2>${members.map((m) => `<div class="invitation-row"><span><strong>${esc(m.fullName || m.role)}</strong><small>${esc(m.role)} / ${esc(m.propertyName)}</small></span>${button("Remove access", { action: "revokeMember", kind: "text-button", attrs: `data-id="${esc(m.id)}"` })}</div>`).join("") || '<p class="legal-copy">No resident or staff memberships yet.</p>'}`,
       "profile",
     ),
     change(name, el, form) {
@@ -446,6 +471,22 @@ export async function invitationsScreen(ctx) {
         `<div class="invitation-code"><h2>Invitation ready</h2><p>Share privately with the invited person. Expires ${date(result.expiresAt)}.</p><code>${esc(result.code)}</code></div>`;
     },
     async action(name, el) {
+      if (
+        name === "revokeMember" &&
+        (await ctx.confirm({
+          title: "Remove workspace access?",
+          message:
+            "This person will lose this membership. Their unused invitations for this property and role will also be revoked.",
+          confirmLabel: "Remove access",
+          danger: true,
+        }))
+      ) {
+        await ctx.api(
+          `/api/platform/memberships/${encodeURIComponent(el.dataset.id)}/revoke`,
+          { method: "POST" },
+        );
+        return ctx.reload();
+      }
       if (name === "revoke") {
         await ctx.api(
           `/api/platform/invitations/${encodeURIComponent(el.dataset.id)}/revoke`,

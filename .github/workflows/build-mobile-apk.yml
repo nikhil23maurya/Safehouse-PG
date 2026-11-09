@@ -3,10 +3,10 @@ name: Build PGOne Android APK
 on:
   workflow_dispatch:
   pull_request:
-    paths: ['mobile/**', 'scripts/verify-mobile-source.mjs', 'scripts/android-smoke.sh', '.github/workflows/build-mobile-apk.yml']
+    paths: ['mobile/**', 'web/billing/**', 'scripts/verify-mobile-source.mjs', 'scripts/android-smoke.sh', '.github/workflows/build-mobile-apk.yml']
   push:
     branches: [main]
-    paths: ['mobile/**', 'scripts/verify-mobile-source.mjs', 'scripts/android-smoke.sh', '.github/workflows/build-mobile-apk.yml']
+    paths: ['mobile/**', 'web/billing/**', 'scripts/verify-mobile-source.mjs', 'scripts/android-smoke.sh', '.github/workflows/build-mobile-apk.yml']
 
 permissions:
   contents: read
@@ -41,12 +41,17 @@ jobs:
         run: |
           node scripts/verify-mobile-source.mjs
           node --check mobile/app/src/main/assets/app.js
+          node web/billing/build.mjs
+          node --test web/billing/checkout.test.js
       - name: Install test browser
         working-directory: mobile/frontend
         run: npx playwright install --with-deps chromium
       - name: User journeys and four-size screenshot inventory
         working-directory: mobile/frontend
-        run: npm run test:e2e
+        run: |
+          npm run test:e2e
+          cd ../..
+          node --test web/billing/browser.test.mjs
       - name: Upload visual evidence and test diagnostics
         if: always()
         uses: actions/upload-artifact@v4
@@ -58,6 +63,7 @@ jobs:
             mobile/frontend/playwright-report/
             mobile/frontend/test-results/
             mobile/frontend/build-meta.json
+            web/billing/screenshots/
           retention-days: 30
 
   android:
@@ -133,6 +139,9 @@ jobs:
           target: google_apis
           arch: x86_64
           profile: pixel_6
+          ram-size: 2048M
+          heap-size: 256M
+          cores: 2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader -feature -Vulkan -noaudio -no-boot-anim -camera-back none
           script: |

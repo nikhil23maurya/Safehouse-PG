@@ -30,10 +30,17 @@ import {
 } from "./invitations.js";
 import {
   cancelSubscription,
+  createSubscription,
   reconcileSubscription,
+  recoverSubscriptionCreation,
   subscriptionStatus,
 } from "./billing.js";
 import { merchantStatus } from "./merchant.js";
+import {
+  customWebBillingEnabled,
+  requireBillingOrigin,
+  verifyAuthorisation,
+} from "./web-billing.js";
 
 export const platformRouter = express.Router();
 const limited = rateLimit({
@@ -56,6 +63,12 @@ platformRouter.get("/config", (req, res) => {
     enabled: platformEnabled(),
     phone: phoneConfig(packageId),
     googleEnabled: false,
+    customWebBilling: {
+      enabled: customWebBillingEnabled(),
+      keyId: customWebBillingEnabled()
+        ? platformConfig.PGONE_SUBSCRIPTION_KEY_ID
+        : null,
+    },
     plan: PLAN,
     androidBilling: "CONSUMPTION_ONLY",
     legal: {
@@ -64,6 +77,63 @@ platformRouter.get("/config", (req, res) => {
     },
   });
 });
+platformRouter.post(
+  "/organisations/:id/subscription/authorise",
+  limited,
+  async (req, res) => {
+    requireBillingOrigin(req);
+    const { account } = await session(req);
+    const organisationId = id.parse(req.params.id);
+    const consent = z
+      .object({
+        accepted: z.literal(true),
+        amountPaise: z.literal(24900),
+        cycles: z.number().int().positive(),
+      })
+      .parse(req.body);
+    assert(
+      consent.cycles === platformConfig.PGONE_SUBSCRIPTION_CYCLES,
+      409,
+      "MANDATE_CHANGED",
+      "The mandate details changed. Refresh and review them again.",
+    );
+    await ownerOrganisation(account.id, organisationId);
+    await atomic((tx) =>
+      audit(
+        tx,
+        account.id,
+        organisationId,
+        "SUBSCRIPTION_CONSENT_RECORDED",
+        organisationId,
+        {
+          amountPaise: consent.amountPaise,
+          cycles: consent.cycles,
+          interval: "month",
+          terms: platformConfig.PGONE_TERMS_URL!,
+          privacy: platformConfig.PGONE_PRIVACY_URL!,
+        },
+      ),
+    );
+    res.json(await createSubscription(account.id, organisationId));
+  },
+);
+platformRouter.post(
+  "/organisations/:id/subscription/authorisation",
+  limited,
+  async (req, res) => {
+    requireBillingOrigin(req);
+    const { account } = await session(req);
+    const input = z
+      .object({
+        paymentId: z.string().regex(/^pay_[a-zA-Z0-9]+$/),
+        signature: z.string().regex(/^[a-fA-F0-9]{64}$/),
+      })
+      .parse(req.body);
+    res.json(
+      await verifyAuthorisation(account.id, id.parse(req.params.id), input),
+    );
+  },
+);
 platformRouter.use((_req, _res, next) => {
   assert(
     platformEnabled(),
@@ -158,7 +228,11 @@ platformRouter.post("/link-legacy", limited, async (req, res) => {
   const current = req.header("authorization")?.startsWith("Bearer pg1.")
     ? await session(req)
     : null;
-  const account = await linkLegacy(legacyAccessToken, current?.account.id);
+  const account = await linkLegacy(
+    legacyAccessToken,
+    current?.account.id,
+    current?.account.tokenVersion,
+  );
   res.json({
     tokens: platformPair(account),
     ...(await accountSnapshot(account.id)),
@@ -196,7 +270,13 @@ platformRouter.post("/properties", async (req, res) => {
 platformRouter.post("/workspace", async (req, res) => {
   const { account } = await session(req);
   const { membershipId } = z.object({ membershipId: id }).parse(req.body);
-  res.json({ tokens: await membershipTokens(account.id, membershipId) });
+  res.json({
+    tokens: await membershipTokens(
+      account.id,
+      membershipId,
+      account.tokenVersion,
+    ),
+  });
 });
 platformRouter.post("/invitations", limited, async (req, res) => {
   const { account } = await session(req);
@@ -219,7 +299,9 @@ platformRouter.post("/invitations/preview", limited, async (req, res) => {
 platformRouter.post("/invitations/accept", limited, async (req, res) => {
   const { account } = await session(req);
   const member = await acceptInvitation(account.id, code.parse(req.body.code));
-  res.json({ tokens: await membershipTokens(account.id, member.id) });
+  res.json({
+    tokens: await membershipTokens(account.id, member.id, account.tokenVersion),
+  });
 });
 platformRouter.get("/organisations/:id/invitations", async (req, res) => {
   const { account } = await session(req);
@@ -269,6 +351,7 @@ platformRouter.post("/memberships/:id/revoke", async (req, res) => {
   const { account } = await session(req);
   const member = await prisma.pgMembership.findUnique({
     where: { id: id.parse(req.params.id) },
+    include: { account: true },
   });
   assert(
     member && member.role !== "OWNER",
@@ -282,6 +365,17 @@ platformRouter.post("/memberships/:id/revoke", async (req, res) => {
       where: { id: member.id },
       data: { status: "REVOKED" },
     });
+    if (member.account.phoneE164)
+      await tx.pgInvitation.updateMany({
+        where: {
+          organisationId: member.organisationId,
+          propertyId: member.propertyId,
+          role: member.role,
+          phoneE164: member.account.phoneE164,
+          status: "PENDING",
+        },
+        data: { status: "REVOKED" },
+      });
     await audit(
       tx,
       account.id,
@@ -292,6 +386,30 @@ platformRouter.post("/memberships/:id/revoke", async (req, res) => {
   });
   res.json({ ok: true });
 });
+platformRouter.get("/organisations/:id/members", async (req, res) => {
+  const { account } = await session(req);
+  const org = await ownerOrganisation(account.id, id.parse(req.params.id));
+  const members = await prisma.pgMembership.findMany({
+    where: {
+      organisationId: org.id,
+      role: { in: ["RESIDENT", "STAFF"] },
+      status: "ACTIVE",
+    },
+    include: { account: true, property: true },
+    take: 100,
+    orderBy: { createdAt: "desc" },
+  });
+  res.json({
+    members: members.map((m) => ({
+      id: m.id,
+      role: m.role,
+      fullName: m.account.fullName,
+      phoneLast4: m.account.phoneE164?.slice(-4) || null,
+      propertyName: m.property.name,
+      permissions: m.permissions,
+    })),
+  });
+});
 platformRouter.get("/organisations/:id/subscription", async (req, res) => {
   const { account } = await session(req);
   res.json(await subscriptionStatus(account.id, id.parse(req.params.id)));
@@ -301,9 +419,11 @@ platformRouter.post(
   async (req, res) => {
     const { account } = await session(req);
     const org = await ownerOrganisation(account.id, id.parse(req.params.id));
-    const sub = await prisma.pgSubscription.findUnique({
-      where: { organisationId: org.id },
+    let sub = await prisma.pgSubscription.findFirst({
+      where: { organisationId: org.id, current: true },
     });
+    if (sub && !sub.providerSubscriptionId)
+      sub = await recoverSubscriptionCreation(sub.id);
     if (sub?.providerSubscriptionId) await reconcileSubscription(sub.id);
     res.json(await subscriptionStatus(account.id, org.id));
   },

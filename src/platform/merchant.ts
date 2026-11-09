@@ -21,7 +21,7 @@ export async function merchantStatus(
       ? { last4: record.bankLast4, status: record.bankVerificationStatus }
       : null,
     verifiedAt: record?.verifiedAt || null,
-    message:
+    message: org.legacyAccess ? "Your existing rent payment flow remains available. Per-owner payment account setup is awaiting provider activation." :
       "Online payment setup is awaiting payment-provider activation. No bank or KYC documents are required in PGOne yet.",
   };
 }

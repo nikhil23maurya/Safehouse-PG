@@ -43,12 +43,41 @@ import {
   propertyFormScreen,
 } from "./screens/profile.js";
 import { paymentScreen } from "./screens/payment.js";
-import { welcomeScreen, phoneScreen, otpScreen, chooseRoleScreen, setupProfileScreen, setupPropertyScreen, setupReadyScreen, workspacesScreen, joinWorkspaceScreen, linkAccountScreen, subscriptionScreen, merchantScreen, invitationsScreen, staffScreen, legalScreen } from "./screens/platform.js";
+import {
+  welcomeScreen,
+  phoneScreen,
+  otpScreen,
+  chooseRoleScreen,
+  setupProfileScreen,
+  setupPropertyScreen,
+  setupReadyScreen,
+  workspacesScreen,
+  joinWorkspaceScreen,
+  linkAccountScreen,
+  subscriptionScreen,
+  merchantScreen,
+  invitationsScreen,
+  staffScreen,
+  legalScreen,
+} from "./screens/platform.js";
 import { onboarding, platformStart } from "./platform/client.js";
 
 const routes = {
-  welcome: [welcomeScreen, null], phone: [phoneScreen, null], otp: [otpScreen, null], legal: [legalScreen, null],
-  chooseRole: [chooseRoleScreen, "PLATFORM"], setupProfile: [setupProfileScreen, "PLATFORM"], setupProperty: [setupPropertyScreen, "PLATFORM"], setupReady: [setupReadyScreen, "PLATFORM"], workspaces: [workspacesScreen, "PLATFORM"], joinWorkspace: [joinWorkspaceScreen, "PLATFORM"], linkAccount: [linkAccountScreen, "PLATFORM"], subscription: [subscriptionScreen, "PLATFORM"], merchant: [merchantScreen, "PLATFORM"], invitations: [invitationsScreen, "PLATFORM"], staffHome: [staffScreen, "PLATFORM"],
+  welcome: [welcomeScreen, null],
+  phone: [phoneScreen, null],
+  otp: [otpScreen, null],
+  legal: [legalScreen, null],
+  chooseRole: [chooseRoleScreen, "PLATFORM"],
+  setupProfile: [setupProfileScreen, "PLATFORM"],
+  setupProperty: [setupPropertyScreen, "PLATFORM"],
+  setupReady: [setupReadyScreen, "PLATFORM"],
+  workspaces: [workspacesScreen, "PLATFORM"],
+  joinWorkspace: [joinWorkspaceScreen, "PLATFORM"],
+  linkAccount: [linkAccountScreen, "PLATFORM"],
+  subscription: [subscriptionScreen, "PLATFORM"],
+  merchant: [merchantScreen, "PLATFORM"],
+  invitations: [invitationsScreen, "PLATFORM"],
+  staffHome: [staffScreen, "PLATFORM"],
   login: [loginScreen, null],
   password: [passwordScreen, "BOTH"],
   ownerHome: [ownerHomeScreen, "OWNER"],
@@ -102,7 +131,14 @@ let sequence = 0,
 const submissions = new WeakSet();
 let submittedForms = 0,
   submissionNavigationAllowed = false;
-const home = () => state.user?.role === "ACCOUNT" ? platformStart(state) : state.user?.role === "STAFF" ? "staffHome" : state.user?.role === "OWNER" ? "ownerHome" : "studentHome";
+const home = () =>
+  state.user?.role === "ACCOUNT"
+    ? platformStart(state)
+    : state.user?.role === "STAFF"
+      ? "staffHome"
+      : state.user?.role === "OWNER"
+        ? "ownerHome"
+        : "studentHome";
 let pendingNotificationRoute = null;
 let restoringMetadata = null;
 function postAuthRoute() {
@@ -126,6 +162,7 @@ function persist() {
           activePropertyId: state.property?.id,
           period: state.period,
           pendingPayment: state.pendingPayment,
+          onboardingDraft: state.onboardingDraft,
         }
       : null,
   );
@@ -154,10 +191,16 @@ function clearSession() {
     properties: [],
     student: null,
     platform: null,
+    onboardingDraft: null,
     pendingPayment: null,
     period: currentPeriod(),
   });
   dirty = false;
+  onboarding.propertyKey = null;
+  onboarding.attempt = "";
+  onboarding.exchangeAttempt = "";
+  onboarding.sentAt = 0;
+  native.call("cancelPhoneSignIn");
   try {
     native.save(null);
   } catch {
@@ -229,9 +272,15 @@ async function canLeave() {
 }
 
 function guardedRoute(name) {
-  if (!state.tokens || !state.user) return routes[name]?.[1] === null ? name : "welcome";
-  if (routes[name]?.[1] === "PLATFORM") return state.tokens.kind === "PLATFORM" ? name : home();
-  if (state.tokens.kind === "PLATFORM" && ["ACCOUNT", "STAFF"].includes(state.user.role)) return home();
+  if (!state.tokens || !state.user)
+    return routes[name]?.[1] === null ? name : "welcome";
+  if (routes[name]?.[1] === "PLATFORM")
+    return state.tokens.kind === "PLATFORM" ? name : home();
+  if (
+    state.tokens.kind === "PLATFORM" &&
+    ["ACCOUNT", "STAFF"].includes(state.user.role)
+  )
+    return home();
   if (state.user.mustChangePassword) return "password";
   const role = routes[name]?.[1];
   if (
@@ -262,6 +311,14 @@ async function navigate(
   )
     return;
   if (!force && !(await canLeave())) return;
+  if (
+    ["phone", "otp"].includes(state.route.name) &&
+    !["phone", "otp"].includes(next)
+  ) {
+    onboarding.attempt = "";
+    onboarding.exchangeAttempt = "";
+    native.call("cancelPhoneSignIn");
+  }
   if (rootRoutes.has(next) && rootRoutes.has(state.route.name)) replace = true;
   dirty = false;
   state.route = { name: next, params: next === name ? params : {} };
@@ -362,31 +419,70 @@ async function refreshPlatform() {
   state.user = result.user;
   state.property = result.property;
   state.student = result.student;
-  state.properties = result.memberships.filter(m => m.role === "OWNER").map(m => m.property);
-  persist(); return result;
+  state.properties = result.memberships
+    .filter((m) => m.role === "OWNER")
+    .map((m) => m.property);
+  persist();
+  return result;
 }
 async function acceptPlatform(tokens, target) {
-  if (tokens?.kind !== "PLATFORM" || !tokens.accessToken || !tokens.refreshToken) throw new Error("Account verification was not completed.");
-  state.authEpoch++; cache.clear(); state.tokens = tokens;
+  if (
+    tokens?.kind !== "PLATFORM" ||
+    !tokens.accessToken ||
+    !tokens.refreshToken
+  )
+    throw new Error("Account verification was not completed.");
+  state.authEpoch++;
+  cache.clear();
+  state.tokens = tokens;
   state.pendingPayment = null;
   await refreshPlatform();
   state.period = currentPeriod(state.property?.timezone);
-  dirty = false; persist();
-  await navigate(target || (state.platform.membershipId ? home() : platformStart(state)), {}, { replace: true, force: true });
+  dirty = false;
+  persist();
+  await navigate(
+    target || (state.platform.membershipId ? home() : platformStart(state)),
+    {},
+    { replace: true, force: true },
+  );
 }
 async function selectWorkspace(membershipId, target) {
-  if (state.pendingPayment) throw new Error("Check your pending rent payment before switching workspace.");
-  const result = await api("/api/platform/workspace", { method: "POST", body: { membershipId } });
+  if (state.pendingPayment)
+    throw new Error(
+      "Check your pending rent payment before switching workspace.",
+    );
+  const result = await api("/api/platform/workspace", {
+    method: "POST",
+    body: { membershipId },
+  });
   await acceptPlatform(result.tokens, target);
 }
 window.PGOnePhoneEvent = async (attempt, type, value) => {
-  if (attempt !== onboarding.attempt || !["phone", "otp"].includes(state.route.name)) return;
+  if (
+    attempt !== onboarding.attempt ||
+    !["phone", "otp"].includes(state.route.name)
+  )
+    return;
   if (type === "sent") onboarding.sentAt = Date.now();
   screen?.phoneEvent?.(type, value);
   if (type === "verified") {
-    onboarding.attempt = ""; onboarding.sentAt = 0;
-    try { const result = await api("/api/platform/phone", { public: true, method: "POST", body: { idToken: value } }); await acceptPlatform(result.tokens); }
-    catch (error) { toast(error.message, "error"); await navigate("phone", {}, { replace: true, force: true }); }
+    const epoch = state.authEpoch;
+    onboarding.exchangeAttempt = attempt;
+    onboarding.attempt = "";
+    onboarding.sentAt = 0;
+    try {
+      const result = await api("/api/platform/phone", {
+        public: true,
+        method: "POST",
+        body: { idToken: value },
+      });
+      if (onboarding.exchangeAttempt !== attempt || state.authEpoch !== epoch)
+        return;
+      await acceptPlatform(result.tokens);
+    } catch (error) {
+      toast(error.message, "error");
+      await navigate("phone", {}, { replace: true, force: true });
+    }
   }
 };
 
@@ -413,7 +509,12 @@ async function logout() {
       /* Logout still revokes this user's server credentials. */
     }
   try {
-    await api(state.tokens?.kind === "PLATFORM" ? "/api/platform/logout" : "/api/auth/logout", { method: "POST", timeout: 10000 });
+    await api(
+      state.tokens?.kind === "PLATFORM"
+        ? "/api/platform/logout"
+        : "/api/auth/logout",
+      { method: "POST", timeout: 10000 },
+    );
   } catch {
     revoked = false;
   }
@@ -484,7 +585,9 @@ window.SafeHouseNotificationOpened = (route) => {
     void navigate(postAuthRoute(), {}, { replace: true });
 };
 window.SafeHouseUpiError = (message) => {
-  const text = message || "The UPI app could not open. Save the QR and scan it from your UPI app gallery.";
+  const text =
+    message ||
+    "The UPI app could not open. Save the QR and scan it from your UPI app gallery.";
   if (screen?.upiResult) screen.upiResult(text);
   else toast(text, "error");
 };
@@ -539,7 +642,10 @@ function makeContext(snapshot, key) {
         { code: "STALE_CONTEXT" },
       );
     const data = await api(path, options);
-    if (contextKey() !== key || (!path.startsWith("/api/platform/") && !matchesContext(data, snapshot)))
+    if (
+      contextKey() !== key ||
+      (!path.startsWith("/api/platform/") && !matchesContext(data, snapshot))
+    )
       throw Object.assign(
         new Error(
           "The response does not match the selected property and billing month. Please refresh.",
@@ -561,10 +667,26 @@ function makeContext(snapshot, key) {
     native,
     payment,
     signIn,
-    refreshPlatform, acceptPlatform, selectWorkspace,
+    refreshPlatform,
+    acceptPlatform,
+    selectWorkspace,
+    saveOnboardingDraft: (value) => {
+      if (contextKey() !== key)
+        throw new Error("Your account context changed.");
+      state.onboardingDraft = value
+        ? { ...value, accountId: state.platform.account.id }
+        : null;
+      persist();
+    },
     enablePlatform: async () => {
-      if (state.pendingPayment) throw new Error("Check your pending rent payment before linking workspaces.");
-      const result = await api("/api/platform/link-legacy", { method: "POST", body: { legacyAccessToken: state.tokens.accessToken } });
+      if (state.pendingPayment)
+        throw new Error(
+          "Check your pending rent payment before linking workspaces.",
+        );
+      const result = await api("/api/platform/link-legacy", {
+        method: "POST",
+        body: { legacyAccessToken: state.tokens.accessToken },
+      });
       await acceptPlatform(result.tokens);
     },
     setupPush,
@@ -582,7 +704,13 @@ function makeContext(snapshot, key) {
     },
     openExternal: (url) => native.openExternal(url),
     selectProperty: async (property, properties) => {
-      if (state.tokens?.kind === "PLATFORM") { const member = state.platform.memberships.find(m => m.role === "OWNER" && m.property.id === property.id); if (!member) throw new Error("Choose an authorised workspace."); return selectWorkspace(member.id); }
+      if (state.tokens?.kind === "PLATFORM") {
+        const member = state.platform.memberships.find(
+          (m) => m.role === "OWNER" && m.property.id === property.id,
+        );
+        if (!member) throw new Error("Choose an authorised workspace.");
+        return selectWorkspace(member.id);
+      }
       state.property = property;
       state.properties = properties;
       state.period = currentPeriod(property.timezone);
@@ -742,7 +870,11 @@ document.addEventListener("click", async (event) => {
     } finally {
       delete element.dataset.busy;
       element.disabled = false;
-      if (restoreFocus && element.isConnected && document.activeElement === document.body)
+      if (
+        restoreFocus &&
+        element.isConnected &&
+        document.activeElement === document.body
+      )
         element.focus({ preventScroll: true });
     }
   } catch (error) {
@@ -927,14 +1059,31 @@ async function boot() {
       const platform = state.tokens.kind === "PLATFORM";
       const me = await api(platform ? "/api/platform/session" : "/api/auth/me");
       if (state.authEpoch !== restoreEpoch) return;
-      if (!(platform ? ["OWNER", "STUDENT", "STAFF", "ACCOUNT"] : ["OWNER", "STUDENT"]).includes(me.user?.role))
+      if (
+        !(
+          platform
+            ? ["OWNER", "STUDENT", "STAFF", "ACCOUNT"]
+            : ["OWNER", "STUDENT"]
+        ).includes(me.user?.role)
+      )
         throw new Error("Invalid account.");
       state.user = me.user;
       state.platform = platform ? me : null;
-      state.properties = platform ? me.memberships.filter(m => m.role === "OWNER").map(m => m.property) : me.properties || [];
+      if (
+        platform &&
+        stored.onboardingDraft?.accountId === me.account.id &&
+        /^[a-zA-Z0-9_-]{16,100}$/.test(stored.onboardingDraft.key || "")
+      )
+        state.onboardingDraft = stored.onboardingDraft;
+      state.properties = platform
+        ? me.memberships
+            .filter((m) => m.role === "OWNER")
+            .map((m) => m.property)
+        : me.properties || [];
       state.student = me.student || null;
       state.property =
-        (!platform && state.properties.find((p) => p.id === stored.activePropertyId)) ||
+        (!platform &&
+          state.properties.find((p) => p.id === stored.activePropertyId)) ||
         me.property ||
         null;
       state.period =

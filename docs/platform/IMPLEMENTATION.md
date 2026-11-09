@@ -44,8 +44,11 @@ Reference images guide visual design, not permission to fabricate mobile OTP/Goo
 
 The native Firebase bridge and server exchange are implemented, but actual SMS, signing/App Verification and real Firebase test-number exchanges have not been verified without project configuration.
 
-Subscription reconciliation, cancellation, inclusive-price checks and signed webhook handling are implemented as a disabled integration adapter. A separate custom web checkout, provider-authorised mandate SDK flow, re-purchase after an ended mandate and full sandbox validation are **not complete**. No Standard Checkout fallback or Android external purchase funnel has been added.
+Subscription reconciliation, cancellation, inclusive-price checks and signed webhook handling are implemented as a disabled integration adapter. A separate custom web authorisation surface, official Custom SDK UPI intent, origin-bound consent/signature APIs, and replacement after a provider-confirmed ended mandate are now implemented. Full merchant sandbox verification is still **not complete**. No Standard Checkout fallback or Android external purchase funnel has been added.
 
 Cashfree merchant onboarding, dynamic bank/KYC submission, signed provider activation and per-owner rent routing are **not complete** without approved Embedded partner access and its contract. The screen is a truthful setup/status gate and does not collect sensitive documents. No code path enables collection from a local status string.
 
 The requested Google sign-in is not implemented; its button is omitted. No simulated identity/merchant/payment success ships with the app.
+
+
+The second implementation stage adds durable PG-creation drafts/idempotency keys, owner-facing membership revocation (including unused invitations), and a separate web billing build. Android release input checks reject web subscription-authorisation code. Web SDK tests use synthetic provider responses and do not establish live payment readiness. The Android emulator twice disconnected before instrumentation; a bounded-memory AVD and host/runtime diagnostics are being verified in the next run.

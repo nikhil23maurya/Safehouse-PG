@@ -131,7 +131,7 @@ model PgOrganisation {
   memberships PgMembership[]
   properties PgPropertySetup[]
   invitations PgInvitation[]
-  subscription PgSubscription?
+  subscriptions PgSubscription[]
   merchant PgMerchantAccount?
   @@index([ownerAccountId])
 }
@@ -190,7 +190,8 @@ model PgInvitation {
 
 model PgSubscription {
   id String @id @default(cuid())
-  organisationId String @unique
+  organisationId String
+  current Boolean @default(true)
   provider String @default("RAZORPAY")
   providerSubscriptionId String? @unique
   creationReference String @unique

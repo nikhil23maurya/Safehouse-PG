@@ -40,7 +40,8 @@ export async function entitlement(organisationId: string) {
   const org = await prisma.pgOrganisation.findUniqueOrThrow({
     where: { id: organisationId },
     include: {
-      subscription: {
+      subscriptions: {
+        where: { current: true },
         include: {
           payments: {
             where: {
@@ -58,8 +59,9 @@ export async function entitlement(organisationId: string) {
   return (
     org.legacyAccess ||
     Boolean(
-      org.subscription?.verifiedAt &&
-        org.subscription.payments.some((p) => paidPeriod(p)),
+      org.subscriptions.some(
+        (sub) => sub.verifiedAt && sub.payments.some((p) => paidPeriod(p)),
+      ),
     )
   );
 }
@@ -87,6 +89,7 @@ export function verifiedInvoice(
     Number.isSafeInteger(invoice.billing_start) &&
     Number.isSafeInteger(invoice.billing_end) &&
     invoice.billing_end > invoice.billing_start &&
+    invoice.billing_end - invoice.billing_start >= 27 * 86400 &&
     invoice.billing_end - invoice.billing_start <= 35 * 86400 &&
     Number.isSafeInteger(payment.created_at)
   );
@@ -172,9 +175,29 @@ export class RazorpaySubscriptions {
   get(id: string) {
     return this.request(`/subscriptions/${encodeURIComponent(id)}`);
   }
-  invoices(id: string) {
-    return this.request(
-      `/invoices?subscription_id=${encodeURIComponent(id)}&count=100`,
+  async invoices(id: string) {
+    const items: any[] = [];
+    for (
+      let skip = 0;
+      skip <= (platformConfig.PGONE_SUBSCRIPTION_CYCLES || 1200) + 100;
+      skip += 100
+    ) {
+      const page = await this.request(
+        `/invoices?subscription_id=${encodeURIComponent(id)}&count=100&skip=${skip}`,
+      );
+      assert(
+        Array.isArray(page.items),
+        502,
+        "INVALID_INVOICES",
+        "The provider invoice list could not be verified.",
+      );
+      items.push(...page.items);
+      if (page.items.length < 100) return { items };
+    }
+    throw new AppError(
+      502,
+      "INVOICE_HISTORY_REVIEW",
+      "The subscription invoice history needs operator review.",
     );
   }
   payment(id: string) {
@@ -188,13 +211,93 @@ export class RazorpaySubscriptions {
 }
 export const subscriptionProvider = new RazorpaySubscriptions();
 
+export async function recoverSubscriptionCreation(
+  id: string,
+  provider = subscriptionProvider,
+) {
+  const pending = await prisma.pgSubscription.findUniqueOrThrow({
+    where: { id },
+  });
+  if (pending.providerSubscriptionId) return pending;
+  for (let skip = 0; skip < 500; skip += 100) {
+    const page = await provider.request(
+      `/subscriptions?count=100&skip=${skip}`,
+    );
+    assert(
+      Array.isArray(page.items),
+      502,
+      "INVALID_PROVIDER_STATE",
+      "The provider subscription list could not be verified.",
+    );
+    const matches = page.items.filter(
+      (s: any) =>
+        s.notes?.pgone_creation_reference === pending.creationReference &&
+        s.notes?.pgone_organisation_id === pending.organisationId,
+    );
+    assert(
+      matches.length <= 1,
+      409,
+      "DUPLICATE_PROVIDER_MANDATE",
+      "Multiple provider mandates need operator review.",
+    );
+    if (matches.length === 1) {
+      const remote = await provider.get(matches[0].id);
+      assert(
+        /^sub_[a-zA-Z0-9]+$/.test(remote.id || "") &&
+          remote.plan_id === platformConfig.PGONE_SUBSCRIPTION_PLAN_ID &&
+          remote.notes?.pgone_creation_reference ===
+            pending.creationReference &&
+          remote.notes?.pgone_organisation_id === pending.organisationId,
+        502,
+        "SUBSCRIPTION_MISMATCH",
+        "The provider mandate could not be matched safely.",
+      );
+      return atomic(async (tx) => {
+        const fresh = await tx.pgSubscription.findUniqueOrThrow({
+          where: { id },
+        });
+        assert(
+          !fresh.providerSubscriptionId ||
+            fresh.providerSubscriptionId === remote.id,
+          409,
+          "SUBSCRIPTION_CONFLICT",
+          "A different mandate is already attached.",
+        );
+        const updated = await tx.pgSubscription.update({
+          where: { id },
+          data: {
+            providerSubscriptionId: remote.id,
+            status: "PENDING_CONFIRMATION",
+          },
+        });
+        await audit(
+          tx,
+          null,
+          pending.organisationId,
+          "SUBSCRIPTION_CREATION_RECOVERED",
+          id,
+        );
+        return updated;
+      });
+    }
+    if (page.items.length < 100) break;
+  }
+  // Absence from a bounded listing is never proof that creation failed.
+  return pending;
+}
+
 export async function subscriptionStatus(
   accountId: string,
   organisationId: string,
 ) {
   const org = await ownerOrganisation(accountId, organisationId);
-  const subscription = await prisma.pgSubscription.findUnique({
-    where: { organisationId },
+  const payments = await prisma.pgBillingPayment.findMany({
+    where: { subscription: { organisationId } },
+    orderBy: { paidAt: "desc" },
+    take: 24,
+  });
+  const subscription = await prisma.pgSubscription.findFirst({
+    where: { organisationId, current: true },
     include: { payments: { orderBy: { paidAt: "desc" }, take: 24 } },
   });
   return {
@@ -212,7 +315,7 @@ export async function subscriptionStatus(
           periodEnd: subscription.periodEnd,
           cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
           verifiedAt: subscription.verifiedAt,
-          payments: subscription.payments.map((p) => ({
+          payments: payments.map((p) => ({
             id: p.id,
             amountPaise: p.amountPaise,
             taxPaise: p.taxPaise,
@@ -235,12 +338,35 @@ export async function createSubscription(
 ) {
   await ownerOrganisation(accountId, organisationId);
   await provider.plan();
+  const prior = await prisma.pgSubscription.findFirst({
+    where: { organisationId, current: true },
+  });
+  if (prior?.providerSubscriptionId)
+    await reconcileSubscription(prior.id, provider);
   const reference = randomCode();
   const sub = await atomic(async (tx) => {
-    const existing = await tx.pgSubscription.findUnique({
-      where: { organisationId },
+    const existing = await tx.pgSubscription.findFirst({
+      where: { organisationId, current: true },
     });
-    if (existing) return existing;
+    if (existing) {
+      if (
+        ["CANCELLED", "EXPIRED", "COMPLETED"].includes(existing.status) &&
+        existing.verifiedAt &&
+        (!existing.periodEnd || existing.periodEnd <= new Date())
+      ) {
+        await tx.pgSubscription.update({
+          where: { id: existing.id },
+          data: { current: false },
+        });
+        await audit(
+          tx,
+          accountId,
+          organisationId,
+          "SUBSCRIPTION_ARCHIVED",
+          existing.id,
+        );
+      } else return existing;
+    }
     const created = await tx.pgSubscription.create({
       data: {
         organisationId,
@@ -257,12 +383,20 @@ export async function createSubscription(
     );
     return created;
   });
-  if (sub.providerSubscriptionId)
+  if (sub.providerSubscriptionId) {
+    const remote = await provider.get(sub.providerSubscriptionId);
+    assert(
+      remote.status === "created",
+      409,
+      "MANDATE_ALREADY_SUBMITTED",
+      "This mandate is already submitted or active. Refresh its status before taking another payment action.",
+    );
     return {
       keyId: platformConfig.PGONE_SUBSCRIPTION_KEY_ID,
       subscriptionId: sub.providerSubscriptionId,
       amountPaise: PLAN.amountPaise,
     };
+  }
   assert(
     sub.creationReference === reference,
     409,
@@ -273,6 +407,8 @@ export async function createSubscription(
     const remote = await provider.create(organisationId, reference);
     assert(
       /^sub_[a-zA-Z0-9]+$/.test(remote.id || "") &&
+        remote.quantity === 1 &&
+        remote.total_count === platformConfig.PGONE_SUBSCRIPTION_CYCLES &&
         remote.plan_id === platformConfig.PGONE_SUBSCRIPTION_PLAN_ID &&
         remote.notes?.pgone_creation_reference === reference &&
         remote.notes?.pgone_organisation_id === organisationId,
@@ -374,7 +510,7 @@ export async function reconcileSubscription(
       assert(
         tax &&
           Number.isSafeInteger(invoice.tax_amount) &&
-          invoice.tax_amount === tax.taxPaise,
+          invoice.tax_amount === (old?.taxPaise ?? tax.taxPaise),
         502,
         "TAX_MISMATCH",
         "The provider invoice tax must match the configured inclusive price.",
@@ -414,6 +550,23 @@ export async function reconcileSubscription(
         },
         update: data,
       });
+      if (!old || old.refundedPaise !== data.refundedPaise)
+        await audit(
+          tx,
+          null,
+          local.organisationId,
+          old ? "BILLING_REFUND_RECONCILED" : "BILLING_PAYMENT_CAPTURED",
+          payment.id,
+          {
+            providerInvoiceId: invoice.id,
+            amountPaise: data.amountPaise,
+            taxPaise: data.taxPaise,
+            refundedPaise: data.refundedPaise,
+            previousRefundedPaise: old?.refundedPaise || 0,
+            periodStart: data.periodStart.toISOString(),
+            periodEnd: data.periodEnd.toISOString(),
+          },
+        );
     }
     if (!fresh.verifiedAt || fresh.verifiedAt <= observedAt) {
       const latest = await tx.pgBillingPayment.findFirst({
@@ -466,8 +619,8 @@ export async function cancelSubscription(
   provider = subscriptionProvider,
 ) {
   await ownerOrganisation(accountId, organisationId);
-  const sub = await prisma.pgSubscription.findUnique({
-    where: { organisationId },
+  const sub = await prisma.pgSubscription.findFirst({
+    where: { organisationId, current: true },
   });
   assert(
     sub?.providerSubscriptionId,
@@ -475,7 +628,17 @@ export async function cancelSubscription(
     "SUBSCRIPTION_UNAVAILABLE",
     "There is no confirmed subscription to cancel.",
   );
-  await provider.cancel(sub.providerSubscriptionId);
+  if (sub.cancelAtPeriodEnd) {
+    await reconcileSubscription(sub.id, provider);
+    return;
+  }
+  const cancelled = await provider.cancel(sub.providerSubscriptionId);
+  assert(
+    cancelled.id === sub.providerSubscriptionId,
+    502,
+    "CANCELLATION_UNCONFIRMED",
+    "The provider could not confirm this cancellation. Refresh status.",
+  );
   await atomic(async (tx) => {
     await tx.pgSubscription.update({
       where: { id: sub.id },
@@ -495,7 +658,14 @@ export async function processSubscriptionWebhook(
   raw: Buffer,
   signature: string,
   eventId: string | undefined,
+  provider = subscriptionProvider,
 ) {
+  assert(
+    Buffer.isBuffer(raw) && raw.length > 0,
+    400,
+    "INVALID_EVENT",
+    "A raw JSON provider event is required.",
+  );
   const secret = platformConfig.PGONE_SUBSCRIPTION_WEBHOOK_SECRET;
   assert(
     secret && webhookSignature(raw, signature, secret),
@@ -520,7 +690,12 @@ export async function processSubscriptionWebhook(
     );
     return;
   }
-  const event = JSON.parse(raw.toString("utf8"));
+  let event;
+  try {
+    event = JSON.parse(raw.toString("utf8"));
+  } catch {
+    throw new AppError(400, "INVALID_EVENT", "Invalid provider event JSON.");
+  }
   let subId =
     event.payload?.subscription?.entity?.id ||
     event.payload?.invoice?.entity?.subscription_id;
@@ -551,7 +726,7 @@ export async function processSubscriptionWebhook(
     if (!sub) {
       // Recover a successful provider creation whose HTTP response was lost.
       // Never issue a second mandate while creation is uncertain.
-      const remote = await subscriptionProvider.get(subId);
+      const remote = await provider.get(subId);
       const reference = remote.notes?.pgone_creation_reference;
       if (typeof reference === "string") {
         const pending = await prisma.pgSubscription.findUnique({
@@ -595,7 +770,7 @@ export async function processSubscriptionWebhook(
         }
       }
     }
-    if (sub) await reconcileSubscription(sub.id);
+    if (sub) await reconcileSubscription(sub.id, provider);
   }
   await atomic(async (tx) => {
     const saved = await tx.pgProviderEvent.upsert({

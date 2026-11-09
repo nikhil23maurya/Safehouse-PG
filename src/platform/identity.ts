@@ -5,6 +5,10 @@ import { AppError, assert } from "../errors.js";
 import { platformConfig, platformEnabled } from "./config.js";
 
 export function phoneConfig(packageId: string) {
+  const apiKey =
+    packageId === "web"
+      ? platformConfig.PGONE_FIREBASE_WEB_API_KEY
+      : config.FIREBASE_ANDROID_API_KEY;
   const applicationId =
     packageId === "com.safehouse.pg.testing"
       ? platformConfig.PGONE_FIREBASE_TESTING_APP_ID
@@ -18,7 +22,7 @@ export function phoneConfig(packageId: string) {
     platformConfig.PGONE_PHONE_AUTH_ENABLED !== "true" ||
     !applicationId ||
     !config.FIREBASE_PROJECT_ID ||
-    !config.FIREBASE_ANDROID_API_KEY ||
+    !apiKey ||
     !config.FIREBASE_SENDER_ID ||
     !config.FIREBASE_SERVICE_ACCOUNT_JSON
   )
@@ -26,7 +30,7 @@ export function phoneConfig(packageId: string) {
   return {
     projectId: config.FIREBASE_PROJECT_ID,
     applicationId,
-    apiKey: config.FIREBASE_ANDROID_API_KEY,
+    apiKey,
     senderId: config.FIREBASE_SENDER_ID,
     authDomain: `${config.FIREBASE_PROJECT_ID}.firebaseapp.com`,
   };

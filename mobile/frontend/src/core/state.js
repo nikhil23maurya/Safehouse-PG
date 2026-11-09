@@ -17,6 +17,7 @@ export const state = {
   properties: [],
   student: null,
   platform: null,
+  onboardingDraft: null,
   period: currentPeriod(),
   route: { name: "welcome", params: {} },
   pendingPayment: null,

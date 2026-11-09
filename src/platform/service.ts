@@ -67,6 +67,15 @@ export async function accountSession(
     "MEMBERSHIP_REVOKED",
     "Your access to this workspace has changed.",
   );
+  if (membership)
+    assert(
+      membership.property.ownerId === membership.organisation.legacyOwnerId &&
+        (membership.role !== "OWNER" ||
+          membership.organisation.ownerAccountId === account.id),
+      403,
+      "MEMBERSHIP_INVALID",
+      "The workspace relationship needs owner confirmation.",
+    );
   return { account, membership, claims };
 }
 export async function accountSnapshot(accountId: string) {
@@ -169,6 +178,7 @@ async function legacyOrganisation(
 export async function linkLegacy(
   accessToken: string,
   existingAccountId?: string,
+  expectedVersion?: number,
 ) {
   const claims = verifyToken(accessToken, "access");
   return atomic(async (tx) => {
@@ -201,6 +211,12 @@ export async function linkLegacy(
       const target = await tx.pgAccount.findUniqueOrThrow({
         where: { id: existingAccountId },
       });
+      assert(
+        target.status === "ACTIVE" && target.tokenVersion === expectedVersion,
+        401,
+        "SESSION_INVALID",
+        "Sign in again before linking accounts.",
+      );
       assert(
         !target.legacyUserId || target.legacyUserId === user.id,
         409,
@@ -335,6 +351,7 @@ export async function createProperty(
     });
     if (prior) {
       assert(
+        (!input.organisationId || prior.organisationId === input.organisationId) &&
         prior.property.name === input.name &&
           prior.city === input.city &&
           (prior.approximateRooms ?? null) === (input.approximateRooms ?? null),
@@ -431,13 +448,20 @@ export async function ownerOrganisation(
 ) {
   const org = await prisma.pgOrganisation.findFirst({
     where: { id: organisationId, ownerAccountId: accountId },
+    include: { legacyOwner: { select: { status: true } } },
   });
-  assert(org, 403, "FORBIDDEN", "You do not have access to this organisation.");
+  assert(
+    org && org.legacyOwner.status === "ACTIVE",
+    403,
+    "FORBIDDEN",
+    "You do not have access to this organisation.",
+  );
   return org;
 }
 export async function membershipTokens(
   accountId: string,
   membershipId: string,
+  expectedVersion?: number,
 ) {
   const membership = await prisma.pgMembership.findFirst({
     where: { id: membershipId, accountId, status: "ACTIVE" },
@@ -451,5 +475,13 @@ export async function membershipTokens(
   const account = await prisma.pgAccount.findUniqueOrThrow({
     where: { id: accountId },
   });
+  assert(
+    account.status === "ACTIVE" &&
+      (expectedVersion === undefined ||
+        account.tokenVersion === expectedVersion),
+    401,
+    "SESSION_INVALID",
+    "Sign in again to choose a workspace.",
+  );
   return platformPair(account, membership.id);
 }

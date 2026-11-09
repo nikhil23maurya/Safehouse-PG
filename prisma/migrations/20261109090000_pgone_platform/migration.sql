@@ -85,6 +85,7 @@ CREATE TABLE "PgInvitation" (
 CREATE TABLE "PgSubscription" (
     "id" TEXT NOT NULL,
     "organisationId" TEXT NOT NULL,
+    "current" BOOLEAN NOT NULL DEFAULT true,
     "provider" TEXT NOT NULL DEFAULT 'RAZORPAY',
     "providerSubscriptionId" TEXT,
     "creationReference" TEXT NOT NULL,
@@ -202,7 +203,7 @@ CREATE UNIQUE INDEX "PgInvitation_tokenHash_key" ON "PgInvitation"("tokenHash");
 CREATE INDEX "PgInvitation_organisationId_status_idx" ON "PgInvitation"("organisationId", "status");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "PgSubscription_organisationId_key" ON "PgSubscription"("organisationId");
+CREATE UNIQUE INDEX "PgSubscription_one_current" ON "PgSubscription"("organisationId") WHERE "current" = true;
 
 -- CreateIndex
 CREATE UNIQUE INDEX "PgSubscription_providerSubscriptionId_key" ON "PgSubscription"("providerSubscriptionId");

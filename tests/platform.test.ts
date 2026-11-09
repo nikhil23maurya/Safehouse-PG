@@ -130,3 +130,49 @@ test("subscription webhooks verify the exact raw bytes with a separate signing s
   assert.equal(webhookSignature(raw, signature, "different-secret"), false);
   assert.equal(webhookSignature(raw, "xyz", secret), false);
 });
+
+const { authorisationSignature } = await import(
+  "../src/platform/web-billing.js"
+);
+test("custom authorisation signatures bind payment to the database subscription", () => {
+  const signature = crypto
+    .createHmac("sha256", "test-sub-secret")
+    .update("pay_Test01|sub_Test01")
+    .digest("hex");
+  assert.equal(
+    authorisationSignature(
+      "pay_Test01",
+      "sub_Test01",
+      signature,
+      "test-sub-secret",
+    ),
+    true,
+  );
+  assert.equal(
+    authorisationSignature(
+      "pay_Test01",
+      "sub_Other01",
+      signature,
+      "test-sub-secret",
+    ),
+    false,
+  );
+  assert.equal(
+    authorisationSignature(
+      "pay_Other01",
+      "sub_Test01",
+      signature,
+      "test-sub-secret",
+    ),
+    false,
+  );
+  assert.equal(
+    authorisationSignature(
+      "pay_Test01",
+      "sub_Test01",
+      signature,
+      "wrong-secret",
+    ),
+    false,
+  );
+});

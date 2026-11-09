@@ -1,5 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
+mkdir -p diagnostics
+collect_diagnostics() {
+  result=$?
+  timeout 10s adb logcat -d -s AndroidRuntime PGOneQR > diagnostics/android-runtime.txt 2>&1 || true
+  free -m > diagnostics/host-memory.txt || true
+  sudo -n dmesg 2>/dev/null | tail -n 80 > diagnostics/host-kernel.txt || true
+  exit "$result"
+}
+trap collect_diagnostics EXIT
 mkdir -p diagnostics/android-screenshots
 adb install mobile/app/build/outputs/apk/debug/app-debug.apk
 adb install mobile/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk

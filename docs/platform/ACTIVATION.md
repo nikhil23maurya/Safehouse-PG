@@ -19,7 +19,7 @@ The app uses official native Firebase Auth, then exchanges a freshly verified Fi
 
 The Android build is **consumption-only**: it displays status and records but has no external purchase button/link or web payment funnel. There is no trial, annual plan, hidden fee or alternate tier.
 
-The server contains a Razorpay Subscriptions reconciliation adapter. This is **not a completed or enabled Custom Checkout integration**. No Standard Checkout fallback is added. The separate custom web authorisation surface and merchant-approved SDK contract still need implementation/verification after access is confirmed. Do not turn an unverified generic SDK into a payment button.
+The separate `web/billing` surface uses the official Razorpay Web Custom SDK with recurring UPI intent. It has no card/PIN fields and no Standard Checkout fallback. It remains disabled until merchant support and sandbox results are confirmed. SDK callbacks are signature-checked and reconciled against captured invoices before access is granted.
 
 1. In Razorpay Dashboard, confirm **Subscriptions** and the intended recurring payment methods are activated for this merchant. Ask support specifically whether the intended **Custom Checkout subscription authorisation** flow is supported and enabled. Existing one-time rent QR credentials do not establish that permission.
 2. Use test-mode credentials first. Create one monthly plan, interval `1`, quantity `1`, exact final amount `24900` paise, currency `INR`, named **PGOne**. Have the provider confirm the inclusive-tax invoice setup and supported authorisation method. An unexpected invoice total/tax or unverified authorisation remains held.
@@ -29,7 +29,7 @@ The server contains a Razorpay Subscriptions reconciliation adapter. This is **n
 6. Configure the dedicated HTTPS `PGONE_BILLING_WEB_ORIGIN` and published legal URLs. This does not automatically enable purchases or change existing CORS settings. Approve the exact web origin through the normal deployment process when a verified custom surface is ready.
 7. Register the **separate** subscription webhook `/api/platform-webhooks/subscriptions`, with its dedicated secret. Enable relevant subscription state, invoice-paid/payment-captured and payment-refund events. Preserve the existing `/api/webhooks/razorpay` rent webhook. The subscription handler verifies exact raw-body HMAC, deduplicates events and re-fetches provider state before entitlement.
 8. Before activation, verify sandbox authorisation, first ₹249 capture, delayed/duplicate/reordered events, mismatched amount/currency/tax, renewal, cancellation, refund and expired access. Current server policy grants a paid current period only; any refund holds that period's entitlement. A different partial-refund policy needs an explicit decision.
-9. New organisations stay read-only without a verified subscription period. Existing organisations keep their prior access; moving them to paid access requires a separate rollout decision. Re-purchase after a fully ended mandate/history migration is not implemented yet and must be completed before purchase activation.
+9. New organisations stay read-only without a verified subscription period. Existing organisations keep their prior access; moving them to paid access requires a separate rollout decision. A replacement mandate is allowed only after provider-confirmed cancellation/expiry/completion and the last paid period ending. Prior contracts and payment records remain in history.
 
 If you want digital subscription purchases inside a Play-distributed app, integrate Google Play Billing or establish eligibility/enrolment for the applicable alternative-billing programme first. The current build intentionally provides no such purchase flow.
 
@@ -56,3 +56,13 @@ If you want digital subscription purchases inside a Play-distributed app, integr
 - [Razorpay Subscriptions API](https://razorpay.com/docs/api/payments/subscriptions/)
 - [Cashfree Embedded Payments](https://www.cashfree.com/embedded-payments/)
 - [Google Play payments policy](https://support.google.com/googleplay/android-developer/answer/10281818)
+
+## Separate web billing build
+
+Run `npm ci --prefix mobile/frontend`, then `node web/billing/build.mjs`. The standalone output is `web/billing/dist`; preview with `node web/billing/serve.mjs` on port 4174. It is never included in Android assets, and Android contains no link to this purchase surface. These commands do not deploy it.
+
+Register a Firebase Web app in the same project. Set `PGONE_FIREBASE_WEB_APP_ID` and `PGONE_FIREBASE_WEB_API_KEY`; add the approved billing domain to Firebase Authentication authorised domains and allow it in the web API key's restrictions. Firebase Auth uses in-memory persistence; PGOne session tokens are held in memory and cleared on reload/sign-out. Existing owners can alternatively authenticate with their existing email/password and verified account linking.
+
+After merchant confirmation and sandbox acceptance, set `PGONE_CUSTOM_WEB_BILLING_ENABLED=true` in approved staging. Authorisation endpoints require the exact configured HTTPS billing Origin, authenticated owner, current price/cycle consent and the server-selected subscription. Keep the flag false in production until provider acceptance passes. Approve hosting headers/CSP and the exact CORS origin during deployment; this branch does not modify production CORS.
+
+Only SDK-confirmed supported recurring UPI apps are offered. If none is available, payment stays unavailable. Mandatory provider/UPI authorisation disclosures may appear; PGOne does not conceal the processor or imitate the bank. No card, VPA-collect or UPI-PIN fallback is added.

@@ -117,6 +117,7 @@ async function platform(page) {
           "Online payment setup is awaiting payment-provider activation.",
         onboardingAvailable: false,
       };
+    else if (path.endsWith("/members")) data = { members: [] };
     else if (path.endsWith("/invitations")) data = { invitations: [] };
     else
       return route.fulfill({

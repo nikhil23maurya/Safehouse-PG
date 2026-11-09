@@ -7,6 +7,10 @@ export const platformConfig = z
     PGONE_PHONE_AUTH_ENABLED: z.enum(["true", "false"]).default("false"),
     PGONE_FIREBASE_TESTING_APP_ID: optional,
     PGONE_FIREBASE_WEB_APP_ID: optional,
+    PGONE_FIREBASE_WEB_API_KEY: optional,
+    PGONE_CUSTOM_WEB_BILLING_ENABLED: z
+      .enum(["true", "false"])
+      .default("false"),
     PGONE_SUBSCRIPTION_KEY_ID: optional,
     PGONE_SUBSCRIPTION_KEY_SECRET: optional,
     PGONE_SUBSCRIPTION_WEBHOOK_SECRET: optional,
@@ -37,7 +41,7 @@ export const PLAN = Object.freeze({
   currency: "INR",
   interval: "month",
 });
-export const STAFF_PERMISSIONS = ["OCCUPANCY_READ", "NOTICES_READ"] as const;
+export const STAFF_PERMISSIONS = ["OCCUPANCY_READ"] as const;
 
 export function taxBreakdown(bps: number | undefined) {
   if (bps === undefined) return null;
