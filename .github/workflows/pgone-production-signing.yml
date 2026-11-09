@@ -23,6 +23,8 @@ jobs:
       PGONE_RELEASE_KEY_PASSWORD: ${{ secrets.PGONE_RELEASE_KEY_PASSWORD }}
     steps:
       - name: Require all signing credentials and exact immutable source
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_main_sha }}
         shell: bash
         run: |
           set -euo pipefail
@@ -32,7 +34,7 @@ jobs:
               exit 1
             fi
           done
-          if ! [[ "${{ inputs.expected_main_sha }}" =~ ^[a-f0-9]{40}$ ]]; then
+          if ! [[ "$EXPECTED_SHA" =~ ^[a-f0-9]{40}$ ]]; then
             echo "::error::Expected source SHA must be exactly 40 hex characters."
             exit 1
           fi
