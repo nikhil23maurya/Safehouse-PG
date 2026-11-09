@@ -54,7 +54,7 @@ function resetPayment() {
 }
 function page(title, description, content) {
   clearInterval(countdown);
-  root.innerHTML = `<main class="onboarding-page royal-page web-billing"><header class="onboarding-top">${brand()}${state.tokens ? button("Sign out", { action: "logout", kind: "text-button" }) : ""}</header><div class="royal-intro"><span class="royal-kicker">YOUR PGONE SUBSCRIPTION</span><h1>${esc(title)}</h1><span class="gold-rule"></span><p>${esc(description)}</p></div>${content}<p class="legal-copy">${config?.legal?.terms ? `<a href="${esc(config.legal.terms)}" target="_blank" rel="noopener noreferrer">Terms</a>` : ""} · ${config?.legal?.privacy ? `<a href="${esc(config.legal.privacy)}" target="_blank" rel="noopener noreferrer">Privacy Policy</a>` : ""}</p></main>`;
+  root.innerHTML = `<main class="onboarding-page royal-page web-billing"><header class="onboarding-top">${brand()}${state.tokens ? button("Sign out", { action: "logout", kind: "text-button" }) : ""}</header><div class="royal-intro"><span class="royal-kicker">YOUR PGONE PLAN</span><h1>${esc(title)}</h1><span class="gold-rule"></span><p>${esc(description)}</p></div>${content}<p class="legal-copy">${config?.legal?.terms ? `<a href="${esc(config.legal.terms)}" target="_blank" rel="noopener noreferrer">Terms</a>` : ""} · ${config?.legal?.privacy ? `<a href="${esc(config.legal.privacy)}" target="_blank" rel="noopener noreferrer">Privacy Policy</a>` : ""}</p></main>`;
 }
 function login() {
   flowGeneration++;
@@ -176,6 +176,7 @@ async function status(recheck = false) {
   if (epoch !== state.authEpoch || organisationId !== org) return;
   data = result;
   resetPayment();
+  message("");
   renderPlan();
 }
 function renderPlan() {

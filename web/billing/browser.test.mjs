@@ -215,6 +215,7 @@ test("custom one-time SDK payment stays pending until a server-confirmed paid pe
     }),
   ).toBeVisible();
   await expect(page.getByRole("button", { name: "Renew for ₹249", exact: true })).toBeVisible();
+  await expect(page.locator("#billing-message")).toHaveText("");
   await expect(page.getByRole("button", { name: "Cancel future renewal" })).toHaveCount(0);
   await mkdir(new URL("screenshots/", import.meta.url), { recursive: true });
   await page.screenshot({
