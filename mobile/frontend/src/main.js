@@ -282,9 +282,12 @@ function guardedRoute(name) {
     return routes[name]?.[1] === null ? name : "welcome";
   if (routes[name]?.[1] === "PLATFORM") {
     if (state.tokens.kind !== "PLATFORM") return home();
-    // Merchant setup is a post-payment task, never an unpaid bypass.
-    if (["merchant", "merchantProfile", "merchantBank"].includes(name) &&
-        !ownerHasPaidAccess(state)) return "subscription";
+    const ownerOnly = ["subscription", "merchant", "merchantProfile", "merchantBank"];
+    if (ownerOnly.includes(name) && state.user.role !== "OWNER") return home();
+    // Merchant setup follows verified subscription activation; it cannot be
+    // used to bypass the owner's paid workspace boundary.
+    if (name.startsWith("merchant") && !ownerHasPaidAccess(state))
+      return "subscription";
     return name;
   }
   if (
