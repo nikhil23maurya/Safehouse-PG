@@ -6,9 +6,11 @@ import { PLAN, platformConfig, platformEnabled, subscriptionCredentials, taxBrea
 import { atomic, audit, ownerOrganisation } from "./service.js";
 import { subscriptionStatus, webhookSignature } from "./billing.js";
 import { indiaDay, nextCalendarMonth, paidAccessChain } from "./plan-period.js";
+import { planPaymentKeyAllowed } from "./credentials.js";
 
 export const planWebhookSecret = () => platformConfig.PGONE_SUBSCRIPTION_WEBHOOK_SECRET || config.RAZORPAY_WEBHOOK_SECRET;
-export const manualBillingConfigured = () => Boolean(subscriptionCredentials() && planWebhookSecret() &&
+const paymentKeyAllowed = () => planPaymentKeyAllowed(subscriptionCredentials()?.keyId, { nodeEnv: config.NODE_ENV, render: process.env.RENDER });
+export const manualBillingConfigured = () => Boolean(subscriptionCredentials() && paymentKeyAllowed() && planWebhookSecret() &&
   platformConfig.PGONE_TAX_BPS !== undefined && platformConfig.PGONE_BILLING_WEB_ORIGIN &&
   platformConfig.PGONE_TERMS_URL && platformConfig.PGONE_PRIVACY_URL);
 export const manualCheckoutEnabled = () => platformEnabled() &&
@@ -70,6 +72,7 @@ export class RazorpayPlanOrders {
 
 function assertMerchant(order: LocalOrder) {
   assert(subscriptionCredentials()?.keyId === order.providerKeyId, 409, "PLAN_MERCHANT_CHANGED", "This order belongs to a different payment account. Contact support before retrying.");
+  assert(paymentKeyAllowed(), 503, "PLAN_KEY_MODE_NOT_LIVE", "Production plan payments require live Razorpay credentials. No paid access has been granted.");
 }
 
 export async function recoverPlanOrder(id: string, provider = new RazorpayPlanOrders()) {

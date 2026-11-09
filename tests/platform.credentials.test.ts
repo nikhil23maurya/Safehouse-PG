@@ -1,6 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { resolveSubscriptionCredentials } from "../src/platform/credentials.js";
+import { resolveSubscriptionCredentials, paymentKeyMode, planPaymentKeyAllowed } from "../src/platform/credentials.js";
+
+test("production or Render refuses test and unknown keys without changing isolated development tests", () => {
+  assert.equal(paymentKeyMode("rzp_live_Example123"), "LIVE");
+  assert.equal(paymentKeyMode("rzp_test_Example123"), "TEST");
+  assert.equal(paymentKeyMode("unexpected-id"), "UNKNOWN");
+  assert.equal(paymentKeyMode(undefined), "UNAVAILABLE");
+  for (const context of [{nodeEnv:"production"},{nodeEnv:"test",render:"true"},{nodeEnv:"development",render:"true"}]) {
+    for (const id of [undefined,"rzp_test_Example123","unexpected-id"])
+      assert.equal(planPaymentKeyAllowed(id,context),false);
+    assert.equal(planPaymentKeyAllowed("rzp_live_Example123",context),true);
+  }
+  assert.equal(planPaymentKeyAllowed("synthetic-provider-key",{nodeEnv:"test"}),true);
+});
 
 const existing = { RAZORPAY_KEY_ID: "existing-id", RAZORPAY_KEY_SECRET: "existing-secret" };
 

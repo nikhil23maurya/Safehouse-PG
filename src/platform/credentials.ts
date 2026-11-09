@@ -7,6 +7,19 @@ type ExistingKeys = {
   RAZORPAY_KEY_SECRET?: string;
 };
 
+export function paymentKeyMode(keyId?: string) {
+  if (!keyId) return "UNAVAILABLE";
+  if (/^rzp_live_[a-zA-Z0-9]+$/.test(keyId)) return "LIVE";
+  if (/^rzp_test_[a-zA-Z0-9]+$/.test(keyId)) return "TEST";
+  return "UNKNOWN";
+}
+export function requiresLivePaymentKey(context: { nodeEnv?: string; render?: string }) {
+  return context.nodeEnv === "production" || context.render === "true";
+}
+export function planPaymentKeyAllowed(keyId: string | undefined, context: { nodeEnv?: string; render?: string }) {
+  return !requiresLivePaymentKey(context) || paymentKeyMode(keyId) === "LIVE";
+}
+
 /** Never combine credentials from two merchant accounts or rotate legacy keys. */
 export function resolveSubscriptionCredentials(
   subscription: SubscriptionKeys,
