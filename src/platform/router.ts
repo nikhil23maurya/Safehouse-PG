@@ -34,6 +34,7 @@ import {
   reconcileSubscription,
   recoverSubscriptionCreation,
   subscriptionStatus,
+  entitlement,
 } from "./billing.js";
 import { merchantStatus } from "./merchant.js";
 import {
@@ -181,8 +182,26 @@ platformRouter.get("/session", async (req, res) => {
   }
   // Phone authentication is an independent verified factor. Temporary-password
   // requirements remain unchanged for the legacy password login.
+  // One authoritative entitlement snapshot drives onboarding and navigation.
+  // New owners must not enter the operational workspace before provider-verified payment.
+  // Preserve explicitly grandfathered organisations through the same entitlement function.
+  const snapshot = await accountSnapshot(account.id);
+  const ownerOrganisationIds = [...new Set(snapshot.memberships
+    .filter((m) => m.role === "OWNER")
+    .map((m) => m.organisation.id))];
+  const ownerEntitlements = new Map(await Promise.all(ownerOrganisationIds.map(async (organisationId) =>
+    [organisationId, await entitlement(organisationId)] as const,
+  )));
+  const memberships = snapshot.memberships.map((m) => ({
+    ...m,
+    organisation: {
+      ...m.organisation,
+      entitled: m.role === "OWNER" ? ownerEntitlements.get(m.organisation.id) === true : null,
+    },
+  }));
   res.json({
-    ...(await accountSnapshot(account.id)),
+    ...snapshot,
+    memberships,
     membershipId: membership?.id || null,
     user: membership
       ? {
