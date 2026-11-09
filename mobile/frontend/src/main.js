@@ -63,6 +63,7 @@ import {
   legalScreen,
 } from "./screens/platform.js";
 import { onboarding, platformStart } from "./platform/client.js";
+import { ownerActivationRoute, ownerHasPaidAccess } from "./platform/activation.js";
 
 const routes = {
   welcome: [welcomeScreen, null],
@@ -279,8 +280,16 @@ async function canLeave() {
 function guardedRoute(name) {
   if (!state.tokens || !state.user)
     return routes[name]?.[1] === null ? name : "welcome";
-  if (routes[name]?.[1] === "PLATFORM")
-    return state.tokens.kind === "PLATFORM" ? name : home();
+  if (routes[name]?.[1] === "PLATFORM") {
+    if (state.tokens.kind !== "PLATFORM") return home();
+    const ownerOnly = ["subscription", "merchant", "merchantProfile", "merchantBank"];
+    if (ownerOnly.includes(name) && state.user.role !== "OWNER") return home();
+    // Merchant setup follows verified subscription activation; it cannot be
+    // used to bypass the owner's paid workspace boundary.
+    if (name.startsWith("merchant") && !ownerHasPaidAccess(state))
+      return "subscription";
+    return name;
+  }
   if (
     state.tokens.kind === "PLATFORM" &&
     ["ACCOUNT", "STAFF"].includes(state.user.role)
@@ -300,7 +309,7 @@ function guardedRoute(name) {
     !["properties", "propertyForm", "password", "profile"].includes(name)
   )
     return "properties";
-  return name;
+  return ownerActivationRoute(state, name);
 }
 
 async function navigate(
@@ -641,9 +650,15 @@ window.SafeHousePaymentError = () => {
   toast("Check payment status before trying again.");
   void payment.resume();
 };
+// The native Custom SDK returns a UPI-app result, never an entitlement.
+window.PGOnePlanPaymentError = (message) => {
+  toast(message || "UPI checkout could not open. Check payment status before retrying.", "error");
+  if (state.route?.name === "subscription") void revalidateOwnerActivation();
+};
 window.SafeHouseResume = () => {
   applyMotionPreference();
   if (screen?.paymentFlow) void payment.resume();
+  else if (state.route?.name === "subscription") void revalidateOwnerActivation();
   else if (state.tokens && state.user && !dirty && !submittedForms) {
     cache.clear();
     void render();
@@ -720,6 +735,11 @@ function makeContext(snapshot, key) {
         ? { ...value, accountId: state.platform.account.id }
         : null;
       persist();
+    },
+    refreshPaidAccess: async () => {
+      // Re-read the signed-in workspace and its server-computed entitlement.
+      await refreshPlatform();
+      return ownerHasPaidAccess(state);
     },
     enablePlatform: async () => {
       if (state.pendingPayment)
@@ -1047,8 +1067,42 @@ window.addEventListener("beforeunload", (event) => {
 window.addEventListener("online", () => {
   if (screen?.paymentFlow) void payment.resume();
 });
+let activationRefreshInFlight = false;
+async function revalidateOwnerActivation() {
+  if (activationRefreshInFlight || dirty || submittedForms ||
+      !state.tokens || state.tokens.kind !== "PLATFORM" ||
+      state.user?.role !== "OWNER" || !state.platform?.membershipId) return;
+  activationRefreshInFlight = true;
+  try {
+    const previouslyPaid = ownerHasPaidAccess(state);
+    if (state.route.name === "subscription" &&
+        onboarding.config?.androidBilling === "CUSTOM_UPI_INTENT") {
+      const org = state.platform?.memberships?.find(m =>
+        m.id === state.platform?.membershipId)?.organisation;
+      if (org?.id) {
+        await api(`/api/platform/organisations/${org.id}/subscription/recheck`, {
+          method: "POST",
+        });
+      }
+    }
+    await refreshPlatform(); // Backend calculates entitlements from captured payments.
+    if (!ownerHasPaidAccess(state)) {
+      // Expired/refunded access also revokes an already-open dashboard.
+      if (guardedRoute(state.route.name) !== state.route.name)
+        await navigate("subscription", {}, { replace: true, force: true });
+    } else if (!previouslyPaid && state.route.name === "subscription") {
+      await navigate("setupReady", {}, { replace: true, force: true });
+    }
+  } catch {
+    // Do not invent activation on a network failure. Owner APIs remain gated.
+  } finally {
+    activationRefreshInFlight = false;
+  }
+}
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && screen?.paymentFlow) void payment.resume();
+  if (document.hidden) return;
+  if (screen?.paymentFlow) void payment.resume();
+  void revalidateOwnerActivation();
 });
 let nativeKeyboardOpen = false,
   keyboardFrame;

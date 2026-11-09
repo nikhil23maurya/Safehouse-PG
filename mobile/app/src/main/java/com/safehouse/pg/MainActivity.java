@@ -37,6 +37,8 @@ import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.razorpay.Checkout;
+import com.razorpay.Razorpay;
+import com.razorpay.PaymentResultListener;
 import com.razorpay.PaymentData;
 import com.razorpay.PaymentResultWithDataListener;
 
@@ -53,6 +55,10 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
     private static final int NOTIFICATION_PERMISSION_REQUEST = 9421;
 
     private WebView webView;
+    // Separate provider-owned WebView: never expose the app session JS bridge to a bank/payment page.
+    private WebView planPaymentWebView;
+    private Razorpay planCustomRazorpay;
+    private String planOrderId;
     private View splashView;
     private FrameLayout hostView;
     private SessionVault sessionVault;
@@ -310,6 +316,31 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         callJs("window.SafeHousePaymentError && window.SafeHousePaymentError(" + q(message) + ");");
     }
 
+    private void closePlanPayment(String reason) {
+        String oldOrder = planOrderId;
+        planOrderId = null;
+        planCustomRazorpay = null;
+        if (planPaymentWebView != null) {
+            WebView view = planPaymentWebView;
+            planPaymentWebView = null;
+            hostView.removeView(view);
+            view.stopLoading();
+            view.destroy();
+        }
+        if (oldOrder != null) {
+            callJs("window.PGOnePlanPaymentResult && window.PGOnePlanPaymentResult(" +
+                q(oldOrder) + "," + q(reason) + ");");
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (planCustomRazorpay != null) {
+            planCustomRazorpay.onActivityResult(requestCode, resultCode, data);
+        }
+    }
+
     private void callJs(String js) {
         runOnUiThread(() -> { if (webView != null && pageReady) webView.evaluateJavascript(js, null); });
     }
@@ -318,6 +349,12 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     @Override
     public void onBackPressed() {
+        if (planCustomRazorpay != null) {
+            // A bank/UPI authorization can be interrupted; always recheck the server.
+            try { planCustomRazorpay.onBackPressed(); } catch (Exception ignored) {}
+            closePlanPayment("CANCELLED_OR_UNKNOWN");
+            return;
+        }
         if (webView != null && pageReady) {
             webView.evaluateJavascript("Boolean(window.SafeHouseBack && window.SafeHouseBack())", handled -> { if (!"true".equals(handled)) finish(); });
         } else super.onBackPressed();
@@ -368,6 +405,74 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                     if (!keyId.isEmpty()) checkout.setKeyID(keyId);
                     checkout.open(MainActivity.this, options);
                 } catch (Exception e) { callJs("window.SafeHousePaymentError && window.SafeHousePaymentError(" + q("Unable to open secure payment. Please try again.") + ");"); }
+            });
+        }
+
+        /**
+         * PGOne's separate ₹249 fee, for internal/sideloaded testing APKs only.
+         * The custom SDK is used for UPI Intent; it shows installed UPI apps and
+         * launches the selected app for authorisation. Only backend captured
+         * payment reconciliation grants access; native result is not evidence.
+         */
+        @JavascriptInterface
+        public void openPlanRazorpayUpi(String optionsJson) {
+            runOnUiThread(() -> {
+                try {
+                    if (!getPackageName().endsWith(".testing")) {
+                        throw new IllegalArgumentException("In-app UPI billing is disabled in Google Play production builds");
+                    }
+                    if (planCustomRazorpay != null) {
+                        throw new IllegalStateException("A ₹249 payment is already in progress");
+                    }
+                    JSONObject input = new JSONObject(optionsJson);
+                    String key = input.optString("key");
+                    String order = input.optString("order_id");
+                    String contact = input.optString("contact", "");
+                    String email = input.optString("email", "");
+                    if (!key.matches("rzp_(live|test)_[a-zA-Z0-9]+") ||
+                        !order.matches("order_[a-zA-Z0-9]+") ||
+                        input.optInt("amount") != 24900 ||
+                        !"INR".equals(input.optString("currency")) ||
+                        (!contact.isEmpty() && !contact.matches("\\+91[6-9][0-9]{9}"))) {
+                        throw new IllegalArgumentException("Payment session is incomplete");
+                    }
+                    planOrderId = order;
+                    planPaymentWebView = new WebView(MainActivity.this);
+                    planPaymentWebView.setBackgroundColor(Color.WHITE);
+                    planPaymentWebView.getSettings().setJavaScriptEnabled(true);
+                    planPaymentWebView.getSettings().setDomStorageEnabled(true);
+                    planPaymentWebView.getSettings().setAllowFileAccess(false);
+                    planPaymentWebView.getSettings().setAllowContentAccess(false);
+                    planPaymentWebView.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+                    hostView.addView(planPaymentWebView,
+                        new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                    planCustomRazorpay = new Razorpay(MainActivity.this, key);
+                    planCustomRazorpay.setWebView(planPaymentWebView);
+                    JSONObject payload = new JSONObject();
+                    payload.put("key", key);
+                    payload.put("order_id", order);
+                    payload.put("amount", 24900);
+                    payload.put("currency", "INR");
+                    payload.put("method", "upi");
+                    payload.put("_[flow]", "intent");
+                    payload.put("description", "PGOne monthly workspace access");
+                    if (!contact.isEmpty()) payload.put("contact", contact);
+                    if (!email.isEmpty()) payload.put("email", email);
+                    // Without upi_app_package_name Razorpay presents its supported
+                    // installed UPI apps rather than forcing a hardcoded app.
+                    planCustomRazorpay.submit(payload, new PaymentResultListener() {
+                        @Override public void onPaymentSuccess(String ignoredPaymentId) {
+                            runOnUiThread(() -> closePlanPayment("RETURNED_CHECK_PROVIDER"));
+                        }
+                        @Override public void onPaymentError(int code, String description) {
+                            runOnUiThread(() -> closePlanPayment("FAILED_OR_UNKNOWN_CHECK_PROVIDER"));
+                        }
+                    });
+                } catch (Exception ignored) {
+                    closePlanPayment("SDK_UNAVAILABLE");
+                    callJs("window.PGOnePlanPaymentError && window.PGOnePlanPaymentError(" +
+                        q("Razorpay UPI checkout could not open. Check activation before paying again.") + ");");
+                }
             });
         }
 

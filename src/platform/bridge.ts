@@ -86,6 +86,18 @@ export async function platformWorkspaceBridge(
       "PROPERTY_ACCESS_DENIED",
       "Choose that property through your workspaces.",
     );
+    // A subscription gates the owner dashboard AND operational reads, not
+    // merely writes. Prevent direct API calls / cached routes from bypassing
+    // onboarding. Keep authentication, platform subscription and legal routes
+    // outside this guard so unpaid owners can recover their account.
+    if (owner && path.startsWith("/api/owner/")) {
+      assert(
+        await entitlement(membership.organisation.id),
+        402,
+        "SUBSCRIPTION_REQUIRED",
+        "Activate PGOne for ₹249/month before accessing your management workspace.",
+      );
+    }
     if (owner && req.method !== "GET") {
       assert(
         !(path === "/api/owner/properties" && req.method === "POST"),
@@ -93,12 +105,16 @@ export async function platformWorkspaceBridge(
         "USE_ONBOARDING",
         "Create properties through PG setup.",
       );
-      assert(
-        await entitlement(membership.organisation.id),
-        402,
-        "SUBSCRIPTION_REQUIRED",
-        "Your PGOne subscription needs attention. Existing records remain available.",
-      );
+      // Non-dashboard financial/notification mutations keep their historical
+      // restrictions while the paid owner operational API is guarded above.
+      if (!path.startsWith("/api/owner/")) {
+        assert(
+          await entitlement(membership.organisation.id),
+          402,
+          "SUBSCRIPTION_REQUIRED",
+          "Your PGOne subscription needs attention. Existing records remain available.",
+        );
+      }
     }
     req.headers["x-property-id"] = membership.propertyId;
     // The existing handlers still perform their normal actor, role and property checks.

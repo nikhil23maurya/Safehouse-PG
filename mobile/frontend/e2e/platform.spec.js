@@ -2,8 +2,8 @@ import { test, expect } from "@playwright/test";
 import { setup, go, noOverflow } from "./helpers.js";
 import fs from "node:fs/promises";
 
-async function platform(page) {
-  await page.addInitScript(() => {
+async function platform(page, { billing = false } = {}) {
+  await page.addInitScript((enableBilling) => {
     window.__platformVault = null;
     window.__phoneSends = 0;
     window.SafeHouseNative = {
@@ -30,8 +30,11 @@ async function platform(page) {
           100,
         ),
       cancelPhoneSignIn: () => {},
+      ...(enableBilling ? { openPlanRazorpayUpi: (raw) => {
+        window.__lastPlanOptions = JSON.parse(raw);
+      } } : {}),
     };
-  });
+  }, billing);
   const fixtures = await setup(page);
   const account = {
     id: "pg-account-1",
@@ -44,6 +47,7 @@ async function platform(page) {
   const memberships = [];
   let selected = null;
   let propertiesCreated = 0;
+  let paid = false;
   const tokens = () => ({
     kind: "PLATFORM",
     accessToken: `pg1.test.${selected || "account"}`,
@@ -51,7 +55,7 @@ async function platform(page) {
   });
   const snapshot = () => ({
     account,
-    memberships,
+    memberships: memberships.map(m => ({ ...m, organisation: { ...m.organisation, entitled: paid } })),
     membershipId: selected,
     property: selected ? memberships[0].property : null,
     student: null,
@@ -70,6 +74,7 @@ async function platform(page) {
     if (path.endsWith("/config"))
       data = {
         enabled: true,
+        androidBilling: billing ? "CUSTOM_UPI_INTENT" : "NOT_CONFIGURED",
         phone: { projectId: "synthetic-test-project" },
         legal: {
           terms: "https://example.test/terms",
@@ -106,15 +111,23 @@ async function platform(page) {
       data = { tokens: tokens() };
     } else if (path.endsWith("/subscription"))
       data = {
-        entitled: false,
+        entitled: paid,
         legacyAccess: false,
-        configured: false,
+        configured: billing,
         mode: "MANUAL_MONTHLY",
         recurring: false,
         tax: null,
         subscription: null,
       };
-    else if (path.endsWith("/merchant"))
+    else if (path.endsWith("/plan/android/orders")) {
+       expect(billing).toBe(true);
+       expect(body).toMatchObject({ accepted:true, amountPaise:24900, recurring:false });
+       expect(body.requestKey.length).toBeGreaterThanOrEqual(16);
+       data = { id:"pg-plan-order-one", orderId:"order_SYNTHETIC001", keyId:"rzp_test_SYNTHETIC001",
+         amountPaise:24900, currency:"INR", recurring:false, payable:true };
+     } else if (path.endsWith("/subscription/recheck")) {
+       data = { entitled: paid };
+     } else if (path.endsWith("/merchant"))
       data = {
         status: "NOT_CONNECTED",
         bank: null,
@@ -155,8 +168,20 @@ async function platform(page) {
     get propertiesCreated() {
       return propertiesCreated;
     },
+    activatePaid() { paid = true; },
+    get entitled() { return paid; },
   };
 }
+async function expectActivationRedirect(page, name) {
+  await page.evaluate((route) => {
+    const record = { safehouse: true, name: route, params: {}, depth: 1 };
+    history.pushState(record, "", `#${route}`);
+    window.dispatchEvent(new PopStateEvent("popstate", { state: record }));
+  }, name);
+  await expect(page).toHaveURL(/#subscription$/);
+  await expect(page.locator("#app")).toHaveAttribute("data-screen", "subscription");
+}
+
 async function phoneLogin(page) {
   await go(page, "welcome");
   await page.getByRole("button", { name: "Create account", exact: true }).click();
@@ -177,8 +202,37 @@ async function phoneLogin(page) {
   ).toBeVisible();
 }
 
+test("₹249 Razorpay UPI checkout starts inside app and only captured provider payment unlocks dashboard", async ({page}) => {
+  const fixture = await platform(page, { billing: true });
+  await phoneLogin(page);
+  await page.getByRole("button",{name:"I manage a PG",exact:false}).click();
+  await page.getByLabel("Full name").fill("Rahul Sharma");
+  await page.getByLabel("Email address").fill("rahul@example.test");
+  await page.getByRole("button",{name:"Continue",exact:true}).click();
+  await page.getByLabel("PG name").fill("Maple House");
+  await page.getByLabel("City",{exact:true}).fill("Bengaluru");
+  await page.getByRole("button",{name:"Create my PG"}).click();
+  await expect(page).toHaveURL(/#subscription$/);
+  const pay = page.getByRole("button",{name:"Pay ₹249 securely with UPI"});
+  await expect(pay).toBeVisible();
+  await pay.click();
+  await expect.poll(()=>page.evaluate(()=>window.__lastPlanOptions)).toMatchObject({
+    key:"rzp_test_SYNTHETIC001", order_id:"order_SYNTHETIC001",
+    amount:24900, currency:"INR", contact:"+919123456789", email:"rahul@example.test",
+  });
+  // SDK success alone cannot give dashboard entitlement.
+  await page.evaluate(()=>window.PGOnePlanPaymentResult("order_SYNTHETIC001","RETURNED_CHECK_PROVIDER"));
+  await expect(page).toHaveURL(/#subscription$/);
+  await expectActivationRedirect(page,"ownerHome");
+  expect(fixture.entitled).toBe(false);
+  fixture.activatePaid(); // Simulated provider-confirmed capture.
+  await page.getByRole("button",{name:"Check payment status"}).click();
+  await expect(page).toHaveURL(/#setupReady$/);
+  expect(fixture.entitled).toBe(true);
+});
+
 test("owner merchant forms validate consent, keep bank data out of the vault and require provider KYC confirmation", async ({page}) => {
-  await platform(page);
+  const fixture = await platform(page);
   const merchant = {onboardingAvailable:true,setupStarted:false,status:"NOT_CONNECTED",environment:"LIVE",bank:null,bankSubmission:null,
     collectionEnabled:false,message:"Complete your business profile and Cashfree KYC."};
   let profiles=0,banks=0;
@@ -197,7 +251,13 @@ test("owner merchant forms validate consent, keep bank data out of the vault and
   await page.getByLabel("PG name").fill("Maple House");
   await page.getByLabel("City",{exact:true}).fill("Bengaluru");
   await page.getByRole("button",{name:"Create my PG"}).click();
-  await expect(page).toHaveURL(/#setupReady$/);
+  await expect(page).toHaveURL(/#subscription$/);
+  await expectActivationRedirect(page, "merchant"); // unpaid owners cannot enter KYC
+  fixture.activatePaid(); // Simulate a server-verified captured payment.
+  // Re-select the workspace to exchange an up-to-date server session.
+  await go(page,"workspaces");
+  await page.getByRole("button",{name:/Maple House/}).click();
+  await expect(page).toHaveURL(/#ownerHome$/);
   await go(page,"merchant");
   await page.getByRole("button",{name:"Set up owner payment account"}).click();
   await expect(page.getByLabel("Legal name")).toHaveValue("Rahul Sharma");
@@ -329,18 +389,25 @@ test("phone onboarding, real controls, saved property and restored workspace", a
   await page.getByLabel("City", { exact: true }).fill("Bengaluru");
   await page.getByLabel("Approximate number of rooms").fill("12");
   await page.getByRole("button", { name: "Create my PG" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Maple House is ready." }),
-  ).toBeVisible();
-  await capture("ready");
+  await expect(page).toHaveURL(/#subscription$/);
+  await expect(page.getByRole("heading", { name: "Your PG is ready. One last step." })).toBeVisible();
+  await capture("unpaid-activation");
+  await expectActivationRedirect(page, "ownerHome"); // Dashboard must stay locked.
   expect(fixture.propertiesCreated).toBe(1);
-  await go(page, "subscription");
-  await expect(page.getByText("one-time monthly payment · no auto-debit", { exact: false })).toBeVisible();
+  await expect(page.getByText("One payment covers one calendar month", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Cancel renewal", exact: true })).toHaveCount(0);
   await capture("plan");
   await expect(
     page.getByRole("button", { name: /buy|subscribe|pay now|upgrade/i }),
   ).toHaveCount(0);
+  await expectActivationRedirect(page, "merchant");
+  fixture.activatePaid();
+  await go(page, "workspaces");
+  await page.getByRole("button",{name:/Maple House/}).click();
+  await expect(page).toHaveURL(/#ownerHome$/);
+  await go(page, "setupReady");
+  await expect(page.getByRole("heading", { name: "Maple House is ready." })).toBeVisible();
+  await capture("ready");
   await go(page, "merchant");
   await capture("merchant");
   await expect(
