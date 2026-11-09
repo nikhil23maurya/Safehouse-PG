@@ -44,6 +44,7 @@ async function platform(page) {
   const memberships = [];
   let selected = null;
   let propertiesCreated = 0;
+  let paid = false;
   const tokens = () => ({
     kind: "PLATFORM",
     accessToken: `pg1.test.${selected || "account"}`,
@@ -51,7 +52,7 @@ async function platform(page) {
   });
   const snapshot = () => ({
     account,
-    memberships,
+    memberships: memberships.map(m => ({ ...m, organisation: { ...m.organisation, entitled: paid } })),
     membershipId: selected,
     property: selected ? memberships[0].property : null,
     student: null,
@@ -106,7 +107,7 @@ async function platform(page) {
       data = { tokens: tokens() };
     } else if (path.endsWith("/subscription"))
       data = {
-        entitled: false,
+        entitled: paid,
         legacyAccess: false,
         configured: false,
         mode: "MANUAL_MONTHLY",
@@ -155,6 +156,7 @@ async function platform(page) {
     get propertiesCreated() {
       return propertiesCreated;
     },
+    activatePaid() { paid = true; },
   };
 }
 async function phoneLogin(page) {
@@ -178,7 +180,7 @@ async function phoneLogin(page) {
 }
 
 test("owner merchant forms validate consent, keep bank data out of the vault and require provider KYC confirmation", async ({page}) => {
-  await platform(page);
+  const fixture = await platform(page);
   const merchant = {onboardingAvailable:true,setupStarted:false,status:"NOT_CONNECTED",environment:"LIVE",bank:null,bankSubmission:null,
     collectionEnabled:false,message:"Complete your business profile and Cashfree KYC."};
   let profiles=0,banks=0;
@@ -197,7 +199,11 @@ test("owner merchant forms validate consent, keep bank data out of the vault and
   await page.getByLabel("PG name").fill("Maple House");
   await page.getByLabel("City",{exact:true}).fill("Bengaluru");
   await page.getByRole("button",{name:"Create my PG"}).click();
-  await expect(page).toHaveURL(/#setupReady$/);
+  await expect(page).toHaveURL(/#subscription$/);
+  await go(page,"merchant");
+  await expect(page).toHaveURL(/#subscription$/); // unpaid owners cannot enter KYC
+  fixture.activatePaid(); // Simulate a server-verified captured payment.
+  await page.reload();
   await go(page,"merchant");
   await page.getByRole("button",{name:"Set up owner payment account"}).click();
   await expect(page.getByLabel("Legal name")).toHaveValue("Rahul Sharma");
@@ -329,18 +335,26 @@ test("phone onboarding, real controls, saved property and restored workspace", a
   await page.getByLabel("City", { exact: true }).fill("Bengaluru");
   await page.getByLabel("Approximate number of rooms").fill("12");
   await page.getByRole("button", { name: "Create my PG" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Maple House is ready." }),
-  ).toBeVisible();
-  await capture("ready");
+  await expect(page).toHaveURL(/#subscription$/);
+  await expect(page.getByRole("heading", { name: "Your PG is ready. One last step." })).toBeVisible();
+  await capture("unpaid-activation");
+  await go(page, "ownerHome");
+  await expect(page).toHaveURL(/#subscription$/); // Dashboard must stay locked.
   expect(fixture.propertiesCreated).toBe(1);
-  await go(page, "subscription");
-  await expect(page.getByText("one-time monthly payment · no auto-debit", { exact: false })).toBeVisible();
+  await expect(page.getByText("One payment covers one calendar month", { exact: false })).toBeVisible();
   await expect(page.getByRole("button", { name: "Cancel renewal", exact: true })).toHaveCount(0);
   await capture("plan");
   await expect(
     page.getByRole("button", { name: /buy|subscribe|pay now|upgrade/i }),
   ).toHaveCount(0);
+  await go(page, "merchant");
+  await expect(page).toHaveURL(/#subscription$/);
+  fixture.activatePaid();
+  await page.reload();
+  await expect(page).toHaveURL(/#ownerHome$/);
+  await go(page, "setupReady");
+  await expect(page.getByRole("heading", { name: "Maple House is ready." })).toBeVisible();
+  await capture("ready");
   await go(page, "merchant");
   await capture("merchant");
   await expect(
