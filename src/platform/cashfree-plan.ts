@@ -85,7 +85,7 @@ export class CashfreePG {
       if (response.status === 404) throw new AppError(404, "CASHFREE_ORDER_NOT_FOUND", "Cashfree has not confirmed the order.");
       throw new AppError(503, "CASHFREE_PROVIDER_UNAVAILABLE", "Cashfree could not confirm the order. Check status before retrying.");
     }
-    try { return await response.json(); }
+    try { return await response.json() as any; }
     catch { throw new AppError(502, "CASHFREE_PROVIDER_INVALID", "Cashfree returned an invalid response."); }
   }
   get(id: string) { return this.request(`/pg/orders/${encodeURIComponent(id)}`); }
@@ -217,7 +217,7 @@ export async function refreshCashfreePlanPayments(accountId: string, organisatio
 }
 export async function processCashfreePlanWebhook(raw: Buffer, timestamp: string, signature: string, provider = new CashfreePG()) {
   assert(cashfreeBillingConfigured() && client().secret &&
-    verifyCashfreeWebhook(raw, timestamp, signature, client().secret), 400,
+    verifyCashfreeWebhook(raw, timestamp, signature, client().secret!), 400,
     "CASHFREE_WEBHOOK_INVALID", "Cashfree webhook authentication failed.");
   const event = JSON.parse(raw.toString("utf8"));
   const remoteId = event?.data?.order?.order_id;
