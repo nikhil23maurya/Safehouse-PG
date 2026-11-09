@@ -91,23 +91,28 @@ async function fixture(enabled) {
             },
           ],
         };
-      else if (path.endsWith("/authorise")) {
+      else if (path.endsWith("/plan/orders")) {
         starts++;
         data = {
-          subscriptionId: "sub_Test01",
+          id: "local-plan-1",
+          orderId: "order_Test01",
+          payable: true,
+          recurring: false,
           keyId: "synthetic-test-key",
           amountPaise: 24900,
         };
       } else if (
         path.endsWith("/subscription") ||
         path.endsWith("/recheck") ||
-        path.endsWith("/authorisation")
+        path.endsWith("/verify")
       ) {
         if (path.endsWith("/recheck")) activated = true;
         data = {
           entitled: activated,
           legacyAccess: false,
-          renewalCycles: 12,
+          mode: "MANUAL_MONTHLY",
+          recurring: false,
+          accessEnd: activated ? "2027-01-01" : null,
           subscription: activated
             ? {
                 status: "ACTIVE",
@@ -161,32 +166,34 @@ test("separate web surface stays unavailable without custom merchant enablement"
   const f = await fixture(false);
   await expect(
     f.page.getByText(
-      "Subscription purchases are awaiting merchant activation.",
+      "Monthly payments are awaiting merchant configuration.",
       { exact: false },
     ),
   ).toBeVisible();
   assert.equal(f.scripts, 0);
   assert.equal(f.starts, 0);
   await expect(
-    f.page.getByRole("button", { name: "Prepare UPI authorisation" }),
+    f.page.getByRole("button", { name: "Pay ₹249 for one month" }),
   ).toHaveCount(0);
   assert.deepEqual(f.errors, []);
   await f.page.close();
 });
-test("custom SDK authorisation remains pending until a server-confirmed paid period", async () => {
+test("custom one-time SDK payment stays pending until a server-confirmed paid period", async () => {
   const f = await fixture(true),
     page = f.page;
   await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: "Prepare UPI authorisation" }).click();
+  await page.getByRole("button", { name: "Pay ₹249 for one month" }).click();
   await page.getByRole("button", { name: "PhonePe", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "PhonePe", exact: true }),
   ).toBeDisabled();
   const payload = await page.evaluate(() => window.__payment);
-  assert.equal(payload.data.subscription_id, "sub_Test01");
+  assert.equal(payload.data.order_id, "order_Test01");
+  assert.equal(payload.data.subscription_id, undefined);
   assert.equal(payload.data.amount, 24900);
   assert.equal(payload.data.method, "upi");
   assert.equal(f.starts, 1);
+  await expect(page.getByText("No recurring mandate or automatic debit.", { exact: false })).toHaveCount(1);
   await page.evaluate(() =>
     window.__sdk.events["payment.success"]({
       razorpay_payment_id: "pay_Test01",
@@ -207,6 +214,8 @@ test("custom SDK authorisation remains pending until a server-confirmed paid per
       exact: true,
     }),
   ).toBeVisible();
+  await expect(page.getByRole("button", { name: "Renew for ₹249", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Cancel future renewal" })).toHaveCount(0);
   await mkdir(new URL("screenshots/", import.meta.url), { recursive: true });
   await page.screenshot({
     path: new URL("screenshots/web-plan.png", import.meta.url).pathname.replace(

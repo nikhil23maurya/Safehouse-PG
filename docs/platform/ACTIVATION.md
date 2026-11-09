@@ -15,23 +15,22 @@ The user authorised main/production promotion. A merge does not activate Firebas
 
 The app uses official native Firebase Auth, then exchanges a freshly verified Firebase ID token with the server. The server checks project signature/audience, token revocation, phone provider, phone number and recent authentication. Selecting a role never authorises access to an existing property. Legacy linking requires successful existing authentication. Resident/staff invitations are owner-created, phone-bound and expire after seven days.
 
-## Subscription: exactly PGOne ₹249/month
+## Monthly access: ₹249, owner pays afresh each month
 
-The Android build is **consumption-only**: it displays status and records but has no external purchase button/link or web payment funnel. There is no trial, annual plan, hidden fee or alternate tier.
+The owner confirmed **manual monthly payments**, not an automatically renewing subscription. Each ₹249 capture purchases one calendar month. An early renewal starts at the existing paid expiry; otherwise the period starts when capture is verified. Renewal dates use Asia/Kolkata and retain the original day (31 January → 28/29 February → 31 March). No free trial or automatic debit is created.
 
-The separate `web/billing` surface uses the official Razorpay Web Custom SDK with recurring UPI intent. It has no card/PIN fields and no Standard Checkout fallback. It remains disabled until merchant support and sandbox results are confirmed. SDK callbacks are signature-checked and reconciled against captured invoices before access is granted.
+The Android Play build remains consumption-only. The separate `/billing/` website uses official Razorpay Custom Checkout `razorpay.js` and one-time UPI intent. It passes a server-created `order_id`, never `subscription_id`. The old recurring-create route returns 410; old records, cancellation/reconciliation and signed legacy webhooks remain for existing contracts. An existing recurring contract must be confirmed ended before a new manual payment can be started.
 
-1. In Razorpay Dashboard, confirm **Subscriptions** and the intended recurring payment methods are activated for this merchant. Ask support specifically whether the intended **Custom Checkout subscription authorisation** flow is supported and enabled. Existing one-time rent QR credentials do not establish that permission.
-2. Use test-mode credentials first. Create one monthly plan, interval `1`, quantity `1`, exact final amount `24900` paise, currency `INR`, named **PGOne**. Have the provider confirm the inclusive-tax invoice setup and supported authorisation method. An unexpected invoice total/tax or unverified authorisation remains held.
-3. Put dedicated secrets in the server secret manager: `PGONE_SUBSCRIPTION_KEY_ID`, `PGONE_SUBSCRIPTION_KEY_SECRET`, `PGONE_SUBSCRIPTION_WEBHOOK_SECRET`. Set `PGONE_SUBSCRIPTION_PLAN_ID`. Do not reuse/replace the existing rent variables.
-4. Set `PGONE_SUBSCRIPTION_CYCLES` to the actual mandate's finite number of monthly cycles. Disclose the mandate duration in the future web authorisation surface. There is no silent unlimited/annual conversion.
-5. Confirm the seller's tax treatment with the responsible accountant. Set `PGONE_TAX_BPS` explicitly, including `0` where appropriate. This is **inclusive** in ₹249, not added on top. Provider invoices must agree exactly. Do not assume a GST rate from this guide.
-6. Configure the dedicated HTTPS `PGONE_BILLING_WEB_ORIGIN` and published legal URLs. This does not automatically enable purchases or change existing CORS settings. Approve the exact web origin through the normal deployment process when a verified custom surface is ready.
-7. Register the **separate** subscription webhook `/api/platform-webhooks/subscriptions`, with its dedicated secret. Enable relevant subscription state, invoice-paid/payment-captured and payment-refund events. Preserve the existing `/api/webhooks/razorpay` rent webhook. The subscription handler verifies exact raw-body HMAC, deduplicates events and re-fetches provider state before entitlement.
-8. Before activation, verify sandbox authorisation, first ₹249 capture, delayed/duplicate/reordered events, mismatched amount/currency/tax, renewal, cancellation, refund and expired access. Current server policy grants a paid current period only; any refund holds that period's entitlement. A different partial-refund policy needs an explicit decision.
-9. New organisations stay read-only without a verified subscription period. Existing organisations keep their prior access; moving them to paid access requires a separate rollout decision. A replacement mandate is allowed only after provider-confirmed cancellation/expiry/completion and the last paid period ending. Prior contracts and payment records remain in history.
+### Required production settings
 
-If you want digital subscription purchases inside a Play-distributed app, integrate Google Play Billing or establish eligibility/enrolment for the applicable alternative-billing programme first. The current build intentionally provides no such purchase flow.
+1. Reuse existing `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`. For a deliberately separate billing merchant, set **both** `PGONE_SUBSCRIPTION_KEY_ID` / `PGONE_SUBSCRIPTION_KEY_SECRET`; partial overrides stay unavailable and never mix accounts. Do not switch merchants after orders exist without a reconciliation plan.
+2. `PGONE_BILLING_WEB_ORIGIN=https://safehouse-api.onrender.com`. Preserve the existing CORS settings. The custom payment API requires this exact Origin, authenticated owner, fixed-price consent, `recurring=false` and an idempotency key.
+3. Configure `PGONE_TAX_BPS` for the actual seller tax treatment, explicitly `0` if appropriate. The total remains exactly ₹249. The receipt records the tax snapshot and access period; it is not represented as a statutory GST invoice. Confirm the business tax treatment before activation rather than guessing.
+4. Register **`https://safehouse-api.onrender.com/api/platform-webhooks/plan-payments`** in the same Razorpay merchant account. Use a dedicated `PGONE_SUBSCRIPTION_WEBHOOK_SECRET` if configured; otherwise the existing `RAZORPAY_WEBHOOK_SECRET` is used for this separate endpoint. Enable `payment.captured`, `order.paid`, `payment.failed` and applicable refund events. Preserve the old rent webhook unchanged.
+5. Confirm the merchant's one-time Custom Checkout/UPI method and payment-capture configuration. Access requires provider-confirmed **captured** payment and a fully paid matching order. An authorised-only payment is pending and grants no access. A Subscriptions product, provider plan ID or mandate cycles are **not needed**.
+6. After the configured checkout is verified, set `PGONE_CUSTOM_WEB_BILLING_ENABLED=true`. The flag never bypasses amount/currency/order/ownership/capture verification. No paid acceptance or merchant activation may be claimed from unit tests alone.
+
+Uncertain order creation is held and recovered by its provider receipt reference. It is not blindly retried. Repeated callbacks, webhook delivery or parallel reconciliation cannot extend access twice. The webhook validates raw-body HMAC, deduplicates events and refetches provider state. A refund monotonically revokes that receipt's period; other paid periods are retained at their original dates. Existing legacy workspace access is unchanged.
 
 ## Per-owner online rent collection
 
@@ -59,13 +58,21 @@ If you want digital subscription purchases inside a Play-distributed app, integr
 
 ## Separate web billing build
 
-Run `npm ci --prefix mobile/frontend`, then `node web/billing/build.mjs`. The standalone output is `web/billing/dist`; preview with `node web/billing/serve.mjs` on port 4174. It is never included in Android assets, and Android contains no link to this purchase surface. The root build also builds this website; the API service serves it at `/billing/` after deployment.
+The root build compiles `web/billing/dist` and serves it at `/billing/`, with a scoped provider CSP and exact file allowlist. Android contains no link or code for the web purchase funnel.
 
-Register a Firebase Web app in the same project. Set `PGONE_FIREBASE_WEB_APP_ID` and `PGONE_FIREBASE_WEB_API_KEY`; add the approved billing domain to Firebase Authentication authorised domains and allow it in the web API key's restrictions. Firebase Auth uses in-memory persistence; PGOne session tokens are held in memory and cleared on reload/sign-out. Existing owners can alternatively authenticate with their existing email/password and verified account linking.
+Use the registered PGOne Billing Firebase Web app in the same project, with `PGONE_FIREBASE_WEB_APP_ID` and `PGONE_FIREBASE_WEB_API_KEY`. Authorise `safehouse-api.onrender.com`. Web session tokens use in-memory persistence. Owners may alternatively prove an existing email/password account and link it. Resident/staff memberships cannot purchase owner access.
 
-After merchant confirmation and sandbox acceptance, set `PGONE_CUSTOM_WEB_BILLING_ENABLED=true` in approved staging. Authorisation endpoints require the exact configured HTTPS billing Origin, authenticated owner, current price/cycle consent and the server-selected subscription. Keep the flag false in production until provider acceptance passes. Approve hosting headers/CSP and the exact CORS origin during deployment; this branch does not modify production CORS.
+Only SDK-confirmed UPI apps are offered. PGOne retains its own payment screens; mandatory payment-provider/UPI authorisation can appear. No Standard Checkout fallback, card input, UPI PIN input or fake payment success is added.
 
-Only SDK-confirmed supported recurring UPI apps are offered. If none is available, payment stays unavailable. Mandatory provider/UPI authorisation disclosures may appear; PGOne does not conceal the processor or imitate the bank. No card, VPA-collect or UPI-PIN fallback is added.
+## Read-only payment preflight
+
+In the configured backend environment run:
+
+```text
+node --import tsx scripts/pgone-payment-preflight.mjs
+```
+
+This reports the credential source, missing monthly-payment settings, webhook-secret availability and HTTP status of a read-only Razorpay Orders request. It never prints credentials or customer/order/payment records. No plan, mandate, payment, merchant or transfer is created. A successful read is not proof of Custom Checkout approval or payment acceptance. No provider subscription plan or mandate is required. `ownerMerchantOnboardingImplemented=false` explicitly identifies the remaining bank/KYC and owner-wise rent integration gap; configuration cannot enable code that is not implemented.
 
 ## Exact production policy values and signing status
 
@@ -86,4 +93,4 @@ The user added both fingerprints to Firebase's production app. The original priv
 
 Firebase test numbers use their configured codes and send no SMS. Keep these entries out of app source and logs. They authenticate real Firebase identities, so use them only for internal verification and remove the entry before customer use of that account. A console test entry has been configured, but a real provider exchange remains pending deployment configuration. Real SMS requires Firebase Blaze billing and the applicable region, quota and app-verification setup.
 
-After deployment, check `/health`, `/ready`, `/api/platform/config?package=com.safehouse.pg`, its exact `deploymentCommit`, the two policy URLs and `/billing/`. A null `phone` requires checking both PGOne feature flags and the Firebase server settings above. Existing one-time rent credentials do not prove recurring Custom Checkout approval.
+After deployment, check `/health`, `/ready`, `/api/platform/config?package=com.safehouse.pg`, its exact `deploymentCommit`, the two policy URLs and `/billing/`. A null `phone` requires checking both PGOne feature flags and the Firebase server settings above. Existing one-time rent credentials do not prove one-time Custom Checkout acceptance.

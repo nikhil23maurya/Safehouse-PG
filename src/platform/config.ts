@@ -1,4 +1,6 @@
 import { z } from "zod";
+import { config as existingConfig } from "../config.js";
+import { resolveSubscriptionCredentials } from "./credentials.js";
 
 const optional = z.string().trim().min(1).optional();
 export const platformConfig = z
@@ -34,6 +36,8 @@ export const platformConfig = z
 
 export const platformEnabled = () =>
   platformConfig.PGONE_PLATFORM_ENABLED === "true";
+export const subscriptionCredentials = () =>
+  resolveSubscriptionCredentials(platformConfig, existingConfig);
 export const PLAN = Object.freeze({
   code: "PGONE_MONTHLY",
   name: "PGOne",

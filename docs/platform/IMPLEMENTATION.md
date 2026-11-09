@@ -60,3 +60,12 @@ The requested Google sign-in is not implemented; its button is omitted. No simul
 
 
 The second implementation stage adds durable PG-creation drafts/idempotency keys, owner-facing membership revocation (including unused invitations), and a separate web billing build. Android release input checks reject web subscription-authorisation code. Web SDK tests use synthetic provider responses and do not establish live payment readiness. Android instrumentation is verified with bounded memory and supported Lavapipe rendering; CI retains runtime diagnostics and screenshots.
+
+
+## Latest approved change: manual monthly access
+
+The owner clarified that each month is a **fresh one-time ₹249 payment**, with no automatic debit or recurring mandate. Payment extends access by one calendar month on the same India renewal day; early renewal retains paid days. This supersedes recurring-purchase behaviour above, which is retained only for prior records/cancellation/reconciliation.
+
+New files: `src/platform/credentials.ts`, `plan-period.ts`, `plan-payments.ts`; additive `20261109140000_pgone_manual_monthly_plan` migration; calendar/signature, credential and PostgreSQL integration tests; read-only preflight script. Updated files are the new platform's router/config/entitlement, scoped webhook mount, policy wording, web custom checkout and mobile plan status. Existing rent settlement, owner/resident financial APIs, authentication, membership guards and unrelated Cyntrova modules remain unchanged.
+
+Database constraints enforce one open order per organisation, request-key uniqueness, one receipt per order/payment and consistent organisation/order relations. Provider capture, signed callbacks, refunds and early renewals are verified through server APIs. New purchases never invoke Razorpay Subscriptions. Real provider acceptance and per-owner rent bank/KYC integration remain separate work; neither is declared complete by this implementation.

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CustomUpiAuthorisation } from "./checkout.js";
-test("custom UPI authorisation uses the server subscription and exact price with a single in-flight SDK request", async () => {
+import { CustomUpiPayment } from "./checkout.js";
+test("custom one-time UPI payment uses the server order and exact price without a mandate", async () => {
   let calls = [];
   let listeners = {};
   let signed = 0;
@@ -18,7 +18,7 @@ test("custom UPI authorisation uses the server subscription and exact price with
       calls.push({ data, options });
     }
   }
-  const client = new CustomUpiAuthorisation({
+  const client = new CustomUpiPayment({
     Razorpay: SDK,
     keyId: "test-key",
     onSigned: () => signed++,
@@ -26,19 +26,19 @@ test("custom UPI authorisation uses the server subscription and exact price with
   });
   assert.deepEqual(await client.availableApps(), [["phonepe", "PhonePe"]]);
   const input = {
-    subscriptionId: "sub_Confirmed01",
+    orderId: "order_Confirmed01",
     contact: "9123456789",
     email: "owner@example.test",
     app: "phonepe",
   };
-  assert.equal(client.authorise(input), true);
-  assert.equal(client.authorise(input), false);
+  assert.equal(client.pay(input), true);
+  assert.equal(client.pay(input), false);
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], {
     data: {
       amount: 24900,
       currency: "INR",
-      subscription_id: input.subscriptionId,
+      order_id: input.orderId,
       method: "upi",
       contact: input.contact,
       email: input.email,
@@ -49,6 +49,6 @@ test("custom UPI authorisation uses the server subscription and exact price with
   listeners["payment.success"]({ razorpay_payment_id: "pay_Test01" });
   assert.equal(signed, 1);
   assert.throws(() =>
-    client.authorise({ ...input, subscriptionId: "client-forged-reference" }),
+    client.pay({ ...input, orderId: "client-forged-reference" }),
   );
 });

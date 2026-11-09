@@ -1,14 +1,13 @@
 import crypto from "node:crypto";
 import { prisma } from "../db.js";
 import { AppError, assert } from "../errors.js";
-import { PLAN, platformConfig, taxBreakdown } from "./config.js";
+import { PLAN, platformConfig, subscriptionCredentials, taxBreakdown } from "./config.js";
 import { atomic, audit, ownerOrganisation } from "./service.js";
 import { hash, randomCode } from "./tokens.js";
 
 export function billingConfigured() {
   return Boolean(
-    platformConfig.PGONE_SUBSCRIPTION_KEY_ID &&
-      platformConfig.PGONE_SUBSCRIPTION_KEY_SECRET &&
+    subscriptionCredentials() &&
       platformConfig.PGONE_SUBSCRIPTION_WEBHOOK_SECRET &&
       platformConfig.PGONE_SUBSCRIPTION_PLAN_ID &&
       platformConfig.PGONE_SUBSCRIPTION_CYCLES &&
@@ -58,6 +57,10 @@ export async function entitlement(organisationId: string) {
   });
   return (
     org.legacyAccess ||
+    Boolean(await prisma.pgPlanReceipt.findFirst({ where: {
+      organisationId, status: "CAPTURED", amountPaise: 24900, refundedPaise: 0,
+      periodStart: { lte: new Date() }, periodEnd: { gt: new Date() },
+    }, select: { id: true } })) ||
     Boolean(
       org.subscriptions.some(
         (sub) => sub.verifiedAt && sub.payments.some((p) => paidPeriod(p)),
@@ -106,8 +109,9 @@ export function webhookSignature(
 export class RazorpaySubscriptions {
   constructor(private readonly fetcher: typeof fetch = fetch) {}
   async request(path: string, body?: object) {
+    const credentials = subscriptionCredentials();
     assert(
-      billingConfigured(),
+      billingConfigured() && credentials,
       503,
       "BILLING_NOT_CONFIGURED",
       "Subscription activation is awaiting merchant configuration.",
@@ -123,7 +127,7 @@ export class RazorpaySubscriptions {
       response = await this.fetcher(`https://api.razorpay.com/v1${path}`, {
         method: body ? "POST" : "GET",
         headers: {
-          authorization: `Basic ${Buffer.from(`${platformConfig.PGONE_SUBSCRIPTION_KEY_ID}:${platformConfig.PGONE_SUBSCRIPTION_KEY_SECRET}`).toString("base64")}`,
+          authorization: `Basic ${Buffer.from(`${credentials.keyId}:${credentials.keySecret}`).toString("base64")}`,
           "content-type": "application/json",
         },
         ...(body ? { body: JSON.stringify(body) } : {}),
@@ -392,7 +396,7 @@ export async function createSubscription(
       "This mandate is already submitted or active. Refresh its status before taking another payment action.",
     );
     return {
-      keyId: platformConfig.PGONE_SUBSCRIPTION_KEY_ID,
+      keyId: subscriptionCredentials()!.keyId,
       subscriptionId: sub.providerSubscriptionId,
       amountPaise: PLAN.amountPaise,
     };
@@ -434,7 +438,7 @@ export async function createSubscription(
       );
     });
     return {
-      keyId: platformConfig.PGONE_SUBSCRIPTION_KEY_ID,
+      keyId: subscriptionCredentials()!.keyId,
       subscriptionId: remote.id,
       amountPaise: PLAN.amountPaise,
     };
