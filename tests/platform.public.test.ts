@@ -34,6 +34,12 @@ test("published policies and account requests work without authentication or tra
 });
 
 test("billing hosting permits the official custom SDK only on the new surface and serves no source files", async () => {
+  const redirect = await fetch(`${base}/billing`, { redirect: "manual" });
+  assert.equal(redirect.status, 308);
+  assert.equal(redirect.headers.get("location"), "/billing/");
+  const canonical = await fetch(`${base}/billing/`, { redirect: "manual" });
+  assert.equal(canonical.status, 200, "canonical billing URL must never redirect to itself");
+  assert.equal((await fetch(`${base}/billing`)).status, 200, "the redirect must terminate");
   const response = await fetch(`${base}/billing/`);
   assert.equal(response.status, 200, "run the root build before this test");
   assert.match(await response.text(), /billing.js/);
