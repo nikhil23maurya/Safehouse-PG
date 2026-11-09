@@ -91,6 +91,21 @@ SHA-256: D2:07:3D:76:B1:4D:FA:AB:99:92:2B:AD:4B:DE:54:E3:D1:F9:04:FD:29:4B:F3:E7
 
 The user added both fingerprints to Firebase's production app. The original private release keystore has not been located; the user reports no keystore file. An APK contains the public certificate, not the private key. Do not silently replace this signing identity or require uninstalling an existing installation to conceal the missing update signer. CI provides an unsigned production assembly and a separate testing package. Use that testing APK's exact certificate under its separate Firebase app registration.
 
+### Signed production release pipeline (requires original keystore)
+
+A guarded manual Actions workflow now exists at `.github/workflows/pgone-production-signing.yml`. It does not create a new key and will refuse to publish any APK signed with a different certificate than the existing PGOne production APKs.
+
+Before running it, the original release-key custodian must configure a restricted GitHub Environment named `production-signing` with these secrets:
+
+- `PGONE_RELEASE_KEYSTORE_B64`: base64 of the original existing production keystore (not a generated replacement)
+- `PGONE_RELEASE_STORE_PASSWORD`: that keystore's password
+- `PGONE_RELEASE_KEY_ALIAS`: the original signing-key alias
+- `PGONE_RELEASE_KEY_PASSWORD`: that key's password
+
+Never copy these values into PRs, issues, docs or chat. The workflow accepts an **exact reviewed 40-character main commit SHA**, assembles a non-debug release, signs the APK, checks the package `com.safehouse.pg` and the original certificate SHA-256, and uploads a verified internal artifact if and only if all checks pass. A signed internal artifact is **not** proof that ₹249 payment acceptance, onboarding, per-owner rent collection, settlements, security, legal requirements or Play Store billing are live; those require separate acceptance testing before a public release.
+
+Without the original signing key, existing manually distributed `com.safehouse.pg` installations cannot be upgraded with a newly signed APK. The signed old APK contains only the public certificate, not the original private key.
+
 Firebase test numbers use their configured codes and send no SMS. Keep these entries out of app source and logs. They authenticate real Firebase identities, so use them only for internal verification and remove the entry before customer use of that account. A console test entry has been configured, but a real provider exchange remains pending deployment configuration. Real SMS requires Firebase Blaze billing and the applicable region, quota and app-verification setup.
 
 After deployment, check `/health`, `/ready`, `/api/platform/config?package=com.safehouse.pg`, its exact `deploymentCommit`, the two policy URLs and `/billing/`. A null `phone` requires checking both PGOne feature flags and the Firebase server settings above. Existing one-time rent credentials do not prove one-time Custom Checkout acceptance.
