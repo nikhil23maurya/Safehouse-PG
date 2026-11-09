@@ -10,9 +10,11 @@ import { planPaymentKeyAllowed } from "./credentials.js";
 
 export const planWebhookSecret = () => platformConfig.PGONE_SUBSCRIPTION_WEBHOOK_SECRET || config.RAZORPAY_WEBHOOK_SECRET;
 const paymentKeyAllowed = () => planPaymentKeyAllowed(subscriptionCredentials()?.keyId, { nodeEnv: config.NODE_ENV, render: process.env.RENDER });
-export const manualBillingConfigured = () => Boolean(subscriptionCredentials() && paymentKeyAllowed() && planWebhookSecret() &&
-  platformConfig.PGONE_TAX_BPS !== undefined && platformConfig.PGONE_BILLING_WEB_ORIGIN &&
-  platformConfig.PGONE_TERMS_URL && platformConfig.PGONE_PRIVACY_URL);
+// Android Custom UPI does not require a web-billing origin. Keep the Razorpay
+// merchant, capture/webhook, tax and legal checks identical across channels.
+export const planProviderConfigured = () => Boolean(subscriptionCredentials() && paymentKeyAllowed() && planWebhookSecret() &&
+  platformConfig.PGONE_TAX_BPS !== undefined && platformConfig.PGONE_TERMS_URL && platformConfig.PGONE_PRIVACY_URL);
+export const manualBillingConfigured = () => Boolean(planProviderConfigured() && platformConfig.PGONE_BILLING_WEB_ORIGIN);
 export const manualCheckoutEnabled = () => platformEnabled() &&
   platformConfig.PGONE_CUSTOM_WEB_BILLING_ENABLED === "true" && manualBillingConfigured();
 
@@ -156,7 +158,7 @@ export async function reconcilePlanOrder(id: string, provider = new RazorpayPlan
 
 export async function createPlanOrder(accountId: string, organisationId: string, requestKey: string, provider = new RazorpayPlanOrders()) {
   await ownerOrganisation(accountId, organisationId);
-  assert(manualBillingConfigured(), 503, "PLAN_PAYMENT_UNAVAILABLE", "Monthly payments need provider and tax configuration.");
+  assert(planProviderConfigured(), 503, "PLAN_PAYMENT_UNAVAILABLE", "Monthly payments need live Razorpay, webhook and tax configuration.");
   assert(/^[a-zA-Z0-9_-]{16,100}$/.test(requestKey), 400, "INVALID_REQUEST_KEY", "Refresh this payment request.");
   const credentials = subscriptionCredentials()!;
   const tax = taxBreakdown(platformConfig.PGONE_TAX_BPS)!;
@@ -247,7 +249,7 @@ export async function manualPlanStatus(accountId: string, organisationId: string
     if (accessEnd && payment.periodStart <= new Date(accessEnd) && payment.periodEnd > new Date(accessEnd)) accessEnd = payment.periodEnd;
   }
   return { ...base, entitled: base.entitled || Boolean(active), mode: "MANUAL_MONTHLY", recurring: false,
-    configured: manualBillingConfigured(), checkoutEnabled: manualCheckoutEnabled(), renewalCycles: null,
+    configured: planProviderConfigured(), checkoutEnabled: manualCheckoutEnabled(), renewalCycles: null,
     accessEnd, pendingOrder: open ? { id: open.id, status: open.status } : null,
     // Keep old contracts/history in the response; never reinterpret them as new mandates.
     legacySubscription: base.subscription,
