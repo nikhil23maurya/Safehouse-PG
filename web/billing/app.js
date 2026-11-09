@@ -13,6 +13,7 @@ import {
   showFormError,
 } from "../../mobile/frontend/src/components/forms.js";
 import { CustomUpiPayment, loadCustomSdk } from "./checkout.js";
+import { launchCashfreeCheckout } from "./cashfree-checkout.js";
 
 const state = { tokens: null, user: null, authEpoch: 0, property: null };
 let config,
@@ -184,10 +185,11 @@ function renderPlan() {
   page(
     "More calm. Every month.",
     "One simple plan for your PG workspaces.",
-    `<div class="royal-plan"><span class="plan-name">PGOne</span><div class="plan-price">₹249<small>/ month</small></div><p>One-time payment · one calendar month · no auto-debit</p><ul><li>${icon("check")}Rooms & residents</li><li>${icon("check")}Rent records & receipts</li><li>${icon("check")}Owner-approved team access</li></ul></div>${notice(subscribed ? (data.legacyAccess ? "Your existing workspace access is preserved." : "Your access is active for the confirmed paid period.") : "Make a fresh ₹249 payment to activate one calendar month of PGOne.")}${data.accessEnd ? `<p class="legal-copy">Access until ${date(data.accessEnd)}. An early renewal adds a month after this date.</p>` : ""}${!data.legacyAccess && config.customWebBilling?.enabled && data.mode === "MANUAL_MONTHLY" ? `<form data-form="prepare" novalidate><div class="form-error" role="alert"></div>${!account.phoneE164 ? field("contact", "Mobile number for this payment", { required: true, attrs: 'inputmode="tel" pattern="[6-9][0-9]{9}" maxlength="10"' }) : ""}${field("email", "Payment contact email", { type: "email", required: true, value: account.email || "", attrs: 'autocomplete="email"' })}<label class="billing-consent"><input name="consent" type="checkbox" required><span>I agree to pay ₹249 once for one calendar month, including applicable tax. Each renewal needs a fresh payment. No recurring mandate or automatic debit.</span></label>${button(subscribed ? "Renew for ₹249" : "Pay ₹249 for one month", { type: "submit", kind: "primary block" })}</form><div data-payment-apps></div>` : !subscribed ? notice("Monthly payments are awaiting merchant configuration. No payment will be initiated.") : ""}${button("Refresh payment status", { action: "refresh", kind: "secondary block" })}${data.legacySubscription?.provider && !data.legacySubscription.cancelAtPeriodEnd ? button("Cancel previous auto-renewal", { action: "cancel", kind: "text-button" }) : ""}<p class="legal-copy">Payments use Razorpay’s official Custom SDK and your UPI app. PGOne never asks for your UPI PIN or card details.</p>${data.subscription?.payments?.length ? `<h2 class="royal-section-title">Payment records</h2>${data.subscription.payments.map((p) => `<div class="billing-record"><strong>₹${(p.amountPaise / 100).toFixed(2)}</strong><span>${date(p.paidAt)} · ${esc(p.receiptNumber)}</span>${p.refundedPaise ? `<small>Refunded ₹${(p.refundedPaise / 100).toFixed(2)}</small>` : `<small>Access ${date(p.periodStart)} – ${date(p.periodEnd)}</small>`}</div>`).join("")}` : ""}`,
+    `<div class="royal-plan"><span class="plan-name">PGOne</span><div class="plan-price">₹249<small>/ month</small></div><p>One-time payment · one calendar month · no auto-debit</p><ul><li>${icon("check")}Rooms & residents</li><li>${icon("check")}Rent records & receipts</li><li>${icon("check")}Owner-approved team access</li></ul></div>${notice(subscribed ? (data.legacyAccess ? "Your existing workspace access is preserved." : "Your access is active for the confirmed paid period.") : "Make a fresh ₹249 payment to activate one calendar month of PGOne.")}${data.accessEnd ? `<p class="legal-copy">Access until ${date(data.accessEnd)}. An early renewal adds a month after this date.</p>` : ""}${!data.legacyAccess && (config.cashfreeWebBilling?.enabled || config.customWebBilling?.enabled) && data.mode === "MANUAL_MONTHLY" ? `<form data-form="prepare" novalidate><div class="form-error" role="alert"></div>${!account.phoneE164 ? field("contact", "Mobile number for this payment", { required: true, attrs: 'inputmode="tel" pattern="[6-9][0-9]{9}" maxlength="10"' }) : ""}${field("email", "Payment contact email", { type: "email", required: true, value: account.email || "", attrs: 'autocomplete="email"' })}<label class="billing-consent"><input name="consent" type="checkbox" required><span>I agree to pay ₹249 once for one calendar month, including applicable tax. Each renewal needs a fresh payment. No recurring mandate or automatic debit.</span></label>${button(subscribed ? "Renew for ₹249" : "Pay ₹249 for one month", { type: "submit", kind: "primary block" })}</form><div data-payment-apps></div>` : !subscribed ? notice("Monthly payments are awaiting merchant configuration. No payment will be initiated.") : ""}${button("Refresh payment status", { action: "refresh", kind: "secondary block" })}${data.legacySubscription?.provider && !data.legacySubscription.cancelAtPeriodEnd ? button("Cancel previous auto-renewal", { action: "cancel", kind: "text-button" }) : ""}<p class="legal-copy">Payments use the approved payment provider. Your PGOne monthly fee is charged to PGOne, never to a property owner. No automatic debit or UPI PIN collection by PGOne.</p>${data.subscription?.payments?.length ? `<h2 class="royal-section-title">Payment records</h2>${data.subscription.payments.map((p) => `<div class="billing-record"><strong>₹${(p.amountPaise / 100).toFixed(2)}</strong><span>${date(p.paidAt)} · ${esc(p.receiptNumber)}</span>${p.refundedPaise ? `<small>Refunded ₹${(p.refundedPaise / 100).toFixed(2)}</small>` : `<small>Access ${date(p.periodStart)} – ${date(p.periodEnd)}</small>`}</div>`).join("")}` : ""}`,
   );
 }
 async function prepare(values) {
+  if (config.cashfreeWebBilling?.enabled) return prepareCashfree(values);
   const epoch = state.authEpoch,
     organisationId = org;
   const current = () => {
@@ -258,6 +260,31 @@ async function prepare(values) {
   container.innerHTML = `<h2 class="royal-section-title">Choose your UPI app</h2>${apps.map(([id, name]) => button(name, { action: "authorise", kind: "primary block", attrs: `data-app="${id}"` })).join("")}`;
   root.querySelector('[data-form="prepare"]').hidden = true;
 }
+async function prepareCashfree(values) {
+  if (!config.cashfreeWebBilling?.enabled || !state.tokens || !org)
+    throw new Error("Cashfree monthly payments are unavailable.");
+  const epoch = state.authEpoch, organisationId = org;
+  const requested = await api(`/api/platform/organisations/${organisationId}/cashfree/plan/orders`, {
+    method: "POST",
+    body: { accepted: true, amountPaise: 24900, recurring: false, requestKey: crypto.randomUUID() },
+  });
+  if (epoch !== state.authEpoch || organisationId !== org || !state.tokens)
+    throw new Error("Workspace changed while the payment request was being created.");
+  if (!requested.payable) {
+    await status(true);
+    message("Existing payment already processed or awaiting review. Check status before paying again.");
+    return;
+  }
+  // Hosted Cashfree checkout is launched only on the separately authorised web billing origin.
+  // Its browser return is never proof of payment; the server checks PAID + SUCCESS + capture.
+  message("Complete your ₹249 payment securely with Cashfree; then check its status.");
+  await launchCashfreeCheckout(requested.paymentSessionId, requested.environment);
+  if (epoch !== state.authEpoch || organisationId !== org) return;
+  await api(`/api/platform/organisations/${organisationId}/cashfree/plan/recheck`, { method: "POST" });
+  await status();
+  message(data.entitled ? "Your PGOne monthly payment is verified." : "Payment not confirmed yet. Check again before paying twice.");
+}
+
 document.addEventListener("submit", async (event) => {
   const form = event.target;
   if (!form.matches("[data-form]")) return;
