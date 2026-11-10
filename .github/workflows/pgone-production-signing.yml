@@ -115,7 +115,7 @@ jobs:
           "$TOOLS/aapt" dump badging "$APK" > signed-output/package-report.txt
           grep -q "package: name='com.safehouse.pg'" signed-output/package-report.txt
           grep -q "application-label:'PGOne'" signed-output/package-report.txt
-          grep -q "versionCode='53'" signed-output/package-report.txt
+          grep -q "versionCode='54'" signed-output/package-report.txt
           grep -q "versionName='5.2.1'" signed-output/package-report.txt
           if grep -q "application-debuggable" signed-output/package-report.txt; then
             echo "::error::Debuggable APK rejected."

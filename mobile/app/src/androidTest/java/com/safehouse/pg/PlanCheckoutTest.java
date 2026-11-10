@@ -23,6 +23,7 @@ import static org.junit.Assert.*;
 public class PlanCheckoutTest {
     final Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
     MainActivity start(){
+        instrumentation.getTargetContext().getSharedPreferences("safehouse_secure_session",android.content.Context.MODE_PRIVATE).edit().clear().commit();
         Intent launch=new Intent(instrumentation.getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
         return (MainActivity)instrumentation.startActivitySync(launch);
     }

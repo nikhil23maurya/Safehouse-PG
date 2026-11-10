@@ -190,7 +190,7 @@ export function joinWorkspaceScreen(ctx) {
   return {
     ...page(
       "Join your PG",
-      `${intro("YOU’RE INVITED", "Your place is waiting.", "Enter the invitation code shared by your PG owner. Use the email address they invited.")}${notice("Enter the private invitation from your owner. Your owner confirms your identity before access is granted.")}${button("Refresh workspaces",{action:"refreshEmail",kind:"secondary block"})}${form("invitation", field("code", "Invitation code", { required: true, attrs: 'minlength="43" maxlength="43" autocomplete="off" autocapitalize="none" spellcheck="false"' }), "Review invitation")}${button("Link an existing account", { route: "linkAccount", kind: "secondary block" })}<p class="legal-copy">Your owner controls property access and staff permissions.</p>`,
+      `${intro("YOU’RE INVITED", "Your place is waiting.", "Enter the invitation code shared by your PG owner. Use the email address they invited.")}${notice("Enter the private invitation from your owner. Your owner confirms your identity before access is granted.")}${button("Refresh workspaces",{action:"refreshEmail",kind:"secondary block"})}${form("invitation", field("code", "Invitation code", { required: true, attrs: 'minlength="43" maxlength="43" autocomplete="off" autocapitalize="none" spellcheck="false"' }), "Review invitation")}<p class="legal-copy">Your owner controls property access and staff permissions.</p>`,
       "workspaces",
     ),
     async action(name){if(name==="refreshEmail"){await ctx.refreshPlatform();await ctx.navigate("workspaces");}},
