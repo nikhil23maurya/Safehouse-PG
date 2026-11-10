@@ -448,14 +448,47 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                     payload.put("description", "PGOne monthly workspace access");
                     if (!contact.isEmpty()) payload.put("contact", contact);
                     if (!email.isEmpty()) payload.put("email", email);
-                    // Without upi_app_package_name Razorpay presents its supported
-                    // installed UPI apps rather than forcing a hardcoded app.
-                    planCustomRazorpay.submit(payload, new PaymentResultListener() {
-                        @Override public void onPaymentSuccess(String ignoredPaymentId) {
-                            runOnUiThread(() -> closePlanPayment("RETURNED_CHECK_PROVIDER"));
+                    final boolean[] discoveryFinished = {false};
+                    planPaymentWebView.postDelayed(() -> {
+                        if (!discoveryFinished[0] && order.equals(planOrderId)) {
+                            closePlanPayment("APP_DISCOVERY_TIMEOUT");
+                            Toast.makeText(MainActivity.this,"UPI app discovery timed out. Check your connection and payment status before retrying.",Toast.LENGTH_LONG).show();
                         }
-                        @Override public void onPaymentError(int code, String description) {
-                            runOnUiThread(() -> closePlanPayment("FAILED_OR_UNKNOWN_CHECK_PROVIDER"));
+                    },15000);
+                    Razorpay.getAppsWhichSupportUpi(MainActivity.this, new com.razorpay.RzpUpiSupportedAppsCallback() {
+                        @Override public void onReceiveUpiSupportedApps(java.util.List<com.razorpay.ApplicationDetails> discovered) {
+                            runOnUiThread(() -> {
+                                discoveryFinished[0] = true;
+                                if (!order.equals(planOrderId) || planCustomRazorpay == null) return;
+                                java.util.ArrayList<com.razorpay.ApplicationDetails> apps = new java.util.ArrayList<>();
+                                java.util.HashSet<String> packages = new java.util.HashSet<>();
+                                if (discovered != null) for (com.razorpay.ApplicationDetails app : discovered) {
+                                    String name=app.getPackageName();
+                                    if(name!=null && name.matches("[a-zA-Z0-9_.]+") && packages.add(name)) apps.add(app);
+                                }
+                                if (apps.isEmpty()) {
+                                    closePlanPayment("NO_SUPPORTED_APP");
+                                    Toast.makeText(MainActivity.this,"No supported UPI app was detected. Install or enable a UPI app, then check payment status before retrying.",Toast.LENGTH_LONG).show();
+                                    return;
+                                }
+                                String[] labels=new String[apps.size()];
+                                for(int i=0;i<apps.size();i++) labels[i]=apps.get(i).getAppName();
+                                new android.app.AlertDialog.Builder(MainActivity.this)
+                                    .setTitle("PGOne · Pay INR 249")
+                                    .setItems(labels,(dialog,which)->{
+                                        if(!order.equals(planOrderId) || planCustomRazorpay==null)return;
+                                        try {
+                                            payload.put("upi_app_package_name",apps.get(which).getPackageName());
+                                            planCustomRazorpay.submit(payload,new PaymentResultListener(){
+                                                @Override public void onPaymentSuccess(String ignoredPaymentId){runOnUiThread(()->closePlanPayment("RETURNED_CHECK_PROVIDER"));}
+                                                @Override public void onPaymentError(int code,String description){runOnUiThread(()->closePlanPayment("FAILED_OR_UNKNOWN_CHECK_PROVIDER"));}
+                                            });
+                                        } catch(Exception error){closePlanPayment("SDK_UNAVAILABLE");}
+                                    })
+                                    .setNegativeButton("Cancel",(dialog,which)->closePlanPayment("CANCELLED_CHECK_PROVIDER"))
+                                    .setOnCancelListener(dialog->closePlanPayment("CANCELLED_CHECK_PROVIDER"))
+                                    .show();
+                            });
                         }
                     });
                 } catch (Exception ignored) {
