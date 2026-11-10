@@ -3,7 +3,7 @@ import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
 import { prisma } from "../db.js";
 import { assert } from "../errors.js";
-import { createTokenPair } from "../security.js";
+import { createTokenPair, verifyToken } from "../security.js";
 import { atomic, audit, accountSession, linkLegacy, accountSnapshot } from "./service.js";
 import { normalizedEmail, passwordHash, passwordMatches } from "./passwords.js";
 import { issueSession } from "./sessions.js";
@@ -50,6 +50,10 @@ export async function loginEmail(email:string,password:string) {
   let account = await prisma.pgAccount.findUnique({where:{credentialEmail:email}});
   if (account?.passwordHash) {
     assert(account.status === "ACTIVE" && await passwordMatches(password,account.passwordHash),401,"INVALID_CREDENTIALS","Invalid email or password.");
+    if(account.passwordHash.startsWith("scrypt$")) {
+      const upgraded=await passwordHash(password);
+      await prisma.pgAccount.updateMany({where:{id:account.id,passwordHash:account.passwordHash},data:{passwordHash:upgraded}});
+    }
     return account;
   }
   // Only a proven legacy password may map its existing actor and memberships.
@@ -74,6 +78,32 @@ export async function loginEmail(email:string,password:string) {
     await audit(tx,current.id,null,"LEGACY_PASSWORD_MIGRATED",user.id);
     return updated;
   });
+}
+
+/** A valid historical session proves its actor; matching email alone never does. */
+export async function upgradeLegacySession(token:string) {
+  const claims=verifyToken(token,"refresh");
+  const user=await prisma.user.findUnique({where:{id:claims.sub}});
+  assert(user&&user.status==="ACTIVE"&&user.tokenVersion===claims.ver&&user.role===claims.role&&user.passwordHash&&user.email,
+    401,"SESSION_INVALID","Sign in with your existing email and password.");
+  const email=normalizedEmail(user.email);
+  const conflicts=await prisma.pgAccount.findMany({where:{OR:[{credentialEmail:email},{email:{equals:email,mode:"insensitive"}}]}});
+  assert(conflicts.every(a=>a.legacyUserId===user.id),409,"ACCOUNT_RECOVERY_REVIEW","Historical identities need ownership review. Sign in or contact support.");
+  const account=await linkLegacy(createTokenPair(user).accessToken,undefined,undefined,true);
+  const updated=await atomic(async tx=>{
+    const actor=await tx.user.findUniqueOrThrow({where:{id:user.id}});
+    assert(actor.tokenVersion===claims.ver&&actor.passwordHash===user.passwordHash,401,"SESSION_INVALID","Your account changed. Sign in again.");
+    const result=await tx.pgAccount.update({where:{id:account.id},data:{email,credentialEmail:email,passwordHash:user.passwordHash,
+      passwordChangeRequired:user.mustChangePassword,tokenVersion:{increment:1}}});
+    await tx.user.update({where:{id:user.id},data:{passwordHash:null,tokenVersion:{increment:1}}});
+    await audit(tx,account.id,null,"LEGACY_SESSION_MIGRATED",user.id);return result;
+  });
+  const memberships=await prisma.pgMembership.findMany({where:{accountId:account.id,status:"ACTIVE"},take:2});
+  return issueSession(updated,memberships.length===1?memberships[0]!.id:null);
+}
+export async function legacyRefreshHandler(req:express.Request,res:express.Response){
+  const {refreshToken}=z.object({refreshToken:z.string().min(20).max(8192)}).parse(req.body);
+  res.json({tokens:await upgradeLegacySession(refreshToken)});
 }
 
 export async function requestEmailAction(accountId:string,purpose:"RESET"|"VERIFY"|"ENROL",mailer:Mailer=sendAccountEmail,

@@ -83,7 +83,7 @@ platformRouter.get("/config", (req, res) => {
     billingMode: "MANUAL_MONTHLY",
     deploymentCommit: process.env.RENDER_GIT_COMMIT || null,
     // Sideloaded internal test APK only. Google Play builds must not bypass Play Billing.
-    androidBilling: packageId === "com.safehouse.pg.testing"
+    androidBilling: packageId === "com.safehouse.pg.testing" || (packageId === "com.safehouse.pg" && req.query.distribution === "SIDELOAD")
       ? (platformEnabled() && planProviderConfigured() ? "CUSTOM_UPI_INTENT" : "NOT_CONFIGURED")
       : "CONSUMPTION_ONLY",
     legal: {
@@ -108,14 +108,14 @@ platformRouter.post(
 // remains consumption-only unless approved alternative billing is enrolled.
 // This origin check is defence-in-depth; paid access always depends on Razorpay
 // HMAC/captured-payment verification plus owner membership binding.
-function requireAndroidTestingCheckout(req: Request) {
+function requireAndroidSideloadCheckout(req: Request) {
   assert(platformEnabled() && planProviderConfigured(), 503, "ANDROID_BILLING_NOT_CONFIGURED",
     "PGOne's Razorpay payment setup is not activated on this server.");
   assert(req.header("origin") === "https://appassets.androidplatform.net",
-    403, "ANDROID_BILLING_ORIGIN", "This payment must start within the PGOne testing app.");
+    403, "ANDROID_BILLING_ORIGIN", "This payment must start within the PGOne sideloaded app.");
 }
 platformRouter.post("/organisations/:id/plan/android/orders", limited, async (req, res) => {
-  requireAndroidTestingCheckout(req);
+  requireAndroidSideloadCheckout(req);
   const { account } = await session(req);
   const input = z.object({ accepted: z.literal(true), amountPaise: z.literal(24900),
     recurring: z.literal(false), requestKey: z.string().min(16).max(100) }).parse(req.body);

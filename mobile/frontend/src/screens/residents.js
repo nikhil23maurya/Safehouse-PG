@@ -369,4 +369,3 @@ export async function residentFormScreen(ctx) {
     },
   };
 }
-

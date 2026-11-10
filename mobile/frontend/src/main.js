@@ -1054,8 +1054,16 @@ async function boot() {
       `<main class="boot session-restore" role="status"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M5 30.1 30.1 8.3a7.5 7.5 0 0 1 9.8 0L59 24.8v11.1L35 15.7 15.2 32.8V59H5Z" fill="#0B2148"/><path d="M15.2 33 35 15.7l24 20.2V52a7 7 0 0 1-7 7H41V45h4V37.5c0-4.9-3.6-8.2-8.8-8.2H31V59H15.2Z" fill="#2056EF"/><path d="M31 29.3h5.2c5.2 0 8.8 3.3 8.8 8.2V45h-4V39c0-2.2-1.5-3.8-3.8-3.8H31Z" fill="#0B2148"/><path d="M23 59V37.2l8-7.9V59Z" fill="#FFF"/><rect x="30.3" y="21.3" width="4" height="4" rx=".7" fill="white"/><rect x="36.2" y="21.3" width="4" height="4" rx=".7" fill="white"/></svg><span>PGOne</span><p>Restoring your account…</p><span class="spinner" aria-hidden="true"></span></main>`;
     requestAnimationFrame(() => native.call("ready"));
     try {
+      if (state.tokens.kind !== "PLATFORM") {
+        const upgraded=await api("/api/auth/refresh",{public:true,method:"POST",body:{refreshToken:state.tokens.refreshToken}});
+        if(upgraded.tokens?.kind === "PLATFORM") state.tokens=upgraded.tokens;
+      }
       const platform = state.tokens.kind === "PLATFORM";
-      const me = await api(platform ? "/api/platform/session" : "/api/auth/me");
+      let me = await api(platform ? "/api/platform/session" : "/api/auth/me");
+      if(platform && !me.membershipId && stored.activePropertyId){
+        const member=me.memberships.find(m=>m.property.id===stored.activePropertyId);
+        if(member){const selection=await api("/api/platform/workspace",{method:"POST",body:{membershipId:member.id}});state.tokens=selection.tokens;me=await api("/api/platform/session");}
+      }
       if (state.authEpoch !== restoreEpoch) return;
       if (
         !(

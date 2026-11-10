@@ -31,6 +31,25 @@ test("real backend email signup through owner activation, restoration and logout
   const session=await request("/api/platform/session",undefined,token);
   assert.equal(session.body.journey.state,"PAYMENT_REQUIRED");
   assert.equal((await request("/api/owner/dashboard",undefined,token)).status,402);
+  const org=first.body.memberships[0].organisation.id;
+  assert.equal((await request(`/api/platform/organisations/${org}/records`,undefined,token)).status,200);
+  assert.equal((await request(`/api/platform/organisations/${org}/plan/receipts/nonexistent.pdf`,undefined,token)).status,404);
+  assert.equal((await request("/api/owner/payments/nonexistent/receipt.pdf",undefined,token)).status,404);
+  const {prisma}=await import("../src/db.js");
+  await prisma.pgOrganisation.update({where:{id:org},data:{legacyAccess:true}}); // Explicit synthetic legacy fixture only.
+  const staffEmail=`staff-${crypto.randomUUID()}@example.test`;
+  const staff=await request("/api/platform/auth/register",{email:staffEmail,password});
+  const invite=await request("/api/platform/invitations",{organisationId:org,propertyId:first.body.property.id,role:"STAFF",email:staffEmail,permissions:["OCCUPANCY_READ"]},token);
+  const claimed=await request("/api/platform/invitations/accept",{code:invite.body.code},staff.body.tokens.accessToken);
+  assert.equal(claimed.body.pendingOwnerApproval,true);
+  assert.equal((await request("/api/platform/session",undefined,staff.body.tokens.accessToken)).body.memberships.length,0);
+  const approval=await request(`/api/platform/invitations/${invite.body.id}/approve`,{accountId:staff.body.account.id,identityChecked:true},token);
+  assert.equal(approval.status,200);
+  const joined=await request("/api/platform/invitations/accept",{code:invite.body.code},staff.body.tokens.accessToken);
+  assert.equal(joined.status,200);
+  assert.equal((await request("/api/platform/staff",undefined,joined.body.tokens.accessToken)).status,200);
+  assert.equal((await request("/api/owner/dashboard",undefined,joined.body.tokens.accessToken)).status,403);
+  await prisma.$disconnect();
   const login=await request("/api/platform/auth/login",{email,password});assert.equal(login.status,200);
   assert.equal((await request("/api/platform/session",undefined,login.body.tokens.accessToken)).body.property.id,first.body.property.id);
   await request("/api/platform/logout",{},login.body.tokens.accessToken);

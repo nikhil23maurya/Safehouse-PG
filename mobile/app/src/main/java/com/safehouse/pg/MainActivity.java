@@ -360,6 +360,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     public final class NativeBridge {
         @JavascriptInterface public String getPackageId() { return getPackageName(); }
+        @JavascriptInterface public String getBillingDistribution() { return BuildConfig.BILLING_DISTRIBUTION; }
         @JavascriptInterface public void openLegalLink(String url) { runOnUiThread(() -> {
             try { Uri target = Uri.parse(url); if ("https".equals(target.getScheme()) && target.getHost() != null && target.getUserInfo() == null) startActivity(new Intent(Intent.ACTION_VIEW, target)); } catch (Exception ignored) { Toast.makeText(MainActivity.this, "This link is unavailable", Toast.LENGTH_SHORT).show(); }
         }); }
@@ -407,7 +408,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         public void openPlanRazorpayUpi(String optionsJson) {
             runOnUiThread(() -> {
                 try {
-                    if (!getPackageName().endsWith(".testing")) {
+                    if (!"SIDELOAD".equals(BuildConfig.BILLING_DISTRIBUTION)) {
                         throw new IllegalArgumentException("In-app UPI billing is disabled in Google Play production builds");
                     }
                     if (planCustomRazorpay != null) {
@@ -615,14 +616,14 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                 try {
                     Uri uri = Uri.parse(url == null ? "" : url);
                     if (!"https".equals(uri.getScheme()) || !"safehouse-api.onrender.com".equals(uri.getHost()) ||
-                        uri.getPath() == null || !(uri.getPath().matches("/api/(owner|student)/payments/[a-zA-Z0-9_-]+/receipt\\.pdf") || uri.getPath().matches("/api/platform/organisations/[a-zA-Z0-9_-]+/plan/receipts/[a-zA-Z0-9_-]+\\.pdf")) || uri.getQuery() != null || uri.getUserInfo() != null) {
+                        (uri.getPort() != -1 && uri.getPort() != 443) || uri.getPath() == null || !(uri.getPath().matches("/api/(owner|student)/payments/[a-zA-Z0-9_-]+/receipt\\.pdf") || uri.getPath().matches("/api/platform/organisations/[a-zA-Z0-9_-]+/plan/receipts/[a-zA-Z0-9_-]+\\.pdf")) || uri.getQuery() != null || uri.getUserInfo() != null) {
                         Toast.makeText(MainActivity.this, "Invalid receipt link", Toast.LENGTH_SHORT).show(); return;
                     }
                     if (Build.VERSION.SDK_INT <= 28 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                         requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 9422);
                         Toast.makeText(MainActivity.this, "Allow storage access, then download the receipt again", Toast.LENGTH_LONG).show(); return;
                     }
-                    String safeName = fileName == null ? "SafeHouse-Receipt.pdf" : fileName.replaceAll("[^a-zA-Z0-9_.-]", "");
+                    String safeName = fileName == null ? "PGOne-Receipt.pdf" : fileName.replaceAll("[^a-zA-Z0-9_.-]", "");
                     DownloadManager.Request request = new DownloadManager.Request(uri);
                     request.setTitle(safeName);
                     request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);

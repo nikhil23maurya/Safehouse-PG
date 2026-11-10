@@ -184,7 +184,7 @@ public class MobileJourneyTest {
         });
         // Reload with fixtures prefixed before the production API client captures fetch.
         instrumentation.runOnMainSync(() -> { web.clearCache(true); web.reload(); });
-        await("document.querySelector('[data-route=login]') || document.querySelector('[data-form=login]')");
+        await("window.__nativeFixtures && (document.querySelector('[data-route=login]') || document.querySelector('[data-form=login]'))");
         if ("true".equals(js("Boolean(document.querySelector('[data-route=login]'))"))) {
             js("document.querySelector('[data-route=login]').click()");
         }

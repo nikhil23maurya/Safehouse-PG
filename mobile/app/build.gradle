@@ -3,6 +3,7 @@ plugins {
 }
 
 android {
+    buildFeatures { buildConfig true }
     namespace 'com.safehouse.pg'
     compileSdk 35
 
@@ -14,15 +15,20 @@ android {
         versionName '5.2.0'
         manifestPlaceholders = [appLabel: 'PGOne']
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        buildConfigField 'String', 'BILLING_DISTRIBUTION', '"CONSUMPTION_ONLY"'
     }
 
     buildTypes {
         debug {
+            buildConfigField 'String', 'BILLING_DISTRIBUTION', '"SIDELOAD"'
             applicationIdSuffix '.testing'
             versionNameSuffix '-testing'
             manifestPlaceholders = [appLabel: 'PGOne Testing']
         }
         release {
+            def channel = providers.gradleProperty('pgoneDistribution').getOrElse('CONSUMPTION_ONLY')
+            if (!(channel in ['SIDELOAD', 'CONSUMPTION_ONLY'])) throw new GradleException('Unsupported billing distribution')
+            buildConfigField 'String', 'BILLING_DISTRIBUTION', '"' + channel + '"'
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

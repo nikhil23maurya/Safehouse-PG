@@ -81,7 +81,7 @@ jobs:
           gradle-version: '8.9'
       - name: Assemble non-debug production package
         working-directory: mobile
-        run: gradle :app:assembleRelease --stacktrace
+        run: gradle :app:assembleRelease -PpgoneDistribution=SIDELOAD --stacktrace
 
       - name: Sign only with the existing production certificate and verify output
         env:
