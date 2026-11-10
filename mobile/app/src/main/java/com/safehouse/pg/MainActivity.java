@@ -165,7 +165,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                     }
                 }
                 String name = path.substring("/assets/".length());
-                if (!("index.html".equals(name) || "app.js".equals(name) || "app.css".equals(name) || "InterVariable.woff2".equals(name) || "Inter-OFL.txt".equals(name) || "ManropeVariable.ttf".equals(name) || "Manrope-OFL.txt".equals(name) || name.matches("onboarding-(hero|property|ready|payments)\\.webp"))) return missingAsset();
+                if (!("index.html".equals(name) || "app.js".equals(name) || "app.css".equals(name) || "InterVariable.woff2".equals(name) || "Inter-OFL.txt".equals(name) || "ManropeVariable.ttf".equals(name) || "Manrope-OFL.txt".equals(name) || name.matches("illustration-(residence|room|records)\\.webp"))) return missingAsset();
                 try {
                     String mime = name.endsWith(".webp") ? "image/webp" : name.endsWith(".js") ? "application/javascript" : name.endsWith(".css") ? "text/css" : name.endsWith(".ttf") ? "font/ttf" : name.endsWith(".woff2") ? "font/woff2" : name.endsWith(".txt") ? "text/plain" : "text/html";
                     return new WebResourceResponse(mime, (name.endsWith(".woff2") || name.endsWith(".ttf") || name.endsWith(".webp")) ? null : "UTF-8", 200, "OK", java.util.Collections.singletonMap("Cache-Control", "no-cache"), getAssets().open(name));

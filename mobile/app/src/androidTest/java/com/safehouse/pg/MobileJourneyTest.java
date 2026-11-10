@@ -94,6 +94,7 @@ public class MobileJourneyTest {
     }
     private void screenshot(String name, boolean requireAppFocus) throws Exception {
         if (requireAppFocus) {
+            await("Array.from(document.images).filter(i=>(i.getAttribute('src')||'').startsWith('illustration-')).every(i=>i.complete&&i.naturalWidth>0)");
             long deadline = System.currentTimeMillis() + 10000;
             AtomicReference<Boolean> focused = new AtomicReference<>(false);
             do {
