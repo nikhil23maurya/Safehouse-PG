@@ -313,7 +313,7 @@ export async function legalScreen(ctx) {
   return {
     ...page(
       privacy ? "Privacy Policy" : "Terms",
-      `${intro("YOUR TRUST MATTERS", privacy ? "Your privacy, clearly." : "A clear understanding.", url ? "Read the published policy before continuing." : "The published policy is awaiting operator configuration. Phone registration stays unavailable until it is supplied.")}${url ? primary("Read published policy", { action: "openPolicy", glyph: "arrow" }) : ""}`,
+      `${intro("YOUR TRUST MATTERS", privacy ? "Your privacy, clearly." : "A clear understanding.", url ? "Read the published policy before continuing." : "The published policy is currently unavailable.")}${url ? primary("Read published policy", { action: "openPolicy", glyph: "arrow" }) : ""}`,
       "login",
     ),
     action(name) {
