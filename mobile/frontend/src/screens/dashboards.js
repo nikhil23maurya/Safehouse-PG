@@ -46,7 +46,7 @@ export async function ownerHomeScreen(ctx) {
     nav: "ownerHome",
     contentClass: "owner-dashboard",
     content:
-      `<h1 class="sr-only">Property overview</h1><div class="property-context"><button data-route="properties">${icon("building")}<span>${esc(d.property.name)}</span>${icon("down")}</button>${button("Refresh", { action: "reload", kind: "secondary", glyph: "refresh" })}</div>` +
+      `<section class="dashboard-hero"><span>OWNER</span><h1>Hello, ${esc(ctx.snapshot.user.fullName?.split(" ")[0]||"Owner")}</h1><p>Your PG at a glance.</p><img src="illustration-residence.webp" alt=""></section><h1 class="sr-only">Property overview</h1><div class="property-context"><button data-route="properties">${icon("building")}<span>${esc(d.property.name)}</span>${icon("down")}</button>${button("Refresh", { action: "reload", kind: "secondary", glyph: "refresh" })}</div>` +
       periodControl(ctx.snapshot.period) +
       `<section class="financial-summary" aria-label="Monthly collection"><div class="summary-top"><span>Rent collected</span><span>${icon("wallet")}</span></div><div class="financial-amount">${money(m.totalCollectedPaise)}</div><p>of ${money(m.totalExpectedPaise)} expected</p><div class="collection-track" role="progressbar" aria-label="Rent collection" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width:${progress}%"></span></div><div class="summary-bottom"><span><small>Pending</small><strong>${money(m.pendingTotalPaise)}</strong></span><span><small>Collected</small><strong>${Number.isFinite(m.collectionRate) ? `${m.collectionRate}%` : "—"}</strong></span></div></section>` +
       (roomsResult.status === "rejected"
@@ -56,7 +56,7 @@ export async function ownerHomeScreen(ctx) {
         : "") +
       section(
         "Get things done",
-        `<div class="quick-actions">${quick("residentForm", "users", "Add resident")}${quick("roomForm", "plus", "Add room")}${quick("dues", "invoice", "View dues")}${quick("dues", "wallet", "Record payment", { recording: true })}</div>`,
+        `<div class="quick-actions">${quick("residentForm", "users", "Add resident")}${quick("roomForm", "plus", "Add room")}${quick("dues", "invoice", "View dues")}${quick(ctx.snapshot.platform ? "pgCode" : "dues", ctx.snapshot.platform ? "building" : "wallet", ctx.snapshot.platform ? "Share PG code" : "Record payment", ctx.snapshot.platform ? {} : { recording: true })}</div>`,
       ) +
       metrics([
         [rooms?.length, "Rooms"],
@@ -101,6 +101,7 @@ export async function studentHomeScreen(ctx) {
   return {
     title: "Home",
     nav: "studentHome",
+    contentClass:"resident-dashboard",
     content:
       heading(
         ctx.snapshot.property?.name || "YOUR HOME",

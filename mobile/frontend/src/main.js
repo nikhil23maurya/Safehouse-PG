@@ -1,3 +1,7 @@
+import {dots,busyButton} from "./components/motion.js";
+import {brand} from "./components/brand.js";
+import {planVerificationScreen,planSuccessScreen,verificationMarkup} from "./screens/plan-verification.js";
+import {pgCodeScreen,joinedResidentsScreen,unassignedResident,unassignedHomeScreen,unassignedRecordsScreen,unassignedProfileScreen} from "./screens/joining.js";
 import {planCheckout} from "./payments/plan.js";
 import {
   state,
@@ -56,6 +60,7 @@ import {
   subscriptionScreen,
   merchantScreen,
   invitationsScreen,
+  staffInvitationScreen,
   staffScreen,
   legalScreen,
 } from "./screens/platform.js";
@@ -76,9 +81,14 @@ const routes = {
   joinWorkspace: [joinWorkspaceScreen, "PLATFORM"],
   linkAccount: [linkAccountScreen, "PLATFORM"],
   subscription: [subscriptionScreen, "PLATFORM"],
+  planVerification:[planVerificationScreen,"PLATFORM"],
+  planSuccess:[planSuccessScreen,"PLATFORM"],
+  pgCode:[pgCodeScreen,"OWNER"],
+  joinedResidents:[joinedResidentsScreen,"OWNER"],
   merchant: [merchantScreen, "PLATFORM"],
 
   invitations: [invitationsScreen, "PLATFORM"],
+  staffInvitation:[staffInvitationScreen,"PLATFORM"],
   staffHome: [staffScreen, "PLATFORM"],
   login: [loginScreen, null],
   password: [passwordScreen, "BOTH"],
@@ -93,13 +103,13 @@ const routes = {
   ownerPayments: [paymentsScreen, "OWNER"],
   manualPayment: [manualPaymentScreen, "OWNER"],
   invoiceCharges: [invoiceChargesScreen, "OWNER"],
-  studentHome: [studentHomeScreen, "STUDENT"],
-  invoices: [invoicesScreen, "STUDENT"],
-  history: [paymentsScreen, "STUDENT"],
+  studentHome: [ctx=>unassignedResident(ctx.snapshot)?unassignedHomeScreen(ctx):studentHomeScreen(ctx), "STUDENT"],
+  invoices: [ctx=>unassignedResident(ctx.snapshot)?unassignedRecordsScreen(ctx):invoicesScreen(ctx), "STUDENT"],
+  history: [ctx=>unassignedResident(ctx.snapshot)?unassignedRecordsScreen(ctx):paymentsScreen(ctx), "STUDENT"],
   payment: [(ctx)=>ctx.snapshot.tokens?.kind === "PLATFORM" && !ctx.snapshot.platform?.memberships?.find(m=>m.id===ctx.snapshot.platform.membershipId)?.organisation?.legacyAccess ? directRentScreen(ctx) : paymentScreen(ctx), "STUDENT"],
   ownerDirectRent: [ownerDirectRentScreen,"OWNER"],
   invoice: [invoiceScreen, "BOTH"],
-  profile: [profileScreen, "BOTH"],
+  profile: [ctx=>unassignedResident(ctx.snapshot)?unassignedProfileScreen(ctx):profileScreen(ctx), "BOTH"],
   notifications: [notificationsScreen, "BOTH"],
   notificationForm: [notificationFormScreen, "OWNER"],
   properties: [propertiesScreen, "OWNER"],
@@ -144,6 +154,8 @@ const home = () =>
 let pendingNotificationRoute = null;
 let restoringMetadata = null;
 function postAuthRoute() {
+  const org=state.platform?.memberships?.find(m=>m.id===state.platform.membershipId&&m.role==="OWNER")?.organisation;
+  if(org){planCheckout.restore(native,org.id);if(planCheckout.orderId&&!planCheckout.receipt&&!["DISCOVERING","CHOOSING_APP"].includes(planCheckout.status))return "planVerification";}
   if (state.user?.mustChangePassword) return "password";
   if (state.tokens?.kind === "PLATFORM" && state.platform?.account?.credentialReady === false) return "enrolEmail";
   if (pendingNotificationRoute === null) return state.platform?.journey?.screen || home();
@@ -282,7 +294,7 @@ function guardedRoute(name) {
     return routes[name]?.[1] === null ? name : "welcome";
   if (routes[name]?.[1] === "PLATFORM") {
     if (state.tokens.kind !== "PLATFORM") return home();
-    const ownerOnly = ["subscription", "merchant", "merchantProfile", "merchantBank"];
+    const ownerOnly = ["planVerification","planSuccess","subscription", "merchant", "merchantProfile", "merchantBank"];
     if (ownerOnly.includes(name) && state.user.role !== "OWNER") return home();
     // Merchant setup follows verified subscription activation; it cannot be
     // used to bypass the owner's paid workspace boundary.
@@ -310,6 +322,7 @@ function guardedRoute(name) {
     !["properties", "propertyForm", "password", "profile"].includes(name)
   )
     return "properties";
+  if(unassignedResident(state)&&!["studentHome","history","invoices","profile","password"].includes(name))return "studentHome";
   return ownerActivationRoute(state, name);
 }
 
@@ -418,6 +431,10 @@ async function acceptPlatform(tokens, target) {
   state.tokens = tokens;
   state.pendingPayment = null;
   await refreshPlatform();
+  if(!state.platform.memberships.length&&!state.platform.account.setupIntent&&["OWNER","RESIDENT"].includes(onboarding.intent)){
+    await api("/api/platform/onboarding-intent",{method:"POST",body:{intent:onboarding.intent}});
+    await refreshPlatform();
+  }
   state.period = currentPeriod(state.property?.timezone);
   dirty = false;
   persist();
@@ -554,7 +571,10 @@ window.SafeHousePaymentError = () => {
 window.PGOnePlanPaymentResult=(order,status,message)=>{
   const org=state.platform?.memberships?.find(m=>m.id===state.platform.membershipId)?.organisation;
   if(state.tokens?.kind!=="PLATFORM" || !org || planCheckout.organisationId!==org.id)return;
-  if(planCheckout.receive(order,status,message))void screen?.onPlanResult?.();
+  if(planCheckout.receive(order,status,message)){
+    if(!["DISCOVERING","CHOOSING_APP","SUBMITTED"].includes(status))void navigate("planVerification",{},{replace:true,force:true});
+    else void screen?.onPlanResult?.();
+  }
 };
 window.PGOneDirectUpiResult=(opened,message)=>screen?.directUpiResult?.(opened,message);
 // The native Custom SDK returns a UPI-app result, never an entitlement.
@@ -565,6 +585,7 @@ window.PGOnePlanPaymentError = (message) => {
 window.SafeHouseResume = () => {
   applyMotionPreference();
   if (screen?.paymentFlow) void payment.resume();
+  else if(planCheckout.orderId&&planCheckout.organisationId&&!["DISCOVERING","CHOOSING_APP"].includes(planCheckout.status))void navigate("planVerification",{},{replace:true,force:true});
   else if (state.route?.name === "subscription") void revalidateOwnerActivation();
   else if (state.tokens && state.user && !dirty && !submittedForms) {
     cache.clear();
@@ -853,12 +874,12 @@ document.addEventListener("click", async (event) => {
     if (element.dataset.busy) return;
     const restoreFocus = document.activeElement === element;
     element.dataset.busy = "true";
-    element.disabled = true;
+    const restoreBusy=busyButton(element);
     try {
       await screen?.action?.(action, element, event);
     } finally {
       delete element.dataset.busy;
-      element.disabled = false;
+      restoreBusy();
       if (
         restoreFocus &&
         element.isConnected &&
@@ -879,15 +900,11 @@ document.addEventListener("submit", async (event) => {
   if (!validateForm(form)) return;
   const activeScreen = screen;
   const submit = form.querySelector('[type="submit"]');
-  const original = submit?.innerHTML;
+  const restoreBusy = submit ? busyButton(submit) : ()=>{};
   const mutation = form.dataset.form !== "search";
   submissions.add(form);
   if (mutation) submittedForms++;
-  if (submit) {
-    submit.disabled = true;
-    submit.innerHTML =
-      '<span class="spinner" aria-hidden="true"></span><span>Please wait…</span>';
-  }
+
   try {
     await activeScreen.submit?.(form.dataset.form, form);
   } catch (error) {
@@ -926,8 +943,7 @@ document.addEventListener("submit", async (event) => {
     submissionNavigationAllowed = false;
     submissions.delete(form);
     if (submit && !form.dataset.uncertain) {
-      submit.disabled = false;
-      submit.innerHTML = original;
+      restoreBusy();
     }
   }
 });
@@ -1028,7 +1044,8 @@ async function revalidateOwnerActivation() {
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) return;
   if (screen?.paymentFlow) void payment.resume();
-  void revalidateOwnerActivation();
+  if(planCheckout.orderId&&["SUBMITTED","RETURNED_CHECK_PROVIDER","INTERRUPTED_CHECK_PROVIDER","FAILED_OR_UNKNOWN_CHECK_PROVIDER"].includes(planCheckout.status))void navigate("planVerification",{},{replace:true,force:true});
+  else void revalidateOwnerActivation();
 });
 // Expiry comes from the server clock; re-read entitlements without provider calls.
 setInterval(async()=>{
@@ -1082,7 +1099,7 @@ async function boot() {
     restoringMetadata = stored;
     state.tokens = stored.tokens;
     document.getElementById("app").innerHTML =
-      `<main class="boot session-restore" role="status"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M5 30.1 30.1 8.3a7.5 7.5 0 0 1 9.8 0L59 24.8v11.1L35 15.7 15.2 32.8V59H5Z" fill="#0B2148"/><path d="M15.2 33 35 15.7l24 20.2V52a7 7 0 0 1-7 7H41V45h4V37.5c0-4.9-3.6-8.2-8.8-8.2H31V59H15.2Z" fill="#2056EF"/><path d="M31 29.3h5.2c5.2 0 8.8 3.3 8.8 8.2V45h-4V39c0-2.2-1.5-3.8-3.8-3.8H31Z" fill="#0B2148"/><path d="M23 59V37.2l8-7.9V59Z" fill="#FFF"/><rect x="30.3" y="21.3" width="4" height="4" rx=".7" fill="white"/><rect x="36.2" y="21.3" width="4" height="4" rx=".7" fill="white"/></svg><span>PGOne</span><p>Restoring your account…</p><span class="spinner" aria-hidden="true"></span></main>`;
+      (()=>{try{const pending=JSON.parse(native.call("getPlanPaymentState")||"null");if(pending?.orderId)return verificationMarkup();}catch{}return `<main class="boot session-restore">${brand()}<p>Restoring your account…</p>${dots("Restoring account")}</main>`;})();
     requestAnimationFrame(() => native.call("ready"));
     try {
       if (state.tokens.kind !== "PLATFORM") {

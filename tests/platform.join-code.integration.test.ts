@@ -1,0 +1,76 @@
+import test,{after} from "node:test";
+import assert from "node:assert/strict";
+import express from "express";
+const url=new URL(process.env.DATABASE_URL||"invalid:");
+assert.equal(process.env.NODE_ENV,"test");assert.ok(["localhost","127.0.0.1"].includes(url.hostname));assert.equal(url.pathname,"/pgone_test");
+process.env.PGONE_PLATFORM_ENABLED="true";
+const {prisma}=await import("../src/db.js");
+const {registerEmail}=await import("../src/platform/email-auth.js");
+const {saveProfile,createProperty,membershipTokens}=await import("../src/platform/service.js");
+const {manageJoinCode,propertyJoinCode,joinProperty,linkResidentRecord}=await import("../src/platform/join-codes.js");
+const {saveOwnerUpi}=await import("../src/platform/direct-rent.js");
+const {platformRouter}=await import("../src/platform/router.js");
+const {platformWorkspaceBridge}=await import("../src/platform/bridge.js");
+const password="Isolated private password 123!";
+const account=()=>registerEmail(`${crypto.randomUUID()}@example.test`,password);
+const app=express();app.use(express.json());app.use("/api/platform",platformRouter);app.use(platformWorkspaceBridge);app.get("/api/student/probe",(_req,res)=>res.json({ok:true}));
+app.use((e:any,_req:any,res:any,_next:any)=>res.status(e.statusCode||500).json({error:{code:e.code,message:e.message}}));
+const server=app.listen(0,"127.0.0.1");await new Promise<void>(r=>server.on("listening",r));const base=`http://127.0.0.1:${(server.address() as any).port}`;
+after(async()=>{server.close();await prisma.$disconnect();});
+async function owner(){const a=await account();await saveProfile(a.id,{fullName:"Join test owner",intent:"OWNER"});const setup=await createProperty(a.id,{name:"Join fixture PG",city:"Pune",key:crypto.randomUUID()});return {a,setup};}
+test("shared PG joining is immediate, concurrent-idempotent, unassigned and privacy preserving",async()=>{
+ const {a,setup}=await owner();await assert.rejects(()=>manageJoinCode(a.id,setup.propertyId,"ENSURE"),{code:"SUBSCRIPTION_REQUIRED"});
+ // Explicit synthetic grandfathered entitlement; no provider payment is claimed.
+ await prisma.pgOrganisation.update({where:{id:setup.organisationId},data:{legacyAccess:true}});
+ const first=await manageJoinCode(a.id,setup.propertyId,"ENSURE");assert.ok(first.code);assert.equal((await manageJoinCode(a.id,setup.propertyId,"ENSURE")).code,first.code);
+ const resident=await account(),other=await account();
+ const [m,duplicate]=await Promise.all([joinProperty(resident.id,first.code!),joinProperty(resident.id,first.code!)]);
+ assert.equal(m.id,duplicate.id);assert.equal(m.status,"ACTIVE");assert.equal(m.actorUserId,null);assert.deepEqual(m.permissions,[]);
+ assert.equal((await joinProperty(other.id,first.code!)).propertyId,setup.propertyId);
+ const tokens=await membershipTokens(resident.id,m.id);
+ const session=await fetch(`${base}/api/platform/session`,{headers:{authorization:`Bearer ${tokens.accessToken}`}});assert.equal(session.status,200);
+ const json:any=await session.json();assert.equal(json.student,null);assert.equal(json.journey.screen,"studentHome");assert.equal(json.user.role,"STUDENT");
+ const probe=await fetch(`${base}/api/student/probe`,{headers:{authorization:`Bearer ${tokens.accessToken}`}});assert.equal(probe.status,403);
+ await assert.rejects(()=>propertyJoinCode(other.id,setup.propertyId),{code:"FORBIDDEN"});
+ const rotated=await manageJoinCode(a.id,setup.propertyId,"ROTATE");assert.notEqual(rotated.code,first.code);assert.equal(rotated.revision,2);
+ const outsider=await account();await assert.rejects(()=>joinProperty(outsider.id,first.code!),{code:"PG_CODE_UNAVAILABLE"});
+ assert.equal((await joinProperty(resident.id,rotated.code!)).id,m.id);
+ await manageJoinCode(a.id,setup.propertyId,"DISABLE");await assert.rejects(()=>joinProperty(other.id,rotated.code!),{code:"PG_CODE_UNAVAILABLE"});
+ assert.equal((await prisma.pgMembership.findUniqueOrThrow({where:{id:m.id}})).status,"ACTIVE");
+ const fresh=await manageJoinCode(a.id,setup.propertyId,"ROTATE");await prisma.pgMembership.update({where:{id:m.id},data:{status:"REVOKED"}});
+ await assert.rejects(()=>joinProperty(resident.id,fresh.code!),{code:"MEMBERSHIP_DISABLED"});
+ const audit=await prisma.pgAudit.findMany({where:{entityId:m.id}});assert.equal(audit.filter(a=>a.action==="PROPERTY_CODE_JOINED").length,1);assert.ok(!JSON.stringify(audit).includes(first.code!));
+});
+test("record assignment requires owner password, identity confirmation and exact property; no email matching",async()=>{
+ const {a,setup}=await owner();await prisma.pgOrganisation.update({where:{id:setup.organisationId},data:{legacyAccess:true}});
+ const code=await manageJoinCode(a.id,setup.propertyId,"ENSURE"),r=await account(),m=await joinProperty(r.id,code.code!);
+ const foreign=await owner();const actor=await prisma.user.create({data:{role:"STUDENT",fullName:"Unrelated tenant"}});
+ const record=await prisma.student.create({data:{propertyId:setup.propertyId,userId:actor.id,mobile:"9876543210",joiningDate:new Date(),monthlyRentPaise:850099}});
+ await assert.rejects(()=>linkResidentRecord(a.id,setup.propertyId,{membershipId:m.id,studentId:record.id,password:"wrong",identityChecked:true}),{code:"IDENTITY_CONFIRMATION_REQUIRED"});
+ await prisma.pgOrganisation.update({where:{id:foreign.setup.organisationId},data:{legacyAccess:true}});
+ await assert.rejects(()=>linkResidentRecord(foreign.a.id,foreign.setup.propertyId,{membershipId:m.id,studentId:record.id,password,identityChecked:true}),{code:"RESIDENT_NOT_FOUND"});
+ assert.equal((await prisma.pgMembership.findUniqueOrThrow({where:{id:m.id}})).actorUserId,null);
+ await linkResidentRecord(a.id,setup.propertyId,{membershipId:m.id,studentId:record.id,password,identityChecked:true});
+ await linkResidentRecord(a.id,setup.propertyId,{membershipId:m.id,studentId:record.id,password,identityChecked:true});
+ assert.equal(await prisma.pgAudit.count({where:{entityId:m.id,action:"RESIDENT_RECORD_ASSIGNED"}}),1);
+ const second=await joinProperty((await account()).id,code.code!);
+ await assert.rejects(()=>linkResidentRecord(a.id,setup.propertyId,{membershipId:second.id,studentId:record.id,password,identityChecked:true}),{code:"RESIDENCY_ALREADY_LINKED"});
+ assert.equal((await prisma.student.findUniqueOrThrow({where:{id:record.id}})).monthlyRentPaise,850099);
+});
+test("join guessing is persistently rate limited per account",async()=>{
+ const r=await account();for(let i=0;i<20;i++)await assert.rejects(()=>joinProperty(r.id,"invalid"),{code:"PG_CODE_UNAVAILABLE"});
+ await assert.rejects(()=>joinProperty(r.id,"invalid"),{code:"PG_JOIN_RATE_LIMIT"});
+});
+test("UPI save survives reread, is idempotent and wrong password is a form error without logout",async()=>{
+ const {a,setup}=await owner();await prisma.pgOrganisation.update({where:{id:setup.organisationId},data:{legacyAccess:true}});
+ const m=await prisma.pgMembership.findFirstOrThrow({where:{accountId:a.id,propertyId:setup.propertyId,role:"OWNER"}});
+ const input={upiAddress:"owner-fixture@invalid",payeeName:"Owner fixture",password,accepted:true as const,enabled:true};
+ const saved=await saveOwnerUpi(a.id,m.id,input);assert.equal(saved.revision,1);
+ assert.equal((await saveOwnerUpi(a.id,m.id,input)).revision,1);
+ assert.equal((await prisma.pgOwnerUpi.findUniqueOrThrow({where:{propertyId:setup.propertyId}})).upiAddress,input.upiAddress);
+ const before=await prisma.pgAccount.findUniqueOrThrow({where:{id:a.id}});
+ await assert.rejects(()=>saveOwnerUpi(a.id,m.id,{...input,password:"wrong"}),(e:any)=>e.statusCode===403&&e.code==="PASSWORD_CONFIRMATION_FAILED");
+ assert.equal((await prisma.pgAccount.findUniqueOrThrow({where:{id:a.id}})).tokenVersion,before.tokenVersion);
+ assert.equal((await saveOwnerUpi(a.id,m.id,{...input,payeeName:"Updated fixture"})).revision,2);
+ const outsider=await account();await assert.rejects(()=>saveOwnerUpi(outsider.id,m.id,input),{code:"FORBIDDEN"});
+});

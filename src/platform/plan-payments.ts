@@ -260,7 +260,7 @@ export async function manualPlanStatus(accountId: string, organisationId: string
   }
   return { ...base, entitled: base.entitled || Boolean(active), mode: "MANUAL_MONTHLY", recurring: false,
     configured: planProviderConfigured(), checkoutEnabled: manualCheckoutEnabled(), renewalCycles: null,
-    accessEnd, pendingOrder: open ? { id: open.id, status: open.status } : null,
+    accessEnd, pendingOrder: open ? { id: open.id, providerOrderId:open.providerOrderId, status: open.status } : null,
     // Keep old contracts/history in the response; never reinterpret them as new mandates.
     legacySubscription: base.subscription,
     subscription: { status: base.legacyAccess ? "LEGACY_ACCESS" : active || base.entitled ? "ACTIVE" : "NOT_ACTIVE",

@@ -42,9 +42,9 @@ export function profileScreen(ctx) {
         : "") +
       section(
         "Manage",
-        `<div class="list menu-list">${owner ? menu("Your properties", "building", "properties") + menu("Property settings", "rooms", "propertyForm", { edit: true }) + menu("Payment history", "wallet", "ownerPayments") : menu("Your invoices", "invoice", "invoices") + menu("Payment history", "wallet", "history")}${menu("Notifications", "bell", "notifications")}${ctx.snapshot.platform ? menu("Change password", "key", "password") + menu("Workspaces", "building", "workspaces") + (owner ? menu("PGOne plan", "shield", "subscription") + menu("Online rent payments", "wallet", "merchant") + menu("Invite residents & staff", "users", "invitations") : "") : menu("Change password", "key", "password") + '<button class="menu-item" data-action="enablePlatform"><span>PGOne workspaces & account setup</span></button>'}</div>`,
+        `<div class="list menu-list">${owner ? menu("Your properties", "building", "properties") + menu("Property settings", "rooms", "propertyForm", { edit: true }) + menu("Payment history", "wallet", "ownerPayments") : menu("Your invoices", "invoice", "invoices") + menu("Payment history", "wallet", "history")}${menu("Notifications", "bell", "notifications")}${ctx.snapshot.platform ? menu("Change password", "key", "password") + menu("Workspaces", "building", "workspaces") + (owner ? menu("PGOne plan", "shield", "subscription") + menu("Online rent payments", "wallet", "merchant") + menu("Share PG code", "building", "pgCode") + menu("Joined residents", "users", "joinedResidents") + menu("Staff invitations", "users", "invitations") : "") : menu("Change password", "key", "password") + '<button class="menu-item" data-action="enablePlatform"><span>PGOne workspaces & account setup</span></button>'}</div>`,
       ) +
-      `<div class="action-stack">${button("Sign out", { action: "logout", kind: "secondary", glyph: "logout" })}</div><p class="context-footnote">PGOne 5.2.2</p>`,
+      `<div class="action-stack">${button("Sign out", { action: "logout", kind: "secondary", glyph: "logout" })}</div><p class="context-footnote">PGOne 5.3.0</p>`,
     action(name) { if (name === "enablePlatform") return ctx.enablePlatform(); },
   };
 }

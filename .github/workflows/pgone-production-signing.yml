@@ -108,15 +108,15 @@ jobs:
             --ks-pass env:PGONE_RELEASE_STORE_PASSWORD \
             --key-pass env:PGONE_RELEASE_KEY_PASSWORD \
             --v4-signing-enabled false \
-            --out signed-output/PGOne-v5.2.2-production.apk \
+            --out signed-output/PGOne-v5.3.0-production.apk \
             "$RUNNER_TEMP/pgone-aligned.apk"
-          APK="signed-output/PGOne-v5.2.2-production.apk"
+          APK="signed-output/PGOne-v5.3.0-production.apk"
           "$TOOLS/apksigner" verify --verbose --print-certs "$APK" > signed-output/signature-report.txt
           "$TOOLS/aapt" dump badging "$APK" > signed-output/package-report.txt
           grep -q "package: name='com.safehouse.pg'" signed-output/package-report.txt
           grep -q "application-label:'PGOne'" signed-output/package-report.txt
-          grep -q "versionCode='55'" signed-output/package-report.txt
-          grep -q "versionName='5.2.2'" signed-output/package-report.txt
+          grep -q "versionCode='56'" signed-output/package-report.txt
+          grep -q "versionName='5.3.0'" signed-output/package-report.txt
           if grep -q "application-debuggable" signed-output/package-report.txt; then
             echo "::error::Debuggable APK rejected."
             exit 1
@@ -131,8 +131,8 @@ jobs:
           fi
           "$TOOLS/zipalign" -c -v 4 "$APK" > signed-output/zipalign-check.txt
           unzip -t "$APK" > signed-output/zip-integrity.txt
-          (cd signed-output && sha256sum PGOne-v5.2.2-production.apk > SHA256SUMS)
-          printf 'commit=%s\npackage=com.safehouse.pg\nversionName=5.2.2\nkind=release-signed\ncertificate_sha256=%s\n' \
+          (cd signed-output && sha256sum PGOne-v5.3.0-production.apk > SHA256SUMS)
+          printf 'commit=%s\npackage=com.safehouse.pg\nversionName=5.3.0\nkind=release-signed\ncertificate_sha256=%s\n' \
             "$(git rev-parse HEAD)" "$FOUND_CERT" > signed-output/build-provenance.txt
 
       - name: Upload verified production-signed APK for controlled acceptance

@@ -71,6 +71,7 @@ export async function platform(page, { billing = false } = {}) {
     else if (path.endsWith("/forgot-password")) data={ok:true,message:"If this email has an eligible account, a recovery link will arrive shortly."};
     else if (path.endsWith("/logout")) data={ok:true};
     else if (path.endsWith("/session")) data = snapshot();
+    else if(path.endsWith("/onboarding-intent")){account.setupIntent=body.intent;data={ok:true};}
     else if (path.endsWith("/profile")) {
       Object.assign(account, {
         fullName: body.fullName,
@@ -123,6 +124,8 @@ export async function platform(page, { billing = false } = {}) {
           "Online payment setup is awaiting payment-provider activation.",
         onboardingAvailable: false,
       };
+    else if(path.endsWith("/state")&&path.includes("/plan/orders/"))data={orderId:"order_SYNTHETIC001",captured:paid,status:paid?"CAPTURED":"VERIFYING",receipt:paid?{id:"synthetic-receipt",number:"SYNTHETIC-249",amountPaise:24900,paidAt:"2026-11-10T10:00:00Z",periodEnd:"2026-12-10T10:00:00Z"}:null};
+    else if(path.endsWith("/join-code"))data={code:"ABCD-EFGH-JKLM",enabled:true,revision:1};
     else if (path.endsWith("/members")) data = { members: [] };
     else if (path.endsWith("/invitations")) data = { invitations: [] };
     else

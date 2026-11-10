@@ -8,11 +8,10 @@ async function createAccount(page){
   await page.getByLabel("Password",{exact:true}).fill("Private password 123!");
   await page.getByLabel("Confirm password",{exact:true}).fill("Private password 123!");
   await page.getByRole("button",{name:"Create account",exact:true}).click();
-  await expect(page).toHaveURL(/#chooseRole$/);
+  await expect(page).toHaveURL(/#setupProfile$/);
 }
 async function createOwnerProperty(page){
   await createAccount(page);
-  await page.getByRole("button",{name:"I manage a PG",exact:false}).click();
   await page.getByLabel("Full name").fill("Rahul Sharma");
   await page.getByRole("button",{name:"Continue",exact:true}).click();
   await page.getByLabel("PG name").fill("Maple House");
@@ -40,22 +39,20 @@ test("one PG, unpaid route denial and server-confirmed entitlement through nativ
   await forceRoute(page,"ownerHome");await expect(page).toHaveURL(/#subscription$/);
   await forceRoute(page,"merchant");await expect(page).toHaveURL(/#subscription$/);
   await page.getByLabel("Mobile number for payment").fill("9999999999");
-  await page.getByRole("button",{name:"Pay ₹249 securely with UPI"}).click();
+  await page.getByRole("button",{name:"Pay ₹249 with UPI"}).click();
   await expect.poll(()=>page.evaluate(()=>window.__lastPlanOptions)).toMatchObject({amount:24900,currency:"INR",email:"rahul@example.test",order_id:"order_SYNTHETIC001"});
   expect(await page.evaluate(()=>window.__lastPlanOptions.contact)).toBe("+919999999999");
-  const returnedSnapshot=page.waitForResponse(response=>new URL(response.url()).pathname==="/api/platform/session"&&response.ok());
   await page.evaluate(()=>window.PGOnePlanPaymentResult("order_SYNTHETIC001","RETURNED_CHECK_PROVIDER"));
-  // Finish the unpaid callback reconciliation before the fixture simulates a later capture.
-  const unpaidSnapshot=await (await returnedSnapshot).json();
-  expect(unpaidSnapshot.memberships[0].organisation.entitled).toBe(false);
-  await expect(page).toHaveURL(/#subscription$/);expect(fixture.entitled).toBe(false);
-  fixture.activatePaid();await page.getByRole("button",{name:"Check payment status"}).click();
-  await expect(page).toHaveURL(/#setupReady$/);
+  await expect(page).toHaveURL(/#planVerification$/);
+  await expect(page.getByRole("heading",{name:"Payment not confirmed yet"})).toBeVisible();expect(fixture.entitled).toBe(false);
+  fixture.activatePaid();await page.getByRole("button",{name:"Check again"}).click();
+  await expect(page).toHaveURL(/#planSuccess$/);
+  await expect(page.getByRole("heading",{name:"Payment successful"})).toBeVisible();
 });
 test("missing or invalid payment contact creates no order; a valid contact reaches native checkout",async({page})=>{
   await platform(page,{billing:true});await createOwnerProperty(page);
   let orders=0;page.on('request',req=>{if(req.url().includes('/plan/android/orders'))orders++;});
-  const pay=page.getByRole('button',{name:'Pay ₹249 securely with UPI'});
+  const pay=page.getByRole('button',{name:'Pay ₹249 with UPI'});
   await pay.click();
   await expect(page.locator('#field-paymentContact-error')).toContainText('required');
   expect(orders).toBe(0);
@@ -77,16 +74,14 @@ test("recovery uses a neutral response and visibility control shows the password
 });
 test("resident onboarding uses owner-approved email invitations without an owner fee",async({page})=>{
   await platform(page);await createAccount(page);
-  await page.getByRole("button",{name:"I live in a PG",exact:false}).click();
-  await page.getByLabel("Full name").fill("Ananya Rao");
-  await page.getByRole("button",{name:"Continue",exact:true}).click();
+  await forceRoute(page,"chooseRole");await page.getByRole("button",{name:"I'm a Resident",exact:true}).click();
   await expect(page).toHaveURL(/#joinWorkspace$/);
-  await expect(page.getByRole("button",{name:"Refresh workspaces"})).toBeVisible();
+  await expect(page.getByLabel("PG code",{exact:true})).toBeVisible();
   await expect(page.getByRole("button",{name:/Pay.*249/})).toHaveCount(0);
 });
 test("account settings and published policies remain accessible before workspace selection",async({page})=>{
   await platform(page);await createAccount(page);
-  await page.getByRole("button",{name:"Your workspaces",exact:true}).click();
+  await forceRoute(page,"workspaces");
   await page.getByRole("button",{name:"Change password",exact:true}).click();
   await expect(page).toHaveURL(/#password$/);
   await expect(page.getByLabel("Current password",{exact:true})).toBeVisible();
@@ -103,16 +98,18 @@ test("email screens fit supported mobile widths",async({page})=>{
 test("native checkout failure survives navigation and does not unlock owner access",async({page})=>{
   const fixture=await platform(page,{billing:true});await createOwnerProperty(page);
   await page.getByLabel("Mobile number for payment").fill("9999999999");
-  await page.getByRole("button",{name:"Pay ₹249 securely with UPI"}).click();
+  await page.getByRole("button",{name:"Pay ₹249 with UPI"}).click();
   await expect(page.locator('[data-plan-checkout-status]')).toContainText("Finding");
   await forceRoute(page,"workspaces");
   await page.evaluate(()=>window.PGOnePlanPaymentResult("order_SYNTHETIC001","NO_SUPPORTED_APP","Razorpay did not return a supported UPI app. No payment was submitted."));
-  await forceRoute(page,"subscription");
+  await expect(page.getByRole("heading",{name:"Payment not confirmed yet"})).toBeVisible();
+  await page.getByRole("button",{name:"Back to my plan"}).click();
   await expect(page.locator('[data-plan-checkout-status]')).toContainText("No payment was submitted");
-  await expect(page.getByRole("button",{name:"Pay ₹249 securely with UPI"})).toBeEnabled();
+  await expect(page.getByRole("button",{name:"Pay ₹249 with UPI"})).toBeEnabled();
   expect(fixture.entitled).toBe(false);
   await page.getByLabel("Mobile number for payment").fill("9999999999");
-  await page.getByRole("button",{name:"Pay ₹249 securely with UPI"}).click();
+  await page.getByRole("button",{name:"Pay ₹249 with UPI"}).click();
+  await page.locator('[data-action="dialog-confirm"]').click();
   await expect(page.locator('[data-plan-checkout-status]')).toContainText("Finding");
   expect(fixture.entitled).toBe(false);
 });

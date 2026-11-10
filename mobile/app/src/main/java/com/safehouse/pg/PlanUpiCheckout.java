@@ -66,7 +66,7 @@ final class PlanUpiCheckout {
     private WebView view;
     private Gateway gateway;
     private AlertDialog chooser;
-    private ProgressDialog progress;
+    private AlertDialog progress;
     private String order;
     private boolean submitted;
     private final android.content.SharedPreferences prefs;
@@ -81,6 +81,9 @@ final class PlanUpiCheckout {
     String snapshot(){
         try{return new JSONObject().put("organisationId",prefs.getString("organisation"," ")).put("orderId",prefs.getString("order","")).put("status",prefs.getString("status","")).put("message",prefs.getString("message","")).toString();}
         catch(Exception e){return "{}";}
+    }
+    void acknowledge(String id){
+        if(id!=null&&id.equals(prefs.getString("order",""))&&order==null)prefs.edit().clear().apply();
     }
     private void save(String id,String status,String message){
         prefs.edit().putString("order",id).putString("status",status).putString("message",message).apply();
@@ -113,7 +116,7 @@ final class PlanUpiCheckout {
             host.addView(view,new FrameLayout.LayoutParams(-1,-1));
             gateway=factory.create(activity,key,view);
             emit("DISCOVERING","Finding your installed UPI apps…");
-            progress=new ProgressDialog(activity);progress.setMessage("Finding UPI apps…");progress.setCancelable(true);
+            progress=new AlertDialog.Builder(activity).setTitle("PGOne · Finding UPI apps").setView(new BouncingDotsView(activity)).create();progress.setCancelable(true);
             progress.setOnCancelListener(d->finish("CANCELLED_BEFORE_SUBMIT","App selection cancelled. No payment was submitted."));progress.show();
             view.postDelayed(()->{if(id.equals(order)&&!submitted&&chooser==null)finish("APP_DISCOVERY_TIMEOUT","UPI app discovery timed out. Check your connection and retry.");},20000);
             gateway.discover(new Apps(){

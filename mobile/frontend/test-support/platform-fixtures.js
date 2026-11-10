@@ -58,6 +58,7 @@ export function createPlatformFixtures() {
         };
       if (path.endsWith("/register") || path.endsWith("/login")) return { tokens: tokens() };
       if (path.endsWith("/session")) return snapshot();
+      if(path.endsWith("/onboarding-intent")){account.setupIntent=body.intent;return {ok:true};}
       if (path.endsWith("/profile")) {
         Object.assign(account, {
           fullName: body.fullName,
@@ -108,6 +109,7 @@ export function createPlatformFixtures() {
             "Online payment setup is awaiting payment-provider activation.",
           onboardingAvailable: merchant.enabled,
         };
+      if(path.endsWith("/join-code"))return {code:"ABCD-EFGH-JKLM",enabled:true,revision:1};
       if (path.endsWith("/invitations")) return { invitations: [] };
       if (path.endsWith("/members")) return { members: [] };
       if (path.endsWith("/logout")) return { ok: true };

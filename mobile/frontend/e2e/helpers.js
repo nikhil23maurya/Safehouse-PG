@@ -40,12 +40,9 @@ export async function setup(page) {
     }),
   );
   await page.goto("/");
-  if (
-    await page
-      .getByRole("button", { name: "Create account", exact: true })
-      .isVisible()
-  ) {
-    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  if(await page.locator('[data-action="entry"][data-role="OWNER"]').isVisible()){
+    await page.locator('[data-action="entry"][data-role="OWNER"]').click();
+    await page.getByRole("button",{name:"Already have an account? Sign in"}).click();
   }
   return { ...fixtures, errors };
 }

@@ -14,6 +14,7 @@ import { emailAuthRouter, mailReady } from "./email-auth.js";
 import { issueSession, rotateSession } from "./sessions.js";
 import { journey } from "./journey.js";
 import { directRentRouter } from "./direct-rent.js";
+import { joinCodeRouter } from "./join-code-router.js";
 import { planReceipt } from "./plan-receipts.js";
 import {
   accountSession,
@@ -165,6 +166,7 @@ platformRouter.post("/phone", (_req,_res) => {
 });
 platformRouter.use("/auth",emailAuthRouter);
 platformRouter.use("/rent",directRentRouter);
+platformRouter.use(joinCodeRouter);
 platformRouter.post("/refresh",limited,async(req,res)=>{
   const {refreshToken} = z.object({refreshToken:z.string().max(8192)}).parse(req.body);
   res.json({tokens:await rotateSession(refreshToken)});
@@ -172,7 +174,7 @@ platformRouter.post("/refresh",limited,async(req,res)=>{
 platformRouter.get("/session", async (req, res) => {
   const { account, membership } = await session(req);
   let student = null;
-  if (membership?.role === "RESIDENT") {
+  if (membership?.role === "RESIDENT" && membership.actorUserId) {
     student = await prisma.student.findFirst({
       where: {
         userId: membership.actorUserId || "",

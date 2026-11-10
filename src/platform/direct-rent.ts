@@ -1,7 +1,7 @@
 import express from "express";
 import {z} from "zod";
 import {prisma} from "../db.js";
-import {assert} from "../errors.js";
+import {assert,AppError} from "../errors.js";
 import {accountSession,atomic,audit} from "./service.js";
 import {entitlement} from "./billing.js";
 import {passwordMatches} from "./passwords.js";
@@ -87,6 +87,26 @@ export async function confirmDirectClaim(accountId:string,propertyId:string,clai
 export const directRentRouter=express.Router();
 directRentRouter.use((_req,res,next)=>{res.setHeader("Cache-Control","no-store");next();});
 const session=(req:express.Request)=>accountSession((req.header("authorization")||"").replace(/^Bearer /,""));
+export async function saveOwnerUpi(accountId:string,membershipId:string,input:{upiAddress:string;payeeName:string;password:string;accepted:true;enabled:boolean}) {
+  const membership=await prisma.pgMembership.findFirst({where:{id:membershipId,accountId,role:"OWNER",status:"ACTIVE"},include:{organisation:true,property:true,account:true}});
+  assert(membership&&membership.organisation.ownerAccountId===accountId&&membership.property.ownerId===membership.organisation.legacyOwnerId&&
+    !membership.account.passwordChangeRequired,403,"FORBIDDEN","Select an owner workspace.");
+  assert(await entitlement(membership.organisationId),402,"SUBSCRIPTION_REQUIRED","Activate PGOne first.");
+  if(!await passwordMatches(input.password,membership.account.passwordHash))throw new AppError(403,"PASSWORD_CONFIRMATION_FAILED","Your password did not match. Your account is still signed in.",
+    {fieldErrors:{password:["Enter your current PGOne password."]}});
+  const upiAddress=vpa.parse(input.upiAddress),payeeName=z.string().trim().min(2).max(100).parse(input.payeeName);
+  assert(input.accepted,400,"CONFIRMATION_REQUIRED","Confirm this is your rent-receiving account.");
+  return atomic(async tx=>{
+    const prior=await tx.pgOwnerUpi.findUnique({where:{propertyId:membership.propertyId}});
+    assert(!prior||prior.ownerAccountId===accountId,409,"PAYEE_OWNERSHIP_REVIEW","This PG's receiving account needs an ownership review.");
+    if(prior&&prior.upiAddress===upiAddress&&prior.payeeName===payeeName&&prior.enabled===input.enabled)return prior;
+    const payee=await tx.pgOwnerUpi.upsert({where:{propertyId:membership.propertyId},
+      create:{propertyId:membership.propertyId,ownerAccountId:accountId,upiAddress,payeeName,enabled:input.enabled},
+      update:{upiAddress,payeeName,enabled:input.enabled,revision:{increment:1}}});
+    await audit(tx,accountId,membership.organisationId,"DIRECT_OWNER_UPI_UPDATED",membership.propertyId,{enabled:input.enabled,revision:payee.revision});
+    return payee;
+  });
+}
 directRentRouter.get("/owner",async(req,res)=>{
   const {account,membership}=await session(req);assert(membership?.role==="OWNER",403,"FORBIDDEN","Select an owner workspace.");
   const [payee,claims]=await Promise.all([prisma.pgOwnerUpi.findUnique({where:{propertyId:membership.propertyId}}),
@@ -95,14 +115,9 @@ directRentRouter.get("/owner",async(req,res)=>{
 });
 directRentRouter.post("/owner",async(req,res)=>{
   const {account,membership}=await session(req);assert(membership?.role==="OWNER"&&!account.passwordChangeRequired,403,"FORBIDDEN","Select an owner workspace.");
-  assert(await entitlement(membership.organisationId),402,"SUBSCRIPTION_REQUIRED","Activate PGOne first.");
   const input=z.object({upiAddress:vpa,payeeName:z.string().trim().min(2).max(100),password:z.string().max(128),accepted:z.literal(true),enabled:z.boolean()}).strict().parse(req.body);
-  assert(await passwordMatches(input.password,account.passwordHash),401,"INVALID_CREDENTIALS","Confirm your password to change rent payment details.");
-  await atomic(async tx=>{await tx.pgOwnerUpi.upsert({where:{propertyId:membership.propertyId},
-    create:{propertyId:membership.propertyId,ownerAccountId:account.id,upiAddress:input.upiAddress,payeeName:input.payeeName,enabled:input.enabled},
-    update:{upiAddress:input.upiAddress,payeeName:input.payeeName,enabled:input.enabled,revision:{increment:1}}});
-    await audit(tx,account.id,membership.organisationId,"DIRECT_OWNER_UPI_UPDATED",membership.propertyId,{enabled:input.enabled});});
-  res.json({ok:true});
+  const payee=await saveOwnerUpi(account.id,membership.id,input);
+  res.json({ok:true,state:payee.enabled?"DETAILS_SAVED":"NOT_CONNECTED",providerVerified:false,payee});
 });
 directRentRouter.get("/invoices/:id",async(req,res)=>{
   const {account,membership}=await session(req);assert(membership,403,"WORKSPACE_REQUIRED","Select your residency.");
