@@ -26,7 +26,6 @@ export function profileScreen(ctx) {
     title: "Your account",
     nav: "profile",
     content:
-      heading("YOUR PGONE", "A place for the details.") +
       `<div class="resident-profile">${avatar(user.fullName, true)}<div><h1>${esc(user.fullName)}</h1><p>${esc(user.email)}</p>${badge(owner ? "Property owner" : "Resident", "blue")}</div></div>` +
       (property
         ? card(
@@ -45,7 +44,7 @@ export function profileScreen(ctx) {
         "Manage",
         `<div class="list menu-list">${owner ? menu("Your properties", "building", "properties") + menu("Property settings", "rooms", "propertyForm", { edit: true }) + menu("Payment history", "wallet", "ownerPayments") : menu("Your invoices", "invoice", "invoices") + menu("Payment history", "wallet", "history")}${menu("Notifications", "bell", "notifications")}${ctx.snapshot.platform ? menu("Change password", "key", "password") + menu("Workspaces", "building", "workspaces") + (owner ? menu("PGOne plan", "shield", "subscription") + menu("Online rent payments", "wallet", "merchant") + menu("Invite residents & staff", "users", "invitations") : "") : menu("Change password", "key", "password") + '<button class="menu-item" data-action="enablePlatform"><span>PGOne workspaces & account setup</span></button>'}</div>`,
       ) +
-      `<div class="action-stack">${button("Sign out", { action: "logout", kind: "secondary", glyph: "logout" })}</div><p class="context-footnote">PGOne 5.2.1 · Your PG, under control.</p>`,
+      `<div class="action-stack">${button("Sign out", { action: "logout", kind: "secondary", glyph: "logout" })}</div><p class="context-footnote">PGOne 5.2.2</p>`,
     action(name) { if (name === "enablePlatform") return ctx.enablePlatform(); },
   };
 }
@@ -58,8 +57,8 @@ export async function propertiesScreen(ctx) {
     nav: "profile",
     content:
       heading(
-        "YOUR PORTFOLIO",
-        "Every home, together.",
+        "",
+        "Your properties",
         "Choose the property you want to manage.",
       ) +
       (properties.length
@@ -95,8 +94,8 @@ export function propertyFormScreen(ctx) {
     guardForm: true,
     content:
       heading(
-        "YOUR PROPERTY",
-        editing ? "A few home details." : "A new home to manage.",
+        "",
+        editing ? "Property settings" : "Add property",
       ) +
       `<form data-form="property" novalidate><div class="card"><div class="form-error" role="alert"></div>${field("name", "Property name", { required: true, value: property?.name || "", attrs: 'minlength="2" maxlength="120" autocomplete="organization"' })}${field("timezone", "Timezone", { required: true, value: property?.timezone || "Asia/Kolkata", help: "Used for billing periods and notification schedules.", attrs: 'minlength="3" maxlength="80" autocapitalize="none" spellcheck="false"' })}</div>${submitBar(editing ? "Save property" : "Create property")}</form>`,
     async submit(name, form) {

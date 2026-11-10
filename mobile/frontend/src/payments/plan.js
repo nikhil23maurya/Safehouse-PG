@@ -1,4 +1,9 @@
 // Native checkout survives a screen replacement. This state never grants access.
+// Payment contact is separate from account authentication; never invent a payer number.
+export function paymentContact(value) {
+  const match=String(value||"").replace(/[\s()-]/g,"").match(/^(?:\+91|91)?([6-9][0-9]{9})$/);
+  return match?`+91${match[1]}`:null;
+}
 const messages = {
   DISCOVERING: "Finding your installed UPI apps…",
   CHOOSING_APP: "Choose a UPI app to continue.",

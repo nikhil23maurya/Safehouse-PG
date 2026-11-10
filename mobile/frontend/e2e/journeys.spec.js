@@ -396,7 +396,7 @@ test("responsive text scaling and landscape do not overflow", async ({
 }) => {
   await setup(page);
   await login(page);
-  await expect(page.locator('.page-heading')).toHaveCSS('animation-name', 'none');
+  await expect(page.locator('.content')).toHaveCSS('animation-name', 'none');
   await page.evaluate(() => {
     document.documentElement.style.fontSize = "20px";
   });

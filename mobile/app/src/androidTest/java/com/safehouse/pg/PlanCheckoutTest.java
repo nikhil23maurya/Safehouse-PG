@@ -28,7 +28,7 @@ public class PlanCheckoutTest {
         return (MainActivity)instrumentation.startActivitySync(launch);
     }
     JSONObject input() throws Exception{return new JSONObject().put("organisationId","native-test-org").put("key","rzp_test_NATIVEFIXTURE")
-        .put("order_id","order_NATIVEFIXTURE").put("amount",24900).put("currency","INR").put("email","native@example.invalid");}
+        .put("order_id","order_NATIVEFIXTURE").put("amount",24900).put("currency","INR").put("email","native@example.invalid").put("contact","9999999999");}
     @Test public void nativeAppChoiceSubmitsExactOrderAndRetainsRedactedFailure() throws Exception {
         MainActivity activity=start();List<String> events=new ArrayList<>();final PlanUpiCheckout[] checkout={null};final JSONObject[] submitted={null};
         instrumentation.runOnMainSync(()->{
@@ -46,11 +46,45 @@ public class PlanCheckoutTest {
         });
         assertEquals(24900,submitted[0].getInt("amount"));assertEquals("order_NATIVEFIXTURE",submitted[0].getString("order_id"));
         assertEquals("fixture.upi.app",submitted[0].getString("upi_app_package_name"));
+        assertEquals("+919999999999",submitted[0].getString("contact"));assertFalse(submitted[0].has("key"));
         assertTrue(events.contains("CHOOSING_APP"));assertTrue(events.contains("SUBMITTED"));assertTrue(events.contains("FAILED_OR_UNKNOWN_CHECK_PROVIDER"));
         JSONObject saved=new JSONObject(checkout[0].snapshot());assertEquals("FAILED_OR_UNKNOWN_CHECK_PROVIDER",saved.getString("status"));
         assertTrue(saved.getString("message").contains("error 7"));assertFalse(saved.getString("message").contains("payer@example.invalid"));
         assertFalse(saved.getString("message").contains("9027666856"));
         instrumentation.runOnMainSync(activity::finish);
+    }
+    @Test public void blankContactCannotReachProviderOrCreateAnOverlay() throws Exception {
+        MainActivity activity=start();final String[] status={null};
+        instrumentation.runOnMainSync(()->{
+            FrameLayout host=(FrameLayout)((android.view.ViewGroup)activity.findViewById(android.R.id.content)).getChildAt(0);int children=host.getChildCount();
+            PlanUpiCheckout checkout=new PlanUpiCheckout(activity,host,(id,state,message)->status[0]=state,(owner,key,view)->{throw new AssertionError("Blank contact reached SDK");});
+            try {JSONObject request=input();request.remove("contact");checkout.open(request.toString());}
+            catch(Exception e){throw new RuntimeException(e);}
+            assertEquals("INVALID_PAYMENT_CONTACT",status[0]);assertEquals(children,host.getChildCount());activity.finish();
+        });
+    }
+    @Test public void providerValidationCauseIsReadableAndPayerDataIsRedacted() throws Exception {
+        String raw=new JSONObject().put("error",new JSONObject().put("code","BAD_REQUEST_ERROR")
+            .put("description","Could not validate payment create request due to: contact: cannot be blank. payer@example.invalid 9999999999")).toString();
+        String result=PlanUpiCheckout.safeDescription(raw);
+        assertTrue(result.contains("contact: cannot be blank"));assertFalse(result.contains("{\"error\""));
+        assertFalse(result.contains("payer@example.invalid"));assertFalse(result.contains("9999999999"));
+        for(String value:new String[]{"9999999999","+91 99999 99999","919999999999"})
+            assertEquals("+919999999999",PlanUpiCheckout.paymentContact(value));
+        assertNull(PlanUpiCheckout.paymentContact("123"));assertNull(PlanUpiCheckout.paymentContact(""));
+    }
+    @Test public void correctedPayloadPassesTheOfficialSdkFieldValidator() throws Exception {
+        MainActivity activity=start();CountDownLatch done=new CountDownLatch(1);final String[] error={null};
+        instrumentation.runOnMainSync(()->{
+            try {
+                JSONObject payload=PlanUpiCheckout.paymentPayload(input()).put("upi_app_package_name","in.org.npci.upiapp");
+                new com.razorpay.Razorpay(activity,"rzp_test_NATIVEFIXTURE").validateFields(payload,new com.razorpay.ValidationListener(){
+                    public void onValidationSuccess(){done.countDown();}
+                    public void onValidationError(java.util.Map<String,String> fields){error[0]=String.valueOf(fields);done.countDown();}
+                });
+            }catch(Exception e){throw new RuntimeException(e);}
+        });
+        assertTrue(done.await(10,TimeUnit.SECONDS));assertNull(error[0]);instrumentation.runOnMainSync(activity::finish);
     }
     @Test public void failedDiscoveryRemovesOverlayAndAllowsAnotherInitiation() throws Exception {
         MainActivity activity=start();final int[] discoveries={0};

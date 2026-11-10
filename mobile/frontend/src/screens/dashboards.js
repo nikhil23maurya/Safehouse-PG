@@ -41,16 +41,23 @@ export async function ownerHomeScreen(ctx) {
   const progress = Number.isFinite(m.collectionRate)
     ? Math.max(0, Math.min(100, m.collectionRate))
     : 0;
-  const firstName = ctx.snapshot.user.fullName.split(" ")[0];
   return {
     title: "Home",
     nav: "ownerHome",
     contentClass: "owner-dashboard",
     content:
-      `<div class="property-context"><button data-route="properties">${icon("building")}<span>${esc(d.property.name)}</span>${icon("down")}</button>${button("Refresh", { action: "reload", kind: "secondary", glyph: "refresh" })}</div>` +
-      heading("", `Hello, ${firstName}.`) +
+      `<h1 class="sr-only">Property overview</h1><div class="property-context"><button data-route="properties">${icon("building")}<span>${esc(d.property.name)}</span>${icon("down")}</button>${button("Refresh", { action: "reload", kind: "secondary", glyph: "refresh" })}</div>` +
       periodControl(ctx.snapshot.period) +
       `<section class="financial-summary" aria-label="Monthly collection"><div class="summary-top"><span>Rent collected</span><span>${icon("wallet")}</span></div><div class="financial-amount">${money(m.totalCollectedPaise)}</div><p>of ${money(m.totalExpectedPaise)} expected</p><div class="collection-track" role="progressbar" aria-label="Rent collection" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width:${progress}%"></span></div><div class="summary-bottom"><span><small>Pending</small><strong>${money(m.pendingTotalPaise)}</strong></span><span><small>Collected</small><strong>${Number.isFinite(m.collectionRate) ? `${m.collectionRate}%` : "—"}</strong></span></div></section>` +
+      (roomsResult.status === "rejected"
+        ? notice(
+            "Room totals are temporarily unavailable. Refresh to try again.",
+          )
+        : "") +
+      section(
+        "Get things done",
+        `<div class="quick-actions">${quick("residentForm", "users", "Add resident")}${quick("roomForm", "plus", "Add room")}${quick("dues", "invoice", "View dues")}${quick("dues", "wallet", "Record payment", { recording: true })}</div>`,
+      ) +
       metrics([
         [rooms?.length, "Rooms"],
         [
@@ -62,26 +69,17 @@ export async function ownerHomeScreen(ctx) {
         [m.totalStudents, "Residents"],
         [m.pendingStudents, "Rent pending"],
       ]) +
-      (roomsResult.status === "rejected"
-        ? notice(
-            "Room totals are temporarily unavailable. Refresh to try again.",
-          )
-        : "") +
-      section(
-        "Get things done",
-        `<div class="quick-actions">${quick("residentForm", "users", "Add resident")}${quick("roomForm", "plus", "Add room")}${quick("dues", "invoice", "View dues")}${quick("dues", "wallet", "Record payment", { recording: true })}</div>`,
-      ) +
       section(
         "Needs attention",
-        `<div class="list">${d.pendingDues?.length ? d.pendingDues.map((i) => dueRow(i, ctx.snapshot.property?.timezone)).join("") : empty("All caught up", "There are no pending dues for this billing month.", { glyph: "check" })}</div>`,
+        `<div class="list">${d.pendingDues?.length ? d.pendingDues.slice(0,3).map((i) => dueRow(i, ctx.snapshot.property?.timezone)).join("") : `<p class="compact-empty">No pending dues this month.</p>`}</div>`,
         `<button class="text-button" ${routeAttrs("dues")}>View all ${icon("arrow")}</button>`,
       ) +
       section(
         "Recent payments",
-        `<div class="list">${d.recentPayments?.length ? d.recentPayments.map((x) => paymentRow(x, true, ctx.snapshot.property?.timezone)).join("") : empty("No payments yet", "Recorded payments for this billing month appear here.", { glyph: "wallet" })}</div>`,
+        `<div class="list">${d.recentPayments?.length ? d.recentPayments.slice(0,3).map((x) => paymentRow(x, true, ctx.snapshot.property?.timezone)).join("") : `<p class="compact-empty">No payments this month.</p>`}</div>`,
         `<button class="text-button" ${routeAttrs("ownerPayments")}>View all ${icon("arrow")}</button>`,
       ) +
-      `<p class="context-footnote">${esc(month(d.period.year, d.period.month))} · ${esc(d.property.name)}</p>`,
+      "",
   };
 }
 
@@ -107,7 +105,7 @@ export async function studentHomeScreen(ctx) {
       heading(
         ctx.snapshot.property?.name || "YOUR HOME",
         `Hello, ${s.name.split(" ")[0]}.`,
-        "A little clarity. A lot more peace of mind.",
+        "",
       ) +
       (invoice
         ? `<section class="financial-summary resident-summary"><div class="summary-top"><span>${esc(month(invoice.year, invoice.month))}</span>${badge(status.label, "summary-badge")}</div><p class="amount-label">${payable ? "Rent outstanding" : invoice.status === "WAIVED" ? "Rent waived" : "Rent settled"}</p><div class="financial-amount">${money(invoice.remainingPaise)}</div><p>${payable ? `Due ${esc(date(invoice.dueDate, ctx.snapshot.property?.timezone))}` : "Your current month is taken care of."}</p>${payable ? button(invoice.status === "PROCESSING" || ctx.snapshot.pendingPayment?.invoiceId === invoice.id ? "Check payment" : "Pay rent", { route: "payment", params: { invoiceId: invoice.id }, glyph: "arrow", kind: "summary-pay" }) : `<button class="summary-link" ${routeAttrs("invoice", { id: invoice.id })}>View your invoice ${icon("arrow")}</button>`}</section>`
@@ -123,21 +121,7 @@ export async function studentHomeScreen(ctx) {
             "An earlier payment may still need confirmation. Open your invoices to check its status.",
           )
         : "") +
-      section(
-        "Your rent",
-        invoice
-          ? invoiceCard(
-              invoice,
-              false,
-              undefined,
-              ctx.snapshot.property?.timezone,
-            )
-          : empty(
-              "No invoice yet",
-              "Your rent details will appear once an invoice is issued.",
-            ),
-        `<button class="text-button" ${routeAttrs("invoices")}>All invoices ${icon("arrow")}</button>`,
-      ) +
+      button("All invoices", {route:"invoices",kind:"text-button block"}) +
       section(
         "Your space",
         card(
@@ -146,7 +130,7 @@ export async function studentHomeScreen(ctx) {
       ) +
       section(
         "Recent payments",
-        `<div class="list">${d.recentPayments?.length ? d.recentPayments.map((x) => paymentRow(x, false, ctx.snapshot.property?.timezone)).join("") : empty("A fresh start", "Your confirmed rent payments and receipts will appear here.", { glyph: "wallet" })}</div>`,
+        `<div class="list">${d.recentPayments?.length ? d.recentPayments.slice(0,3).map((x) => paymentRow(x, false, ctx.snapshot.property?.timezone)).join("") : `<p class="compact-empty">No confirmed payments yet.</p>`}</div>`,
         `<button class="text-button" ${routeAttrs("history")}>View all ${icon("arrow")}</button>`,
       ) +
       button("Refresh balances", {

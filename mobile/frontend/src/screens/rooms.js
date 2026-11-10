@@ -30,7 +30,7 @@ export async function roomsScreen(ctx) {
     content:
       heading(
         ctx.snapshot.property?.name,
-        "Room for everyone.",
+        "Rooms",
         `${rooms.length} rooms · ${rooms.reduce((total, r) => total + r.vacant, 0)} beds available`,
         button("Add", { route: "roomForm", glyph: "plus" }),
       ) +
@@ -110,10 +110,10 @@ export async function roomFormScreen(ctx) {
     content:
       heading(
         ctx.snapshot.property?.name,
-        room ? "Make space work." : "Open a new door.",
+        room ? "Edit room" : "Add room",
         room
           ? `Update room ${room.number}.`
-          : "A clear room number. The right capacity.",
+          : "",
       ) +
       `<form data-form="room" novalidate><div class="card"><div class="form-error" role="alert"></div>${field("number", "Room number", { value: room?.number || "", required: true, attrs: 'maxlength="30" autocomplete="off"', placeholder: "e.g. 203" })}${field("capacity", "Number of beds", { type: "number", value: room?.capacity || "", required: true, attrs: `min="${Math.max(1, room?.occupied || 0)}" max="50" step="1" inputmode="numeric"`, help: room ? `${room.occupied} beds are currently occupied. Capacity cannot be lower than occupancy.` : "Between 1 and 50 beds. Real occupancy is checked by the server." })}</div>${submitBar(room ? "Save room" : "Add room")}</form>`,
     async submit(name, form) {

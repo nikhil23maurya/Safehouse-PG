@@ -74,10 +74,10 @@ export async function duesScreen(ctx) {
     content:
       heading(
         ctx.snapshot.property?.name,
-        recording ? "Record a payment." : "Keep rent on track.",
+        recording ? "Record payment" : "Rent dues",
         recording
           ? "Choose the invoice you received payment for."
-          : "Clear balances. Thoughtful reminders.",
+          : "",
       ) +
       periodControl(ctx.snapshot.period) +
       card(
@@ -172,9 +172,9 @@ export async function invoicesScreen(ctx) {
     nav: "invoices",
     content:
       heading(
-        "YOUR RENT, EXPLAINED",
-        "Every month. In order.",
-        "Review a bill, settle rent or find a receipt.",
+        "",
+        "Your invoices",
+        "",
       ) +
       filters(
         [
@@ -238,8 +238,8 @@ export async function paymentsScreen(ctx) {
     content:
       heading(
         owner ? ctx.snapshot.property?.name : "RENT, TAKEN CARE OF",
-        "Your payment trail.",
-        "Confirmed payments. Receipts when you need them.",
+        "Payment history",
+        "",
       ) +
       (owner ? periodControl(ctx.snapshot.period) : "") +
       `<div class="list">${payments.length ? payments.map((p) => paymentRow(p, owner, ctx.snapshot.property?.timezone)).join("") : empty("No payments yet", owner ? "No recorded payments for this billing month." : "Your recorded payments and receipts will appear here.", { glyph: "wallet" })}</div>` +
@@ -266,7 +266,7 @@ export async function manualPaymentScreen(ctx) {
     content:
       heading(
         "PAYMENT RECEIVED",
-        "Keep the record right.",
+        "Record payment",
         `${resident.name} · ${month(invoice.year, invoice.month)}`,
       ) +
       card(
@@ -326,7 +326,7 @@ export async function invoiceChargesScreen(ctx) {
     content:
       heading(
         "INVOICE ADJUSTMENTS",
-        "Clear charges. Clear rent.",
+        "Invoice adjustments",
         `${resident.name} · ${month(invoice.year, invoice.month)}`,
       ) +
       notice(
