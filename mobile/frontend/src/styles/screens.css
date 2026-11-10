@@ -976,3 +976,11 @@
 .owner-dashboard .section-heading { margin-bottom: 8px; }
 .owner-dashboard .quick-action { min-height: 76px; gap: 6px; }
 .owner-dashboard .quick-action > span { width: 44px; height: 44px; border-radius: 13px; }
+
+.room-card { padding: 16px; }
+.room-card .bed-indicators { margin: 10px 0 8px; }
+.room-card .room-number strong { font-size: 16px; }
+.dues-summary, .dues-card { padding: 16px; }
+.dues-summary .financial-amount, .dues-card .financial-amount { font-size: 28px; margin-top: 8px; }
+.dues-card .action-stack { margin-top: 12px; gap: 6px; }
+.dues-card .action-stack .button { min-height: 44px; }

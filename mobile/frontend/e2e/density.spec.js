@@ -1,7 +1,7 @@
 import {test,expect} from "@playwright/test";
 import fs from "node:fs/promises";
 import {platform} from "./platform-helper.js";
-import {setup,login,noOverflow} from "./helpers.js";
+import {setup,login,go,noOverflow} from "./helpers.js";
 
 async function fits(page,action,name){
   await page.evaluate(()=>scrollTo(0,0));
@@ -66,4 +66,15 @@ test('dashboard keeps a short preview and links to full lists',async({page})=>{
   const action=await page.getByRole('button',{name:'View dues',exact:true}).boundingBox();
   const nav=await page.locator('.bottom-nav').boundingBox();
   expect(action.y+action.height,'quick actions clear the fixed navigation').toBeLessThanOrEqual(nav.y);
+});
+
+test('rooms and rent dues use compact cards with reachable actions',async({page})=>{
+  await page.setViewportSize({width:360,height:640});await setup(page);await login(page);
+  await go(page,'rooms');await noOverflow(page);
+  expect((await page.locator('.room-card').first().boundingBox()).height).toBeLessThanOrEqual(165);
+  await page.screenshot({path:'visual-evidence/compact/rooms-360.png',fullPage:true});
+  await go(page,'dues');await noOverflow(page);
+  expect((await page.locator('.dues-card').first().boundingBox()).height).toBeLessThanOrEqual(250);
+  await expect(page.getByRole('button',{name:'View invoice',exact:true}).first()).toBeVisible();
+  await page.screenshot({path:'visual-evidence/compact/dues-360.png',fullPage:true});
 });
