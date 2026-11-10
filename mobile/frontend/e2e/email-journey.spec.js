@@ -43,7 +43,11 @@ test("one PG, unpaid route denial and server-confirmed entitlement through nativ
   await page.getByRole("button",{name:"Pay ₹249 securely with UPI"}).click();
   await expect.poll(()=>page.evaluate(()=>window.__lastPlanOptions)).toMatchObject({amount:24900,currency:"INR",email:"rahul@example.test",order_id:"order_SYNTHETIC001"});
   expect(await page.evaluate(()=>window.__lastPlanOptions.contact)).toBe("+919999999999");
+  const returnedSnapshot=page.waitForResponse(response=>new URL(response.url()).pathname==="/api/platform/session"&&response.ok());
   await page.evaluate(()=>window.PGOnePlanPaymentResult("order_SYNTHETIC001","RETURNED_CHECK_PROVIDER"));
+  // Finish the unpaid callback reconciliation before the fixture simulates a later capture.
+  const unpaidSnapshot=await (await returnedSnapshot).json();
+  expect(unpaidSnapshot.memberships[0].organisation.entitled).toBe(false);
   await expect(page).toHaveURL(/#subscription$/);expect(fixture.entitled).toBe(false);
   fixture.activatePaid();await page.getByRole("button",{name:"Check payment status"}).click();
   await expect(page).toHaveURL(/#setupReady$/);
