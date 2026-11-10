@@ -54,7 +54,7 @@ final class PlanUpiCheckout {
                     public void onError(String ignored){callback.failed("METHODS_UNAVAILABLE");}
                 });
             }
-            public void submit(JSONObject payload,PaymentResultListener result){sdk.submit(payload,result);}
+            public void submit(JSONObject payload,PaymentResultListener result) throws Exception {sdk.submit(payload,result);}
             public void activityResult(int request,int result,Intent data){sdk.onActivityResult(request,result,data);}
             public void back(){sdk.onBackPressed();}
         };
@@ -92,8 +92,10 @@ final class PlanUpiCheckout {
     }
     void open(String raw){
         if(order!=null){events.result(order,submitted?"SUBMITTED":"CHOOSING_APP","A checkout is already open. Finish or cancel it first.");return;}
+        String attemptOrder="";
         try {
             JSONObject input=new JSONObject(raw);
+            attemptOrder=input.optString("order_id","");
             String id=input.optString("order_id"),key=input.optString("key");
             if(!"SIDELOAD".equals(BuildConfig.BILLING_DISTRIBUTION) || !id.matches("order_[A-Za-z0-9]+") ||
                 !key.matches("rzp_(live|test)_[A-Za-z0-9]+") || input.optInt("amount")!=24900 || !"INR".equals(input.optString("currency")))
@@ -143,7 +145,7 @@ final class PlanUpiCheckout {
             });
         }catch(Exception e){
             if(order!=null)finish("SDK_UNAVAILABLE","UPI checkout could not start. Check payment status, then retry.");
-            else events.result("","SDK_UNAVAILABLE","The checkout session is incomplete. Refresh payment status and retry.");
+            else events.result(attemptOrder,"SDK_UNAVAILABLE","The checkout session is incomplete. Refresh payment status and retry.");
         }
     }
     private static String safeDescription(String text){

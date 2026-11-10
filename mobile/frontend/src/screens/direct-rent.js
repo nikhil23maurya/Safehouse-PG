@@ -44,7 +44,7 @@ export async function directRentScreen(ctx) {
         if(!ctx.native.has("openDirectOwnerUpi"))throw new Error("Open PGOne on your Android phone to pay with a UPI app.");
         if(!claim)await ctx.reload();
         ctx.native.call("openDirectOwnerUpi",fresh.intent);
-      } finally {opening=false;}
+      } catch(error) {opening=false;throw error;}
     },
     async submit(_name,form){await ctx.api(`/api/platform/rent/claims/${claim.id}/reference`,{method:"POST",body:{reference:formValues(form).reference.trim()}});
       ctx.markSaved();ctx.toast("Reference submitted. Your owner must verify the bank credit.");await ctx.reload();},

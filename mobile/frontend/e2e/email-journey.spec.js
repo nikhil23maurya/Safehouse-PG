@@ -52,7 +52,7 @@ test("recovery uses a neutral response and visibility control shows the password
   await page.getByRole("button",{name:"Show password",exact:true}).click();
   await expect(page.getByLabel("Password",{exact:true})).toHaveAttribute("type","text");
   await page.getByRole("button",{name:"Forgot password?"}).click();
-  await page.getByLabel("Email address").fill("unknown@example.test");
+  await page.locator("[data-form=forgotPassword] input[name=email]").fill("unknown@example.test");
   await page.getByRole("button",{name:"Send recovery link"}).click();
   await expect(page.locator('[data-recovery-status]')).toContainText("If this email has an eligible account");
 });

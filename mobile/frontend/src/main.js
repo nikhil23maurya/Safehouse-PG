@@ -724,6 +724,10 @@ async function render() {
   const seq = ++sequence;
   screen?.unmount?.();
   screen = null;
+  // During async route resolution, the previous form must not accept input
+  // that would be discarded when the destination screen replaces it.
+  if(document.getElementById("app").dataset.screen!==state.route.name)
+    document.querySelectorAll("#app input,#app button,#app select,#app textarea").forEach(el=>{el.disabled=true;});
   clearTimeout(loadingTimer);
   const snapshot = {
       ...state,
