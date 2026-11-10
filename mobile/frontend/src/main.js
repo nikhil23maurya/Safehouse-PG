@@ -1,3 +1,4 @@
+import {planCheckout} from "./payments/plan.js";
 import {
   state,
   currentPeriod,
@@ -199,6 +200,9 @@ function clearSession() {
   });
   dirty = false;
   onboarding.propertyKey = null;
+  onboarding.config = null;
+  onboarding.configFetchedAt = 0;
+  planCheckout.clear();
   onboarding.attempt = "";
   onboarding.exchangeAttempt = "";
   onboarding.sentAt = 0;
@@ -547,6 +551,12 @@ window.SafeHousePaymentError = () => {
   toast("Check payment status before trying again.");
   void payment.resume();
 };
+window.PGOnePlanPaymentResult=(order,status,message)=>{
+  const org=state.platform?.memberships?.find(m=>m.id===state.platform.membershipId)?.organisation;
+  if(state.tokens?.kind!=="PLATFORM" || !org || planCheckout.organisationId!==org.id)return;
+  if(planCheckout.receive(order,status,message))void screen?.onPlanResult?.();
+};
+window.PGOneDirectUpiResult=(opened,message)=>screen?.directUpiResult?.(opened,message);
 // The native Custom SDK returns a UPI-app result, never an entitlement.
 window.PGOnePlanPaymentError = (message) => {
   toast(message || "UPI checkout could not open. Check payment status before retrying.", "error");

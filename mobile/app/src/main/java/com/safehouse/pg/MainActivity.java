@@ -56,9 +56,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     private WebView webView;
     // Separate provider-owned WebView: never expose the app session JS bridge to a bank/payment page.
-    private WebView planPaymentWebView;
-    private Razorpay planCustomRazorpay;
-    private String planOrderId;
+    private PlanUpiCheckout planCheckout;
     private View splashView;
     private FrameLayout hostView;
     private SessionVault sessionVault;
@@ -91,6 +89,8 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         splashView = buildSplash();
         hostView.addView(splashView);
         setContentView(hostView);
+        planCheckout = new PlanUpiCheckout(this,hostView,(order,status,message) -> callJs(
+            "window.PGOnePlanPaymentResult && window.PGOnePlanPaymentResult("+q(order)+","+q(status)+","+q(message)+");"));
         hostView.setOnApplyWindowInsetsListener((view, insets) -> {
             if (Build.VERSION.SDK_INT >= 30) {
                 android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
@@ -150,6 +150,10 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                 if (!"appassets.androidplatform.net".equals(uri.getHost())) return null;
                 String path = uri.getPath();
                 if (!isAssetUri(uri) || path == null) return missingAsset();
+                if ("/assets/owner-rent-qr.png".equals(path)) {
+                    try {return new WebResourceResponse("image/png",null,200,"OK",java.util.Collections.singletonMap("Cache-Control","no-store"),new ByteArrayInputStream(DirectRentQr.png(uri.getQueryParameter("intent"))));}
+                    catch(Exception e){return missingAsset();}
+                }
                 if ("/assets/payment-qr.png".equals(path)) {
                     try {
                         ProviderQr.Prepared qr = providerQr.prepare(Uri.parse(uri.getQueryParameter("source")), Integer.parseInt(uri.getQueryParameter("amount")));
@@ -244,6 +248,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         if (registrationReceiverAdded) {
             try { unregisterReceiver(registrationReceiver); } catch (Exception ignored) {}
         }
+        if(planCheckout!=null)planCheckout.destroy();
         super.onDestroy();
     }
 
@@ -314,29 +319,9 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         callJs("window.SafeHousePaymentError && window.SafeHousePaymentError(" + q(message) + ");");
     }
 
-    private void closePlanPayment(String reason) {
-        String oldOrder = planOrderId;
-        planOrderId = null;
-        planCustomRazorpay = null;
-        if (planPaymentWebView != null) {
-            WebView view = planPaymentWebView;
-            planPaymentWebView = null;
-            hostView.removeView(view);
-            view.stopLoading();
-            view.destroy();
-        }
-        if (oldOrder != null) {
-            callJs("window.PGOnePlanPaymentResult && window.PGOnePlanPaymentResult(" +
-                q(oldOrder) + "," + q(reason) + ");");
-        }
-    }
-
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (planCustomRazorpay != null) {
-            planCustomRazorpay.onActivityResult(requestCode, resultCode, data);
-        }
+    @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
+        super.onActivityResult(requestCode,resultCode,data);
+        if(planCheckout!=null)planCheckout.activityResult(requestCode,resultCode,data);
     }
 
     private void callJs(String js) {
@@ -347,12 +332,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     @Override
     public void onBackPressed() {
-        if (planCustomRazorpay != null) {
-            // A bank/UPI authorization can be interrupted; always recheck the server.
-            try { planCustomRazorpay.onBackPressed(); } catch (Exception ignored) {}
-            closePlanPayment("CANCELLED_OR_UNKNOWN");
-            return;
-        }
+        if (planCheckout != null && planCheckout.back()) return;
         if (webView != null && pageReady) {
             webView.evaluateJavascript("Boolean(window.SafeHouseBack && window.SafeHouseBack())", handled -> { if (!"true".equals(handled)) finish(); });
         } else super.onBackPressed();
@@ -398,120 +378,27 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
             });
         }
 
-        /**
-         * PGOne's separate ₹249 fee, for internal/sideloaded testing APKs only.
-         * The custom SDK is used for UPI Intent; it shows installed UPI apps and
-         * launches the selected app for authorisation. Only backend captured
-         * payment reconciliation grants access; native result is not evidence.
-         */
-        @JavascriptInterface
-        public void openPlanRazorpayUpi(String optionsJson) {
-            runOnUiThread(() -> {
-                try {
-                    if (!"SIDELOAD".equals(BuildConfig.BILLING_DISTRIBUTION)) {
-                        throw new IllegalArgumentException("In-app UPI billing is disabled in Google Play production builds");
-                    }
-                    if (planCustomRazorpay != null) {
-                        throw new IllegalStateException("A ₹249 payment is already in progress");
-                    }
-                    JSONObject input = new JSONObject(optionsJson);
-                    String key = input.optString("key");
-                    String order = input.optString("order_id");
-                    String contact = input.optString("contact", "");
-                    String email = input.optString("email", "");
-                    if (!key.matches("rzp_(live|test)_[a-zA-Z0-9]+") ||
-                        !order.matches("order_[a-zA-Z0-9]+") ||
-                        input.optInt("amount") != 24900 ||
-                        !"INR".equals(input.optString("currency")) ||
-                        (!contact.isEmpty() && !contact.matches("\\+91[6-9][0-9]{9}"))) {
-                        throw new IllegalArgumentException("Payment session is incomplete");
-                    }
-                    planOrderId = order;
-                    planPaymentWebView = new WebView(MainActivity.this);
-                    planPaymentWebView.setBackgroundColor(Color.WHITE);
-                    planPaymentWebView.getSettings().setJavaScriptEnabled(true);
-                    planPaymentWebView.getSettings().setDomStorageEnabled(true);
-                    planPaymentWebView.getSettings().setAllowFileAccess(false);
-                    planPaymentWebView.getSettings().setAllowContentAccess(false);
-                    planPaymentWebView.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
-                    hostView.addView(planPaymentWebView,
-                        new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-                    planCustomRazorpay = new Razorpay(MainActivity.this, key);
-                    planCustomRazorpay.setWebView(planPaymentWebView);
-                    JSONObject payload = new JSONObject();
-                    payload.put("key", key);
-                    payload.put("order_id", order);
-                    payload.put("amount", 24900);
-                    payload.put("currency", "INR");
-                    payload.put("method", "upi");
-                    payload.put("_[flow]", "intent");
-                    payload.put("description", "PGOne monthly workspace access");
-                    if (!contact.isEmpty()) payload.put("contact", contact);
-                    if (!email.isEmpty()) payload.put("email", email);
-                    final boolean[] discoveryFinished = {false};
-                    planPaymentWebView.postDelayed(() -> {
-                        if (!discoveryFinished[0] && order.equals(planOrderId)) {
-                            closePlanPayment("APP_DISCOVERY_TIMEOUT");
-                            Toast.makeText(MainActivity.this,"UPI app discovery timed out. Check your connection and payment status before retrying.",Toast.LENGTH_LONG).show();
-                        }
-                    },15000);
-                    Razorpay.getAppsWhichSupportUpi(MainActivity.this, new com.razorpay.RzpUpiSupportedAppsCallback() {
-                        @Override public void onReceiveUpiSupportedApps(java.util.List<com.razorpay.ApplicationDetails> discovered) {
-                            runOnUiThread(() -> {
-                                discoveryFinished[0] = true;
-                                if (!order.equals(planOrderId) || planCustomRazorpay == null) return;
-                                java.util.ArrayList<com.razorpay.ApplicationDetails> apps = new java.util.ArrayList<>();
-                                java.util.HashSet<String> packages = new java.util.HashSet<>();
-                                if (discovered != null) for (com.razorpay.ApplicationDetails app : discovered) {
-                                    String name=app.getPackageName();
-                                    if(name!=null && name.matches("[a-zA-Z0-9_.]+") && packages.add(name)) apps.add(app);
-                                }
-                                if (apps.isEmpty()) {
-                                    closePlanPayment("NO_SUPPORTED_APP");
-                                    Toast.makeText(MainActivity.this,"No supported UPI app was detected. Install or enable a UPI app, then check payment status before retrying.",Toast.LENGTH_LONG).show();
-                                    return;
-                                }
-                                String[] labels=new String[apps.size()];
-                                for(int i=0;i<apps.size();i++) labels[i]=apps.get(i).getAppName();
-                                new android.app.AlertDialog.Builder(MainActivity.this)
-                                    .setTitle("PGOne · Pay INR 249")
-                                    .setItems(labels,(dialog,which)->{
-                                        if(!order.equals(planOrderId) || planCustomRazorpay==null)return;
-                                        try {
-                                            payload.put("upi_app_package_name",apps.get(which).getPackageName());
-                                            planCustomRazorpay.submit(payload,new PaymentResultListener(){
-                                                @Override public void onPaymentSuccess(String ignoredPaymentId){runOnUiThread(()->closePlanPayment("RETURNED_CHECK_PROVIDER"));}
-                                                @Override public void onPaymentError(int code,String description){runOnUiThread(()->closePlanPayment("FAILED_OR_UNKNOWN_CHECK_PROVIDER"));}
-                                            });
-                                        } catch(Exception error){closePlanPayment("SDK_UNAVAILABLE");}
-                                    })
-                                    .setNegativeButton("Cancel",(dialog,which)->closePlanPayment("CANCELLED_CHECK_PROVIDER"))
-                                    .setOnCancelListener(dialog->closePlanPayment("CANCELLED_CHECK_PROVIDER"))
-                                    .show();
-                            });
-                        }
-                    });
-                } catch (Exception ignored) {
-                    closePlanPayment("SDK_UNAVAILABLE");
-                    callJs("window.PGOnePlanPaymentError && window.PGOnePlanPaymentError(" +
-                        q("Razorpay UPI checkout could not open. Check activation before paying again.") + ");");
-                }
-            });
+        @JavascriptInterface public void openPlanRazorpayUpi(String raw){runOnUiThread(()->planCheckout.open(raw));}
+        @JavascriptInterface public String getPlanPaymentState(){return planCheckout==null?"{}":planCheckout.snapshot();}
+        @JavascriptInterface public String directRentQrImageUrl(String uri){
+            try{DirectRentQr.validate(uri);return Uri.parse("https://appassets.androidplatform.net/assets/owner-rent-qr.png").buildUpon().appendQueryParameter("intent",uri).build().toString();}
+            catch(Exception e){return "";}
         }
-
-        @JavascriptInterface public void openDirectOwnerUpi(String uri) { runOnUiThread(() -> {
-            try {
-                Uri target=Uri.parse(uri);
-                String address=target.getQueryParameter("pa"), amount=target.getQueryParameter("am");
-                if (!"upi".equals(target.getScheme()) || !"pay".equals(target.getHost()) ||
-                    address==null || !address.matches("[a-zA-Z0-9._-]{2,128}@[a-zA-Z0-9.-]{2,64}") ||
-                    amount==null || !amount.matches("[0-9]{1,9}\\.[0-9]{2}") || !"INR".equals(target.getQueryParameter("cu")))
-                    throw new IllegalArgumentException("Invalid owner payment details");
-                Intent intent=new Intent(Intent.ACTION_VIEW,target);
-                if (intent.resolveActivity(getPackageManager())==null) throw new ActivityNotFoundException();
+        @JavascriptInterface public void saveDirectRentQr(String uri){
+            if(Build.VERSION.SDK_INT<=28 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)!=PackageManager.PERMISSION_GRANTED){
+                runOnUiThread(()->{requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE},9422);Toast.makeText(MainActivity.this,"Allow storage access, then save again",Toast.LENGTH_LONG).show();});return;
+            }
+            new Thread(()->{try{QrDownloads.save(MainActivity.this,DirectRentQr.png(uri));runOnUiThread(()->Toast.makeText(MainActivity.this,"QR saved to Pictures / PGOne",Toast.LENGTH_LONG).show());}
+              catch(Exception e){runOnUiThread(()->Toast.makeText(MainActivity.this,"QR could not be saved",Toast.LENGTH_LONG).show());}}).start();
+        }
+        @JavascriptInterface public void openDirectOwnerUpi(String uri){runOnUiThread(()->{
+            try{
+                Intent intent=new Intent(Intent.ACTION_VIEW,DirectRentQr.validate(uri));
+                if(getPackageManager().queryIntentActivities(intent,PackageManager.MATCH_DEFAULT_ONLY).isEmpty())throw new ActivityNotFoundException();
                 startActivity(Intent.createChooser(intent,"Pay your PG owner"));
-            } catch(Exception error) { Toast.makeText(MainActivity.this,"No supported UPI app is available. Use the owner's UPI address in your payment app.",Toast.LENGTH_LONG).show(); }
-        }); }
+                callJs("window.PGOneDirectUpiResult && window.PGOneDirectUpiResult(true,'');");
+            }catch(Exception e){callJs("window.PGOneDirectUpiResult && window.PGOneDirectUpiResult(false,"+q("No compatible UPI app could open. You can use the optional QR or your owner's UPI address.")+");");}
+        });}
 
         @JavascriptInterface public void openExternal(String url) { runOnUiThread(() -> MainActivity.this.openExternal(url)); }
 

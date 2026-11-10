@@ -2,14 +2,17 @@ export const onboarding = {
   config: null,
   intent: "OWNER",
   propertyKey: null,
+  configFetchedAt: 0,
 };
-export async function platformConfig(ctx) {
-  if (onboarding.config) return onboarding.config;
+export async function platformConfig(ctx, {force=false} = {}) {
+  if (!force && onboarding.config && Date.now()-onboarding.configFetchedAt<30000) return onboarding.config;
   try {
-    return (onboarding.config = await ctx.api(
+    const value = await ctx.api(
       `/api/platform/config?package=${encodeURIComponent(ctx.native.call("getPackageId") || "web")}&distribution=${encodeURIComponent(ctx.native.call("getBillingDistribution") || "CONSUMPTION_ONLY")}`,
       { public: true, timeout: 10000 },
-    ));
+    );
+    onboarding.configFetchedAt = Date.now();
+    return (onboarding.config = value);
   } catch {
     return { enabled: false, phone: null, legal: {}, unavailable: true };
   }

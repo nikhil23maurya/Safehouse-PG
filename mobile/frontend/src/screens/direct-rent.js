@@ -6,18 +6,46 @@ import {requestId} from "../platform/client.js";
 export async function directRentScreen(ctx) {
   const id=ctx.params.invoiceId || ctx.params.id;
   if(!id)throw new Error("Open a rent invoice first.");
-  const data=await ctx.api(`/api/platform/rent/invoices/${encodeURIComponent(id)}`,{method:"POST",body:{key:requestId()}});
-  const claim=data.claim,confirmed=claim.status==="OWNER_CONFIRMED";
-  let opened=false;
+  const data=await ctx.api(`/api/platform/rent/invoices/${encodeURIComponent(id)}`);
+  const claim=data.claim,confirmed=claim?.status==="OWNER_CONFIRMED";
+  const canPay=data.canPrepare || data.payable;
+  let opening=false,opened=false;
+  const qr=data.intent?ctx.native.call("directRentQrImageUrl",data.intent):"";
+  const status=(message)=>{const el=document.querySelector('[data-direct-upi-status]');if(el)el.textContent=message;};
+  const prepare=async()=>{
+    const fresh=await ctx.api(`/api/platform/rent/invoices/${encodeURIComponent(id)}`,{method:"POST",body:{key:requestId()}});
+    if(!fresh.payable||!fresh.intent)throw new Error(fresh.issue||"This request is not payable. Refresh its status.");
+    return fresh;
+  };
   return {title:"Pay your owner",back:true,nav:false,
-    content:heading("DIRECT OWNER PAYMENT","Your rent. Your owner's account.","This is a direct bank transfer. PGOne does not verify it through Razorpay.")+
-      card(`<h2>${money(claim.amountPaise)}</h2><dl><dt>Payee supplied by owner</dt><dd>${esc(claim.payeeName)}</dd><dt>UPI address</dt><dd>${esc(claim.payeeAddress)}</dd><dt>PGOne reference</dt><dd>${esc(claim.reference)}</dd></dl>${badge(confirmed?"OWNER CONFIRMED":"PENDING OWNER CONFIRMATION")}`)+
-      notice("Check the payee shown inside your UPI app before approving. Returning to PGOne or submitting a bank reference does not mark rent paid. If you already transferred rent, do not pay again.")+
-      (!confirmed&&!claim.bankReference?button("Open UPI app",{action:"directUpi",kind:"primary block"}):"")+
-      (!confirmed?`<form data-form="directReference" novalidate><div class="form-error" role="alert"></div>${field("reference","Bank transaction reference",{required:true,value:claim.bankReference||"",help:"Copy the UTR/reference from your bank. Never enter a UPI PIN.",attrs:'minlength="6" maxlength="40" autocomplete="off"'})}${button("Submit for owner review",{type:"submit",kind:"secondary block"})}</form>`:button("View rent history",{route:"history",kind:"primary block"})),
-    async action(name){if(name!=="directUpi")return;if(opened)throw new Error("Check your bank before making another transfer.");
-      if(!ctx.native.has("openDirectOwnerUpi"))throw new Error("Open PGOne on your Android phone, or use the owner's UPI address in your payment app.");
-      opened=true;ctx.native.call("openDirectOwnerUpi",data.intent);},
+    content:heading("RENT PAYMENT","Pay your PG owner.","Approve payment securely in your UPI app. Your owner confirms the bank credit.")+
+      card(`<h2>${money(data.remainingPaise)}</h2>${claim?`<dl><dt>Payee supplied by owner</dt><dd>${esc(claim.payeeName)}</dd><dt>UPI address</dt><dd>${esc(claim.payeeAddress)}</dd><dt>Payment reference</dt><dd>${esc(claim.reference)}</dd></dl>${badge(confirmed?"OWNER CONFIRMED":"OWNER CONFIRMATION REQUIRED")}`:""}`)+
+      (data.issue?notice(data.issue):!data.ownerConfigured&&!data.settled?notice("Your owner has not set up rent collection yet. Ask your owner to add their rent-receiving UPI address."):"")+
+      (data.settled?notice(confirmed?"Your owner confirmed this rent payment.":"This invoice has no outstanding balance."):notice("Check the payee and amount in your UPI app. Returning here does not mark rent paid. If money was debited, do not pay again."))+
+      (canPay?button("Pay with UPI app",{action:"directUpi",kind:"primary block"}):"")+
+      `<p data-direct-upi-status role="status" aria-live="polite"></p>`+
+      (canPay?button("Pay from another phone · show QR",{action:"directQr",kind:"text-button block"}):"")+
+      `<section data-direct-qr ${ctx.params.qr&&qr?"":"hidden"}>${qr?`<img src="${esc(qr)}" alt="Rent QR for your owner's UPI address" style="display:block;width:min(100%,280px);aspect-ratio:1;margin:16px auto;background:white"><p class="subtitle">Owner UPI transfer · bank confirmation required</p>${button("Save QR",{action:"saveDirectQr",kind:"secondary block"})}`:""}</section>`+
+      (claim&&!confirmed?`<form data-form="directReference" novalidate><div class="form-error" role="alert"></div>${field("reference","Bank transaction reference",{required:true,value:claim.bankReference||"",help:"After paying, copy the bank UTR/reference. Never enter a UPI PIN.",attrs:'minlength="6" maxlength="40" autocomplete="off"'})}${button("Submit for owner review",{type:"submit",kind:"secondary block"})}</form>`:"")+
+      button("Refresh payment status",{action:"refreshDirect",kind:"secondary block"})+
+      (data.settled?button("View rent history",{route:"history",kind:"secondary block"}):""),
+    directUpiResult(success,message){opening=false;opened=success;status(message||(success?"UPI app opened. If money was debited, submit the bank reference below; do not pay again.":"The UPI app did not open. Retry or use the optional QR."));},
+    async action(name){
+      if(name==="refreshDirect")return ctx.reload();
+      if(name==="saveDirectQr")return ctx.native.call("saveDirectRentQr",data.intent);
+      if(name!=="directUpi"&&name!=="directQr")return;
+      if(opening)return;
+      if(opened && !(await ctx.confirm({title:"Check your bank first",message:"Continue only if the earlier UPI attempt was cancelled and no money was debited. A pending debit must be checked with your owner.",confirmLabel:"No debit — retry"})))return;
+      opening=true;
+      try {
+        document.querySelector('[data-direct-qr]')?.setAttribute("hidden","");
+        const fresh=await prepare();
+        if(name==="directQr")return ctx.navigate("payment",{invoiceId:id,qr:true},{replace:true,force:true});
+        if(!ctx.native.has("openDirectOwnerUpi"))throw new Error("Open PGOne on your Android phone to pay with a UPI app.");
+        if(!claim)await ctx.reload();
+        ctx.native.call("openDirectOwnerUpi",fresh.intent);
+      } finally {opening=false;}
+    },
     async submit(_name,form){await ctx.api(`/api/platform/rent/claims/${claim.id}/reference`,{method:"POST",body:{reference:formValues(form).reference.trim()}});
       ctx.markSaved();ctx.toast("Reference submitted. Your owner must verify the bank credit.");await ctx.reload();},
   };

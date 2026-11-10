@@ -10,7 +10,7 @@ between('app.post("/api/platform-webhooks/merchant"','app.use(express.json',
 source=source.replace('app.use("/billing", billingWebRouter);','app.use("/billing", billingWebRouter);\napp.use("/account", accountWebRouter);');
 source=source.replaceAll('Cashfree','provider');
 between('app.post("/api/auth/login",','app.post("/api/auth/refresh"',
-  'app.post("/api/auth/login", loginLimiter, emailLoginHandler);\n\n');
+  'app.post("/api/auth/login", loginLimiter, (_req,_res)=>{throw new AppError(426,"APP_UPDATE_REQUIRED","Install the current PGOne app and sign in with email and password.");});\n\n');
 between('app.post("/api/auth/refresh"','app.get("/api/auth/me"',
   'app.post("/api/auth/refresh", loginLimiter, legacyRefreshHandler);\n\n');
 source=source.replace('tempPassword: z.string().min(8).max(128),','tempPassword: z.string().min(8).max(128).optional(),');
@@ -19,4 +19,5 @@ source=source.replace('const passwordHash = await hashPassword(input.tempPasswor
 source=source.replace('role: "STUDENT", mustChangePassword: true','role: "STUDENT", mustChangePassword: false');
 between('owner.post("/students/:id/reset-password"','owner.get("/rooms"',
   'owner.post("/students/:id/reset-password", (_req,_res) => { throw new AppError(410,"PRIVATE_ACCOUNT_RECOVERY","Residents control their passwords. Use an email invitation or Forgot Password."); });\n\n');
+source=source.replace('await bootstrapOwner();','if (process.env.PGONE_PLATFORM_ENABLED !== \"true\") await bootstrapOwner(); // Fresh platform signup never creates a fixed bootstrap owner.');
 fs.writeFileSync(path,source);

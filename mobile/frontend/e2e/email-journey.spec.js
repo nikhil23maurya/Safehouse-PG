@@ -41,7 +41,7 @@ test("one PG, unpaid route denial and server-confirmed entitlement through nativ
   await forceRoute(page,"merchant");await expect(page).toHaveURL(/#subscription$/);
   await page.getByRole("button",{name:"Pay ₹249 securely with UPI"}).click();
   await expect.poll(()=>page.evaluate(()=>window.__lastPlanOptions)).toMatchObject({amount:24900,currency:"INR",email:"rahul@example.test",order_id:"order_SYNTHETIC001"});
-  expect(await page.evaluate(()=>window.__lastPlanOptions.contact)).toBeUndefined();
+  expect(await page.evaluate(()=>window.__lastPlanOptions.contact)).toBe("");
   await page.evaluate(()=>window.PGOnePlanPaymentResult("order_SYNTHETIC001","RETURNED_CHECK_PROVIDER"));
   await expect(page).toHaveURL(/#subscription$/);expect(fixture.entitled).toBe(false);
   fixture.activatePaid();await page.getByRole("button",{name:"Check payment status"}).click();
@@ -78,4 +78,28 @@ test("email screens fit supported mobile widths",async({page})=>{
   for(const width of [360,393,412,600]){await page.setViewportSize({width,height:852});await noOverflow(page);await page.screenshot({path:`visual-evidence/email-journey/login-${width}.png`,fullPage:true});}
   await page.getByRole("button",{name:"New to PGOne? Create account"}).click();
   await page.screenshot({path:'visual-evidence/email-journey/signup.png',fullPage:true});await noOverflow(page);
+});
+
+
+test("native checkout failure survives navigation and does not unlock owner access",async({page})=>{
+  const fixture=await platform(page,{billing:true});await createOwnerProperty(page);
+  await page.getByRole("button",{name:"Pay ₹249 securely with UPI"}).click();
+  await expect(page.locator('[data-plan-checkout-status]')).toContainText("Finding");
+  await forceRoute(page,"workspaces");
+  await page.evaluate(()=>window.PGOnePlanPaymentResult("order_SYNTHETIC001","NO_SUPPORTED_APP","Razorpay did not return a supported UPI app. No payment was submitted."));
+  await forceRoute(page,"subscription");
+  await expect(page.locator('[data-plan-checkout-status]')).toContainText("No payment was submitted");
+  await expect(page.getByRole("button",{name:"Pay ₹249 securely with UPI"})).toBeEnabled();
+  expect(fixture.entitled).toBe(false);
+  await page.getByRole("button",{name:"Pay ₹249 securely with UPI"}).click();
+  await expect(page.locator('[data-plan-checkout-status]')).toContainText("Finding");
+  expect(fixture.entitled).toBe(false);
+});
+
+test("disabled recovery does not promise to send an email",async({page})=>{
+  await platform(page);
+  await page.route('**/api/platform/config?**',route=>route.fulfill({json:{enabled:true,recoveryAvailable:false,authentication:'EMAIL_PASSWORD'}}));
+  await page.getByRole('button',{name:'Forgot password?'}).click();
+  await expect(page.getByRole('heading',{name:'Password recovery is unavailable.'})).toBeVisible();
+  await expect(page.getByRole('button',{name:'Send recovery link'})).toHaveCount(0);
 });
