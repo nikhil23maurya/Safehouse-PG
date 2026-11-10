@@ -16,6 +16,7 @@ between('app.post("/api/auth/refresh"','app.get("/api/auth/me"',
 source=source.replace('tempPassword: z.string().min(8).max(128),','tempPassword: z.string().min(8).max(128).optional(),');
 source=source.replace('const passwordHash = await hashPassword(input.tempPassword);',
   'const passwordHash = null; // Residents choose credentials privately through email registration.');
+source=source.replace('role: "STUDENT", mustChangePassword: true','role: "STUDENT", mustChangePassword: false');
 between('owner.post("/students/:id/reset-password"','owner.get("/rooms"',
   'owner.post("/students/:id/reset-password", (_req,_res) => { throw new AppError(410,"PRIVATE_ACCOUNT_RECOVERY","Residents control their passwords. Use an email invitation or Forgot Password."); });\n\n');
 fs.writeFileSync(path,source);
