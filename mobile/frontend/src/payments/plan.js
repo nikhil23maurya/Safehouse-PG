@@ -17,9 +17,9 @@ const messages = {
   SDK_UNAVAILABLE: "UPI checkout could not start. Check payment status, then retry.",
 };
 export const planCheckout = {
-  orderId: null, organisationId: null, status: null, message: "", busy: false,
+  orderId: null, organisationId: null, status: null, message: "", busy: false, checkedOrder:null,receipt:null,
   begin(organisationId, orderId) {
-    Object.assign(this, {organisationId, orderId, status:"DISCOVERING", message:messages.DISCOVERING, busy:true});
+    Object.assign(this, {organisationId, orderId, status:"DISCOVERING", message:messages.DISCOVERING, busy:true,checkedOrder:null,receipt:null});
   },
   receive(orderId, status, detail = "") {
     if (this.orderId && this.orderId !== orderId) return false;
@@ -38,5 +38,5 @@ export const planCheckout = {
       }
     } catch { /* A missing native snapshot does not change server payment state. */ }
   },
-  clear() { Object.assign(this,{orderId:null,organisationId:null,status:null,message:"",busy:false}); },
+  clear() { Object.assign(this,{orderId:null,organisationId:null,status:null,message:"",busy:false,checkedOrder:null,receipt:null}); },
 };

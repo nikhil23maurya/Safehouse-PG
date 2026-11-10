@@ -4,19 +4,31 @@ import fs from "node:fs/promises";
 
 export async function platform(page, { billing = false } = {}) {
   await page.addInitScript((enableBilling) => {
-    window.__platformVault = null;
+    window.__platformVault = JSON.parse(sessionStorage.getItem("synthetic-vault")||"null");
+    window.__planState=JSON.parse(sessionStorage.getItem("synthetic-plan")||"null");
     window.__phoneSends = 0;
     window.SafeHouseNative = {
       getPackageId: () => "com.safehouse.pg.testing",
       ready: () => {},
+      getPlanPaymentState:()=>JSON.stringify(window.__planState||{}),
+      acknowledgePlanPayment:()=>{window.__planState=null;sessionStorage.removeItem("synthetic-plan");},
       getSession: () =>
         window.__platformVault ? JSON.stringify(window.__platformVault) : null,
       saveSession: (raw) => {
         window.__platformVault = raw ? JSON.parse(raw) : null;
+        sessionStorage.setItem("synthetic-vault",JSON.stringify(window.__platformVault));
         return true;
       },
       ...(enableBilling ? { openPlanRazorpayUpi: (raw) => {
+        if(!window.__nativeCallbackWrapped){
+          const callback=window.PGOnePlanPaymentResult;
+          window.PGOnePlanPaymentResult=(order,status,message)=>{
+            window.__planState={...window.__planState,orderId:order,status,message};
+            sessionStorage.setItem("synthetic-plan",JSON.stringify(window.__planState));callback(order,status,message);
+          };window.__nativeCallbackWrapped=true;
+        }
         window.__lastPlanOptions = JSON.parse(raw);
+        window.__planState={organisationId:window.__lastPlanOptions.organisationId,orderId:window.__lastPlanOptions.order_id,status:"DISCOVERING"};
       } } : {}),
     };
   }, billing);
@@ -34,6 +46,7 @@ export async function platform(page, { billing = false } = {}) {
   let selected = null;
   let propertiesCreated = 0;
   let paid = false;
+  let exactCaptured=true;
   const tokens = () => ({
     kind: "PLATFORM",
     accessToken: `pg1.test.${selected || "account"}`,
@@ -49,7 +62,7 @@ export async function platform(page, { billing = false } = {}) {
       id: "owner1",
       fullName: account.fullName,
       email: account.email,
-      role: selected ? "OWNER" : "ACCOUNT",
+      role: selected ? (memberships[0].role==="RESIDENT"?"STUDENT":"OWNER") : "ACCOUNT",
       mustChangePassword: false,
     },
   });
@@ -71,6 +84,11 @@ export async function platform(page, { billing = false } = {}) {
     else if (path.endsWith("/forgot-password")) data={ok:true,message:"If this email has an eligible account, a recovery link will arrive shortly."};
     else if (path.endsWith("/logout")) data={ok:true};
     else if (path.endsWith("/session")) data = snapshot();
+    else if(path.endsWith("/onboarding-intent")){account.setupIntent=body.intent;data={ok:true};}
+    else if(path.endsWith("/join")){
+      if(body.code!=="ABCD-EFGH-JKLM")return route.fulfill({status:404,json:{error:{code:"PG_CODE_UNAVAILABLE",message:"Invalid PG code."}}});
+      memberships.push({id:"resident-membership",role:"RESIDENT",organisation:{id:"joined-org",name:"Resident PG",legacyAccess:false},property:{id:"joined-property",name:"Resident PG",timezone:"Asia/Kolkata",currency:"INR"}});selected="resident-membership";data={tokens:tokens(),joined:true};
+    }
     else if (path.endsWith("/profile")) {
       Object.assign(account, {
         fullName: body.fullName,
@@ -123,6 +141,8 @@ export async function platform(page, { billing = false } = {}) {
           "Online payment setup is awaiting payment-provider activation.",
         onboardingAvailable: false,
       };
+    else if(path.endsWith("/state")&&path.includes("/plan/orders/"))data={orderId:"order_SYNTHETIC001",captured:paid&&exactCaptured,status:paid&&exactCaptured?"CAPTURED":"VERIFYING",receipt:paid&&exactCaptured?{id:"synthetic-receipt",number:"SYNTHETIC-249",amountPaise:24900,paidAt:"2026-11-10T10:00:00Z",periodEnd:"2026-12-10T10:00:00Z"}:null};
+    else if(path.endsWith("/join-code"))data={code:"ABCD-EFGH-JKLM",enabled:true,revision:1};
     else if (path.endsWith("/members")) data = { members: [] };
     else if (path.endsWith("/invitations")) data = { invitations: [] };
     else
@@ -157,6 +177,7 @@ export async function platform(page, { billing = false } = {}) {
       return propertiesCreated;
     },
     activatePaid() { paid = true; },
+    setOrderCaptured(value){exactCaptured=value;},
     get entitled() { return paid; },
   };
 }

@@ -380,6 +380,15 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
         @JavascriptInterface public void openPlanRazorpayUpi(String raw){runOnUiThread(()->planCheckout.open(raw));}
         @JavascriptInterface public String getPlanPaymentState(){return planCheckout==null?"{}":planCheckout.snapshot();}
+        @JavascriptInterface public void acknowledgePlanPayment(String id){runOnUiThread(()->{if(planCheckout!=null)planCheckout.acknowledge(id);});}
+        @JavascriptInterface public void copyPgCode(String code){
+            if(code==null||!code.matches("[A-HJ-NP-Z2-9]{4}(-[A-HJ-NP-Z2-9]{4}){2}"))return;
+            runOnUiThread(()->((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("PGOne PG code",code)));
+        }
+        @JavascriptInterface public void sharePgCode(String name,String code){
+            if(name==null||name.length()>120||code==null||!code.matches("[A-HJ-NP-Z2-9]{4}(-[A-HJ-NP-Z2-9]{4}){2}"))return;
+            runOnUiThread(()->{Intent send=new Intent(Intent.ACTION_SEND);send.setType("text/plain");send.putExtra(Intent.EXTRA_TEXT,"Join "+name+" on PGOne. PG code: "+code);startActivity(Intent.createChooser(send,"Share PG code"));});
+        }
         @JavascriptInterface public String directRentQrImageUrl(String uri){
             try{DirectRentQr.validate(uri);return Uri.parse("https://appassets.androidplatform.net/assets/owner-rent-qr.png").buildUpon().appendQueryParameter("intent",uri).build().toString();}
             catch(Exception e){return "";}

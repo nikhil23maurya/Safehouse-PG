@@ -1,8 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PGOne icon">
-<path d="M5 30.1 30.1 8.3a7.5 7.5 0 0 1 9.8 0L59 24.8v11.1L35 15.7 15.2 32.8V59H5Z" fill="#0B2148"/>
-<path d="M15.2 33 35 15.7l24 20.2V52a7 7 0 0 1-7 7H41V45h4V37.5c0-4.9-3.6-8.2-8.8-8.2H31V59H15.2Z" fill="#2056EF"/>
-<path d="M31 29.3h5.2c5.2 0 8.8 3.3 8.8 8.2V45h-4V39c0-2.2-1.5-3.8-3.8-3.8H31Z" fill="#0B2148"/>
-<path d="M23 59V37.2l8-7.9V59Z" fill="#FFF"/>
-<rect x="30.3" y="21.3" width="4" height="4" rx=".7" fill="white"/>
-<rect x="36.2" y="21.3" width="4" height="4" rx=".7" fill="white"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="PGOne"><path d="M10 56V18L20 8H44L54 18V36L44 46H26V56Z M26 20V34H38L42 30V24L38 20Z" fill="#2056EF" fill-rule="evenodd"/><path d="M26 34H38V46H26Z" fill="#0B2148"/></svg>

@@ -5,7 +5,9 @@ import { entitlement } from "./billing.js";
 export async function journey(account:{id:string;fullName:string;setupIntent:string|null;passwordChangeRequired:boolean},
   membership:{role:string;organisationId:string}|null) {
   if(account.passwordChangeRequired)return {state:"PASSWORD_CHANGE_REQUIRED",screen:"password"};
-  if(!account.fullName.trim())return {state:account.setupIntent?"PROFILE_REQUIRED":"ACCOUNT_CREATED",screen:"chooseRole"};
+  if(membership?.role==="RESIDENT")return {state:"MEMBERSHIP_ACTIVE",screen:"studentHome"};
+  if(!account.fullName.trim())return {state:account.setupIntent?"PROFILE_REQUIRED":"ACCOUNT_CREATED",
+    screen:account.setupIntent==="OWNER"?"setupProfile":account.setupIntent==="RESIDENT"?"joinWorkspace":"chooseRole"};
   if(!membership){const count=await prisma.pgMembership.count({where:{accountId:account.id,status:"ACTIVE"}});
     return count?{state:"WORKSPACE_REQUIRED",screen:"workspaces"}:{state:"PROPERTY_REQUIRED",screen:account.setupIntent==="OWNER"?"setupProperty":"joinWorkspace"};}
   if(membership.role!=="OWNER")return {state:"MEMBERSHIP_ACTIVE",screen:membership.role==="RESIDENT"?"studentHome":"staffHome"};

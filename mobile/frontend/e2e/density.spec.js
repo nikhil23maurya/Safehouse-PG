@@ -23,9 +23,7 @@ for(const [width,height] of [[360,640],[393,786],[412,840]]){
     await page.getByLabel('Password',{exact:true}).fill('A long private password!');
     await page.getByLabel('Confirm password',{exact:true}).fill('A long private password!');
     await page.getByRole('button',{name:'Create account',exact:true}).click();
-    await expect(page).toHaveURL(/#chooseRole$/);
-    await fits(page,page.getByRole('button',{name:/I work at a PG/}),`roles-${width}`);
-    await page.getByRole('button',{name:/I manage a PG/}).click();
+    await expect(page).toHaveURL(/#setupProfile$/);
     await fits(page,page.getByRole('button',{name:'Continue',exact:true}),`profile-${width}`);
     await page.getByLabel('Full name').fill('Rahul Sharma');
     await page.getByRole('button',{name:'Continue',exact:true}).click();
@@ -35,12 +33,12 @@ for(const [width,height] of [[360,640],[393,786],[412,840]]){
     await page.getByLabel('City',{exact:true}).fill('Bengaluru');
     await page.getByRole('button',{name:'Create my PG'}).click();
     await expect(page).toHaveURL(/#subscription$/);
-    await fits(page,page.getByRole('button',{name:'Pay ₹249 securely with UPI'}),`plan-${width}`);
-    const details=page.locator('details').filter({has:page.locator('summary', {hasText:'Plan & payment details'})});
+    await fits(page,page.getByRole('button',{name:'Pay ₹249 with UPI'}),`plan-${width}`);
+    const details=page.locator('details').filter({has:page.locator('summary', {hasText:'Plan and receipts'})});
     await expect(details).not.toHaveAttribute('open','');
     await details.locator('summary').click();
     await expect(details).toContainText('₹249 total');
-    await expect(details).toContainText('If debited');
+    await expect(details).toContainText('Renew manually');
     await noOverflow(page);
   });
 }
@@ -48,8 +46,8 @@ test('welcome fits a short phone; larger text remains scrollable and reachable',
   await page.setViewportSize({width:360,height:640});
   await page.route('**/api/platform/config**',route=>route.fulfill({json:{enabled:true,authentication:'EMAIL_PASSWORD'}}));
   await page.goto('/');
-  await fits(page,page.getByRole('button',{name:'Sign in',exact:true}),'welcome-360');
-  await page.getByRole('button',{name:'Create account',exact:true}).click();
+  await fits(page,page.getByRole('button',{name:"I'm a Resident",exact:false}),'welcome-360');
+  await page.locator('[data-action=entry][data-role=OWNER]').click();
   await page.addStyleTag({content:'html { font-size: 24px; } .royal-page * { font-size: max(1em, 18px); }'});
   const submit=page.getByRole('button',{name:'Create account',exact:true});
   await submit.scrollIntoViewIfNeeded();

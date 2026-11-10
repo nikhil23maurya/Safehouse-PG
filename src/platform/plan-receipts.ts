@@ -1,3 +1,4 @@
+import {markPath,markFold} from "./brand.js";
 import type {Response} from "express";
 import PDFDocument from "pdfkit";
 import {prisma} from "../db.js";
@@ -10,7 +11,8 @@ export async function planReceipt(accountId:string,organisationId:string,receipt
   res.setHeader("Cache-Control","no-store");res.setHeader("Content-Type","application/pdf");
   res.setHeader("Content-Disposition",`attachment; filename="${receipt.receiptNumber}.pdf"`);
   const doc=new PDFDocument({size:"A4",margin:48});doc.pipe(res);
-  doc.fillColor("#10378b").fontSize(25).text("PGOne");doc.fillColor("#15213a").fontSize(16).text("Monthly access payment receipt");doc.moveDown();
+  doc.save().translate(44,42).scale(.5).path(markPath).fill("#2056EF").path(markFold).fill("#0B2148").restore();
+  doc.fillColor("#0B2148").font("Helvetica-Bold").fontSize(25).text("PGOne",84,48);doc.font("Helvetica").moveDown();doc.fillColor("#15213a").fontSize(16).text("Monthly access payment receipt");doc.moveDown();
   const date=(value:Date)=>value.toLocaleString("en-IN",{timeZone:"Asia/Kolkata"});
   const rows=[["Receipt",receipt.receiptNumber],["Organisation",org.name],["Payment",receipt.providerPaymentId],
     ["Paid",date(receipt.paidAt)],["Total",`INR ${(receipt.amountPaise/100).toFixed(2)}`],

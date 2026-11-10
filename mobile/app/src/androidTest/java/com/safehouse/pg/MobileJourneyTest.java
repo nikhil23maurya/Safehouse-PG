@@ -159,7 +159,8 @@ public class MobileJourneyTest {
         instrumentation.runOnMainSync(() -> web = findWeb(activity.getWindow().getDecorView()));
         assertNotNull("WebView did not initialize", web);
         ((MainActivity)activity).providerQr = new ProviderQr(uri -> QrTestImages.poster(QrTestImages.PAYLOAD));
-        await("document.querySelector('[data-route=login]') || document.querySelector('[data-form=login]')");
+        await("document.querySelector('[data-action=entry]') || document.querySelector('[data-form=login]')");
+        if("true".equals(js("Boolean(document.querySelector('[data-action=entry]'))"))){screenshot("00-premium-entry");js("document.querySelector('[data-action=entry][data-role=OWNER]').click()");await("document.querySelector('[data-route=login]')");}
         if ("true".equals(js("Boolean(document.querySelector('[data-route=login]'))"))) {
             js("document.querySelector('[data-route=login]').click()");
         }
@@ -184,7 +185,8 @@ public class MobileJourneyTest {
         });
         // Reload with fixtures prefixed before the production API client captures fetch.
         instrumentation.runOnMainSync(() -> { web.clearCache(true); web.reload(); });
-        await("window.__nativeFixtures && (document.querySelector('[data-route=login]') || document.querySelector('[data-form=login]'))");
+        await("window.__nativeFixtures && (document.querySelector('[data-action=entry]') || document.querySelector('[data-form=login]'))");
+        if("true".equals(js("Boolean(document.querySelector('[data-action=entry]'))"))){js("document.querySelector('[data-action=entry][data-role=OWNER]').click()");await("document.querySelector('[data-route=login]')");}
         if ("true".equals(js("Boolean(document.querySelector('[data-route=login]'))"))) {
             js("document.querySelector('[data-route=login]').click()");
         }
@@ -320,10 +322,11 @@ public class MobileJourneyTest {
         js("document.querySelector('[data-action=dialog-confirm]').click()");
         await("document.querySelector('[data-form=login]')");
         js("window.__platformFixtureEnabled=true");
-        go("signup", "{}"); screenshot("40-create-account");
+        go("welcome", "{}");
+        js("document.querySelector('[data-action=entry][data-role=OWNER]').click()");
+        await("document.querySelector('[data-form=signup]')"); screenshot("40-create-account");
         js("document.querySelector('[name=email]').value='rahul@example.test';document.querySelector('[name=password]').value='Private password 123!';document.querySelector('[name=confirmPassword]').value='Private password 123!';document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));");
-        await("document.getElementById('app').dataset.screen==='chooseRole'"); screenshot("42-choose-role");
-        js("document.querySelector('[data-role=OWNER]').click()");
+
         await("document.querySelector('[data-form=setupProfile]')"); screenshot("43-owner-profile");
         js("document.querySelector('[name=fullName]').value='Rahul Sharma';document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));");
         await("document.querySelector('[data-form=setupProperty]')"); screenshot("44-create-pg");
@@ -343,7 +346,7 @@ public class MobileJourneyTest {
         go("workspaces", "{}");
         js("document.querySelector('[data-action=workspace]').click()");
         await("document.getElementById('app').dataset.screen==='ownerHome'");
-        go("setupReady", "{}"); screenshot("45c-verified-paid-ready");
+        go("pgCode", "{}"); screenshot("45c-verified-paid-pg-code");
         go("merchant", "{}"); screenshot("48-merchant");
         assertEquals("No premature bank/KYC collection", "0", js("document.querySelectorAll('input').length"));
         go("invitations", "{}"); screenshot("49-invitations");

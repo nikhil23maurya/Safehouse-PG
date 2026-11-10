@@ -1,0 +1,32 @@
+[
+  {
+    "name": "residence",
+    "file": "residence.webp",
+    "width": 900,
+    "height": 600,
+    "bytes": 113514,
+    "sha256": "b711616d81ac2f6f8fb94757b63b054c8f48e565a320fcff8433b20c4a8ffe32",
+    "source": "exec-63c98658-1f9f-422e-988e-86be143a06c3.png",
+    "provenance": "Original built-in image generation 2026-11-10; resized and WebP-encoded without painting or background alteration"
+  },
+  {
+    "name": "room",
+    "file": "room.webp",
+    "width": 900,
+    "height": 600,
+    "bytes": 88986,
+    "sha256": "c58cf0c9e6d2d568e2da0e6aa2f285bd61eb41fd1ca9d2b8bf54dd97bda5c66b",
+    "source": "exec-fdc154cf-f3bc-4ec1-a862-11c8121b8d64.png",
+    "provenance": "Original built-in image generation 2026-11-10; resized and WebP-encoded without painting or background alteration"
+  },
+  {
+    "name": "records",
+    "file": "records.webp",
+    "width": 900,
+    "height": 600,
+    "bytes": 44632,
+    "sha256": "16d6f2a1aaec141f2acca3258d3d33433845b91b4f0edbf451cba9ddb1774391",
+    "source": "exec-cf4f83a3-4452-43b7-98ec-88065cc1506f.png",
+    "provenance": "Original built-in image generation 2026-11-10; resized and WebP-encoded without painting or background alteration"
+  }
+]

@@ -1,6 +1,6 @@
 export const onboarding = {
   config: null,
-  intent: "OWNER",
+  intent: null,
   propertyKey: null,
   configFetchedAt: 0,
 };
@@ -18,11 +18,10 @@ export async function platformConfig(ctx, {force=false} = {}) {
   }
 }
 export function platformStart(snapshot) {
-  if (!snapshot.platform?.account?.fullName?.trim()) return "chooseRole";
-  if (snapshot.platform?.memberships?.length) return "workspaces";
-  return snapshot.platform?.account?.setupIntent === "OWNER"
-    ? "setupProperty"
-    : "joinWorkspace";
+  if(snapshot.platform?.journey?.screen)return snapshot.platform.journey.screen;
+  if(snapshot.platform?.memberships?.length)return "workspaces";
+  const intent=snapshot.platform?.account?.setupIntent;
+  return intent==="OWNER" ? (snapshot.platform.account.fullName?.trim()?"setupProperty":"setupProfile") : intent==="RESIDENT"?"joinWorkspace":"chooseRole";
 }
 export function organisation(snapshot) {
   return (

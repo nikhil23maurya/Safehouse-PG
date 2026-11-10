@@ -1,10 +1,10 @@
-import {platformConfig} from "../platform/client.js";
+import {onboarding,platformConfig} from "../platform/client.js";
 import { brand } from "../components/icons.js";
 import { button, heading, notice } from "../components/ui.js";
 import { field, formValues } from "../components/forms.js";
 
 const accountPage = (title,description,body) => ({bare:true,title,
-  content:`<main class="login-page royal-page"><div class="login-inner"><div class="login-identity">${brand()}</div><div class="login-heading"><h1>${title}</h1><p>${description}</p></div>${body}</div></main>`});
+  content:`<main class="login-page royal-page"><div class="login-inner"><div class="login-identity"><button class="royal-back" data-route="welcome" aria-label="Back">←</button>${brand()}</div><div class="login-heading"><h1>${title}</h1><p>${description}</p></div>${body}</div></main>`});
 const emailField = () => field("email","Email address",{type:"email",required:true,placeholder:"you@example.com",attrs:'autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="254"'});
 const passwordField = (name,label,current=false) => field(name,label,{type:"password",required:true,
   placeholder:!current&&name==="password"?"At least 12 characters":"",
@@ -20,7 +20,7 @@ export function loginScreen(ctx) {
     async submit(name,form){if(name!=="login")return;const v=formValues(form);await ctx.signIn(v.email.trim(),v.password);}};
 }
 export function signupScreen(ctx) {
-  return {...accountPage("Create your account.","Start with your email and a password.",
+  return {...accountPage(onboarding.intent==="OWNER"?"Create owner account":onboarding.intent==="RESIDENT"?"Create resident account":"Create your account.","Email and password. One secure account.",
     accountForm("signup",emailField()+passwordField("password","Password")+passwordField("confirmPassword","Confirm password"),"Create account")+
     button("Already have an account? Sign in",{route:"login",kind:"secondary block"})+legalLinks()),
     async submit(name,form){if(name!=="signup")return;const v=formValues(form);if(v.password!==v.confirmPassword)throw new Error("Passwords do not match.");

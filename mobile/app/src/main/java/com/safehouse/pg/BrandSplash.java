@@ -14,10 +14,15 @@ final class BrandSplash extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final long started = android.os.SystemClock.uptimeMillis();
     private final boolean reducedMotion;
+    private final Typeface wordmark;
 
     BrandSplash(Context context) {
         super(context);
         setBackgroundColor(Color.WHITE);
+        Typeface face;
+        try { face=Typeface.createFromAsset(context.getAssets(), "ManropeVariable.ttf"); }
+        catch(Exception missing){ face=Typeface.create("sans-serif",Typeface.BOLD); }
+        wordmark=android.os.Build.VERSION.SDK_INT>=28?Typeface.create(face,750,false):Typeface.create(face,Typeface.BOLD);
         reducedMotion = Settings.Global.getFloat(context.getContentResolver(), Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f;
         setContentDescription("Opening PGOne");
         setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
@@ -28,7 +33,7 @@ final class BrandSplash extends View {
         final float density = getResources().getDisplayMetrics().density;
         final float centerX = getWidth() / 2f;
         final float centerY = getHeight() / 2f - 32f * density;
-        final float progress = reducedMotion ? 1f : Math.min(1f, (android.os.SystemClock.uptimeMillis() - started) / 700f);
+        final float progress = reducedMotion ? 1f : Math.min(1f, (android.os.SystemClock.uptimeMillis() - started) / 220f);
         final int opacity = Math.round(255f * progress);
 
         // Identical vector geometry to the website/app launcher; no alternate house icon.
@@ -44,7 +49,7 @@ final class BrandSplash extends View {
 
         paint.setStyle(Paint.Style.FILL);
         paint.setTextSize(27f * density);
-        paint.setTypeface(Typeface.create("sans-serif-medium", Typeface.BOLD));
+        paint.setTypeface(wordmark);
         paint.setTextAlign(Paint.Align.LEFT);
         paint.setAlpha(opacity);
         float pgWidth = paint.measureText("PG");

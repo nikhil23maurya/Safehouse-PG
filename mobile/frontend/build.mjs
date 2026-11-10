@@ -1,3 +1,4 @@
+import {brand} from "./src/components/brand.js";
 import { build } from "esbuild";
 import { mkdir, readFile, writeFile, copyFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -10,7 +11,7 @@ await copyFile(path.join(here, "src/assets/fonts/InterVariable.woff2"), path.joi
 await copyFile(path.join(here, "src/assets/fonts/OFL.txt"), path.join(out, "Inter-OFL.txt"));
 await copyFile(path.join(here, "src/assets/fonts/ManropeVariable.ttf"), path.join(out, "ManropeVariable.ttf"));
 await copyFile(path.join(here, "src/assets/fonts/Manrope-OFL.txt"), path.join(out, "Manrope-OFL.txt"));
-for (const name of ["hero", "property", "ready", "payments"]) await copyFile(path.join(here, `src/assets/onboarding/${name}.webp`), path.join(out, `onboarding-${name}.webp`));
+for (const name of ["residence","room","records"]) await copyFile(path.join(here, `src/assets/illustrations/${name}.webp`), path.join(out, `illustration-${name}.webp`));
 await build({
   absWorkingDir: here,
   entryPoints: ["src/main.js"],
@@ -28,13 +29,13 @@ await build({
   );
 });
 const css = await Promise.all(
-  ["tokens", "components", "screens", "platform"].map((name) =>
+  ["tokens", "components", "screens", "platform", "premium", "motion"].map((name) =>
     readFile(path.join(here, `src/styles/${name}.css`), "utf8"),
   ),
 );
 await writeFile(path.join(out, "app.css"), css.join("\n"));
 await writeFile(
   path.join(out, "index.html"),
-  await readFile(path.join(here, "index.html"), "utf8"),
+  (await readFile(path.join(here, "index.html"), "utf8")).replace("{{PGONE_BOOT_BRAND}}",brand()),
 );
 console.log("Built maintained PGOne frontend → Android assets");
