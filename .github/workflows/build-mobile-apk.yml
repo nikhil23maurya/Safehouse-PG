@@ -143,7 +143,7 @@ jobs:
           heap-size: 256M
           cores: 2
           disable-animations: true
-          emulator-options: -no-window -gpu lavapipe -feature -Vulkan -noaudio -no-boot-anim -camera-back none
+          emulator-options: -no-window -gpu swiftshader -feature -Vulkan -noaudio -no-boot-anim -camera-back none
           script: |
             bash scripts/android-smoke.sh
       - name: Upload Android build and emulator diagnostics
