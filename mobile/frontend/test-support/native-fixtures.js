@@ -3,33 +3,6 @@ import { createPlatformFixtures } from "./platform-fixtures.js";
 window.__nativeFixtures = createFixtures();
 window.__platformFixtures = createPlatformFixtures();
 window.__platformFixtureEnabled = false;
-const device = window.SafeHouseNative;
-window.SafeHouseNative = new Proxy(device, {
-  get(target, name) {
-    if (name === "startPhoneSignIn")
-      return (...args) =>
-        window.__platformFixtureEnabled
-          ? setTimeout(() => window.PGOnePhoneEvent(args[2], "sent", ""), 100)
-          : target[name](...args);
-    if (name === "verifyPhoneCode")
-      return (...args) =>
-        window.__platformFixtureEnabled
-          ? setTimeout(
-              () =>
-                window.PGOnePhoneEvent(
-                  args[1],
-                  "verified",
-                  "synthetic-test-phone-token",
-                ),
-              100,
-            )
-          : target[name](...args);
-    const method = target[name];
-    return typeof method === "function"
-      ? (...args) => target[name](...args)
-      : method;
-  },
-});
 window.fetch = async (input, options = {}) => {
   const url = typeof input === "string" ? input : input.url;
   if (!url.startsWith("https://safehouse-api.onrender.com/api/"))

@@ -46,9 +46,6 @@ export async function setup(page) {
       .isVisible()
   ) {
     await page.getByRole("button", { name: "Sign in", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Use email & password", exact: true })
-      .click();
   }
   return { ...fixtures, errors };
 }

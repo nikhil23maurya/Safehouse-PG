@@ -1,3 +1,4 @@
+import { phoneAccount } from "./legacy-fixtures.js";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -11,7 +12,7 @@ Object.assign(process.env, {
 });
 // No provider plan or mandate cycles configured: manual payments must work without them.
 const { prisma } = await import("../src/db.js");
-const { phoneAccount, saveProfile, createProperty } = await import("../src/platform/service.js");
+const { saveProfile, createProperty } = await import("../src/platform/service.js");
 const { entitlement } = await import("../src/platform/billing.js");
 const { platformPair } = await import("../src/platform/tokens.js");
 const { platformRouter } = await import("../src/platform/router.js");

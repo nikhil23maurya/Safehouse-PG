@@ -43,9 +43,9 @@ export function profileScreen(ctx) {
         : "") +
       section(
         "Manage",
-        `<div class="list menu-list">${owner ? menu("Your properties", "building", "properties") + menu("Property settings", "rooms", "propertyForm", { edit: true }) + menu("Payment history", "wallet", "ownerPayments") : menu("Your invoices", "invoice", "invoices") + menu("Payment history", "wallet", "history")}${menu("Notifications", "bell", "notifications")}${ctx.snapshot.platform ? menu("Workspaces", "building", "workspaces") + (owner ? menu("PGOne plan", "shield", "subscription") + menu("Online rent payments", "wallet", "merchant") + menu("Invite residents & staff", "users", "invitations") : "") : menu("Change password", "key", "password") + '<button class="menu-item" data-action="enablePlatform"><span>PGOne workspaces & account setup</span></button>'}</div>`,
+        `<div class="list menu-list">${owner ? menu("Your properties", "building", "properties") + menu("Property settings", "rooms", "propertyForm", { edit: true }) + menu("Payment history", "wallet", "ownerPayments") : menu("Your invoices", "invoice", "invoices") + menu("Payment history", "wallet", "history")}${menu("Notifications", "bell", "notifications")}${ctx.snapshot.platform ? menu("Change password", "key", "password") + menu("Workspaces", "building", "workspaces") + (owner ? menu("PGOne plan", "shield", "subscription") + menu("Online rent payments", "wallet", "merchant") + menu("Invite residents & staff", "users", "invitations") : "") : menu("Change password", "key", "password") + '<button class="menu-item" data-action="enablePlatform"><span>PGOne workspaces & account setup</span></button>'}</div>`,
       ) +
-      `<div class="action-stack">${button("Sign out", { action: "logout", kind: "secondary", glyph: "logout" })}</div><p class="context-footnote">PGOne 5.1.0 · Your PG, under control.</p>`,
+      `<div class="action-stack">${button("Sign out", { action: "logout", kind: "secondary", glyph: "logout" })}</div><p class="context-footnote">PGOne 5.2.0 · Your PG, under control.</p>`,
     action(name) { if (name === "enablePlatform") return ctx.enablePlatform(); },
   };
 }
@@ -74,7 +74,7 @@ export async function propertiesScreen(ctx) {
             "Create a property before adding rooms or residents.",
             { glyph: "building" },
           )) +
-      `<div class="action-stack">${button("Add a property", { route: "propertyForm", glyph: "plus" })}</div>`,
+      `<div class="action-stack">${button("Add a property", { route: ctx.snapshot.platform ? "setupProperty" : "propertyForm", glyph: "plus" })}</div>`,
     action(name, el) {
       if (name === "selectProperty") {
         const p = properties.find((p) => p.id === el.dataset.id);

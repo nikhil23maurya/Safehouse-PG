@@ -16,13 +16,12 @@ import {
   showFormError,
   validateForm,
 } from "./components/forms.js";
-import { loginScreen, passwordScreen } from "./screens/auth.js";
+import { loginScreen, signupScreen, forgotPasswordScreen, enrolEmailScreen, passwordScreen } from "./screens/auth.js";
 import { ownerHomeScreen, studentHomeScreen } from "./screens/dashboards.js";
 import {
   residentsScreen,
   residentScreen,
   residentFormScreen,
-  resetPasswordScreen,
 } from "./screens/residents.js";
 import { roomsScreen, roomScreen, roomFormScreen } from "./screens/rooms.js";
 import {
@@ -42,11 +41,10 @@ import {
   propertiesScreen,
   propertyFormScreen,
 } from "./screens/profile.js";
+import { ownerDirectRentScreen, directRentScreen } from "./screens/direct-rent.js";
 import { paymentScreen } from "./screens/payment.js";
 import {
   welcomeScreen,
-  phoneScreen,
-  otpScreen,
   chooseRoleScreen,
   setupProfileScreen,
   setupPropertyScreen,
@@ -56,8 +54,6 @@ import {
   linkAccountScreen,
   subscriptionScreen,
   merchantScreen,
-  merchantProfileScreen,
-  merchantBankScreen,
   invitationsScreen,
   staffScreen,
   legalScreen,
@@ -67,8 +63,9 @@ import { ownerActivationRoute, ownerHasPaidAccess } from "./platform/activation.
 
 const routes = {
   welcome: [welcomeScreen, null],
-  phone: [phoneScreen, null],
-  otp: [otpScreen, null],
+  signup: [signupScreen, null],
+  forgotPassword: [forgotPasswordScreen, null],
+  enrolEmail: [enrolEmailScreen, "PLATFORM"],
   legal: [legalScreen, null],
   chooseRole: [chooseRoleScreen, "PLATFORM"],
   setupProfile: [setupProfileScreen, "PLATFORM"],
@@ -79,8 +76,7 @@ const routes = {
   linkAccount: [linkAccountScreen, "PLATFORM"],
   subscription: [subscriptionScreen, "PLATFORM"],
   merchant: [merchantScreen, "PLATFORM"],
-  merchantProfile: [merchantProfileScreen, "PLATFORM"],
-  merchantBank: [merchantBankScreen, "PLATFORM"],
+
   invitations: [invitationsScreen, "PLATFORM"],
   staffHome: [staffScreen, "PLATFORM"],
   login: [loginScreen, null],
@@ -89,7 +85,6 @@ const routes = {
   residents: [residentsScreen, "OWNER"],
   resident: [residentScreen, "OWNER"],
   residentForm: [residentFormScreen, "OWNER"],
-  resetPassword: [resetPasswordScreen, "OWNER"],
   rooms: [roomsScreen, "OWNER"],
   room: [roomScreen, "OWNER"],
   roomForm: [roomFormScreen, "OWNER"],
@@ -100,7 +95,8 @@ const routes = {
   studentHome: [studentHomeScreen, "STUDENT"],
   invoices: [invoicesScreen, "STUDENT"],
   history: [paymentsScreen, "STUDENT"],
-  payment: [paymentScreen, "STUDENT"],
+  payment: [(ctx)=>ctx.snapshot.tokens?.kind === "PLATFORM" && !ctx.snapshot.platform?.memberships?.find(m=>m.id===ctx.snapshot.platform.membershipId)?.organisation?.legacyAccess ? directRentScreen(ctx) : paymentScreen(ctx), "STUDENT"],
+  ownerDirectRent: [ownerDirectRentScreen,"OWNER"],
   invoice: [invoiceScreen, "BOTH"],
   profile: [profileScreen, "BOTH"],
   notifications: [notificationsScreen, "BOTH"],
@@ -148,7 +144,8 @@ let pendingNotificationRoute = null;
 let restoringMetadata = null;
 function postAuthRoute() {
   if (state.user?.mustChangePassword) return "password";
-  if (pendingNotificationRoute === null) return home();
+  if (state.tokens?.kind === "PLATFORM" && state.platform?.account?.credentialReady === false) return "enrolEmail";
+  if (pendingNotificationRoute === null) return state.platform?.journey?.screen || home();
   const target = notificationRoute(pendingNotificationRoute, state.user?.role);
   pendingNotificationRoute = null;
   return target;
@@ -205,7 +202,6 @@ function clearSession() {
   onboarding.attempt = "";
   onboarding.exchangeAttempt = "";
   onboarding.sentAt = 0;
-  native.call("cancelPhoneSignIn");
   try {
     native.save(null);
   } catch {
@@ -220,10 +216,9 @@ const api = createApiClient({
     persist();
   },
   onExpired: () => {
-    const phone = state.tokens?.kind === "PLATFORM";
     clearSession();
     toast("Your session expired. Please sign in again.", "error");
-    void navigate(phone ? "phone" : "login", phone ? { mode: "SIGN_IN" } : {}, { replace: true, force: true });
+    void navigate("login", {}, { replace: true, force: true });
   },
 });
 
@@ -278,6 +273,7 @@ async function canLeave() {
 }
 
 function guardedRoute(name) {
+  if(name === "legal") return "legal";
   if (!state.tokens || !state.user)
     return routes[name]?.[1] === null ? name : "welcome";
   if (routes[name]?.[1] === "PLATFORM") {
@@ -292,10 +288,11 @@ function guardedRoute(name) {
   }
   if (
     state.tokens.kind === "PLATFORM" &&
-    ["ACCOUNT", "STAFF"].includes(state.user.role)
+    ["ACCOUNT", "STAFF"].includes(state.user.role) && name !== "password"
   )
     return home();
   if (state.user.mustChangePassword) return "password";
+  if (state.tokens?.kind === "PLATFORM" && state.platform?.account?.credentialReady === false && name !== "legal") return "enrolEmail";
   const role = routes[name]?.[1];
   if (
     !routes[name] ||
@@ -325,14 +322,6 @@ async function navigate(
   )
     return;
   if (!force && !(await canLeave())) return;
-  if (
-    ["phone", "otp"].includes(state.route.name) &&
-    !["phone", "otp"].includes(next)
-  ) {
-    onboarding.attempt = "";
-    onboarding.exchangeAttempt = "";
-    native.call("cancelPhoneSignIn");
-  }
   if (rootRoutes.has(next) && rootRoutes.has(state.route.name)) replace = true;
   dirty = false;
   state.route = { name: next, params: next === name ? params : {} };
@@ -393,42 +382,16 @@ window.addEventListener("popstate", async (event) => {
   await render();
 });
 
-async function signIn(email, password) {
-  const result = await api("/api/auth/login", {
-    method: "POST",
-    public: true,
-    body: { email, password },
-  });
-  if (
-    !["OWNER", "STUDENT"].includes(result.user?.role) ||
-    !result.tokens?.accessToken ||
-    !result.tokens?.refreshToken
-  )
-    throw new Error("The server returned an invalid account response.");
-  state.authEpoch++;
-  cache.clear();
-  Object.assign(state, {
-    tokens: result.tokens,
-    user: result.user,
-    property: result.property || null,
-    properties: result.properties || [],
-    student: result.student || null,
-    pendingPayment: null,
-  });
-  state.period = currentPeriod(state.property?.timezone);
-  try {
-    persist();
-  } catch (error) {
-    clearSession();
-    throw error;
-  }
-  dirty = false;
-  await navigate(postAuthRoute(), {}, { replace: true, force: true });
-  void setupPush().catch(() => {});
+async function signIn(email,password) {
+  const result = await api("/api/platform/auth/login",{method:"POST",public:true,body:{email,password}});
+  await acceptPlatform(result.tokens);
+  void setupPush().catch(()=>{});
 }
 
 async function refreshPlatform() {
+  const epoch=state.authEpoch;
   const result = await api("/api/platform/session");
+  if(epoch!==state.authEpoch || !state.tokens) throw Object.assign(new Error("Your account changed. Retry from the current workspace."),{code:"STALE_SESSION"});
   state.platform = result;
   state.user = result.user;
   state.property = result.property;
@@ -455,7 +418,7 @@ async function acceptPlatform(tokens, target) {
   dirty = false;
   persist();
   await navigate(
-    target || (state.platform.membershipId ? home() : platformStart(state)),
+    target || postAuthRoute(),
     {},
     { replace: true, force: true },
   );
@@ -471,72 +434,6 @@ async function selectWorkspace(membershipId, target) {
   });
   await acceptPlatform(result.tokens, target);
 }
-window.PGOnePhoneEvent = async (attempt, type, value) => {
-  if (
-    attempt !== onboarding.attempt ||
-    !["phone", "otp"].includes(state.route.name)
-  )
-    return;
-  if (type === "sent") onboarding.sentAt = Date.now();
-  screen?.phoneEvent?.(type, value);
-  if (type === "verified") {
-    const epoch = state.authEpoch;
-    onboarding.exchangeAttempt = attempt;
-    onboarding.attempt = "";
-    onboarding.sentAt = 0;
-    const current = () =>
-      onboarding.exchangeAttempt === attempt && !onboarding.attempt &&
-      state.authEpoch === epoch && ["phone", "otp"].includes(state.route.name);
-    let tokens;
-    try {
-      let result;
-      try {
-        result = await api("/api/platform/phone", {
-          public: true,
-          method: "POST",
-          body: { idToken: value, mode: onboarding.authMode },
-        });
-      } catch (error) {
-        if (!current()) return;
-        if (error.code !== "PHONE_ACCOUNT_NOT_FOUND") throw error;
-        const create = await confirm({
-          title: "Create a PGOne account?",
-          message:
-            "Your number is verified, but it has no PGOne phone account yet. Create one to set up or join a PG. Existing password accounts can be linked after signing in with email.",
-          confirmLabel: "Create account",
-          cancelLabel: "Back to sign in",
-        });
-        if (!current()) return;
-        if (!create) {
-          await navigate("phone", { mode: "SIGN_IN" }, { replace: true, force: true });
-          return;
-        }
-        onboarding.authMode = "SIGN_UP";
-        result = await api("/api/platform/phone", {
-          public: true,
-          method: "POST",
-          body: { idToken: value, mode: "SIGN_UP" },
-        });
-      }
-      if (!current()) return;
-      tokens = result.tokens;
-    } catch (error) {
-      if (!current()) return;
-      toast(error.message, "error");
-      await navigate("phone", {}, { replace: true, force: true });
-      return;
-    }
-    try {
-      await acceptPlatform(tokens);
-    } catch (error) {
-      if (state.tokens?.accessToken !== tokens?.accessToken) return;
-      clearSession();
-      toast(error.message, "error");
-      await navigate("phone", { mode: "SIGN_IN" }, { replace: true, force: true });
-    }
-  }
-};
-
 async function logout() {
   if (
     !(await confirm({
@@ -572,7 +469,7 @@ async function logout() {
   }
   if (state.authEpoch !== logoutEpoch) return;
   clearSession();
-  await navigate(phone ? "phone" : "login", phone ? { mode: "SIGN_IN" } : {}, { replace: true, force: true });
+  await navigate("login", {}, { replace: true, force: true });
   if (!revoked)
     toast(
       "Signed out on this device. Server session revocation could not be confirmed.",
@@ -699,7 +596,15 @@ function makeContext(snapshot, key) {
         new Error("This request belongs to an earlier account or property."),
         { code: "STALE_CONTEXT" },
       );
-    const data = await api(path, options);
+    let data;
+    try {data = await api(path, options);}
+    catch(error){
+      if(error.status===402 && state.tokens?.kind==="PLATFORM" && state.user?.role==="OWNER"){
+        await refreshPlatform();
+        await navigate("subscription",{},{replace:true,force:true});
+      }
+      throw error;
+    }
     if (
       contextKey() !== key ||
       (!path.startsWith("/api/platform/") && !matchesContext(data, snapshot))
@@ -728,6 +633,12 @@ function makeContext(snapshot, key) {
     refreshPlatform,
     acceptPlatform,
     selectWorkspace,
+    downloadAccountReceipt:async(path,number)=>{
+      await api("/api/platform/session");
+      const filename=`PGOne-${String(number).replace(/[^a-zA-Z0-9_-]/g,"")}.pdf`;
+      if(native.has("downloadReceipt"))native.call("downloadReceipt",API_BASE+path,state.tokens.accessToken,"",filename);
+      else{const blob=await api(path,{response:"blob"});const url=URL.createObjectURL(blob),link=document.createElement("a");link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+    },
     saveOnboardingDraft: (value) => {
       if (contextKey() !== key)
         throw new Error("Your account context changed.");
@@ -793,6 +704,7 @@ function makeContext(snapshot, key) {
       cache.clear();
       dirty = false;
       persist();
+      if (tokens.kind === "PLATFORM") await refreshPlatform();
       await navigate(postAuthRoute(), {}, { replace: true, force: true });
     },
   };
@@ -1104,6 +1016,12 @@ document.addEventListener("visibilitychange", () => {
   if (screen?.paymentFlow) void payment.resume();
   void revalidateOwnerActivation();
 });
+// Expiry comes from the server clock; re-read entitlements without provider calls.
+setInterval(async()=>{
+  if(document.hidden || state.tokens?.kind!=="PLATFORM" || state.user?.role!=="OWNER")return;
+  try{await refreshPlatform();if(!ownerHasPaidAccess(state) && !["subscription","workspaces","password","legal"].includes(state.route.name))
+    await navigate("subscription",{},{replace:true,force:true});}catch{/* Offline never invents paid access; protected APIs enforce expiry. */}
+},60000);
 let nativeKeyboardOpen = false,
   keyboardFrame;
 function revealFocusedField() {
@@ -1153,8 +1071,16 @@ async function boot() {
       `<main class="boot session-restore" role="status"><svg viewBox="0 0 64 64" aria-hidden="true"><path d="M5 30.1 30.1 8.3a7.5 7.5 0 0 1 9.8 0L59 24.8v11.1L35 15.7 15.2 32.8V59H5Z" fill="#0B2148"/><path d="M15.2 33 35 15.7l24 20.2V52a7 7 0 0 1-7 7H41V45h4V37.5c0-4.9-3.6-8.2-8.8-8.2H31V59H15.2Z" fill="#2056EF"/><path d="M31 29.3h5.2c5.2 0 8.8 3.3 8.8 8.2V45h-4V39c0-2.2-1.5-3.8-3.8-3.8H31Z" fill="#0B2148"/><path d="M23 59V37.2l8-7.9V59Z" fill="#FFF"/><rect x="30.3" y="21.3" width="4" height="4" rx=".7" fill="white"/><rect x="36.2" y="21.3" width="4" height="4" rx=".7" fill="white"/></svg><span>PGOne</span><p>Restoring your account…</p><span class="spinner" aria-hidden="true"></span></main>`;
     requestAnimationFrame(() => native.call("ready"));
     try {
+      if (state.tokens.kind !== "PLATFORM") {
+        const upgraded=await api("/api/auth/refresh",{public:true,method:"POST",body:{refreshToken:state.tokens.refreshToken}});
+        if(upgraded.tokens?.kind === "PLATFORM") state.tokens=upgraded.tokens;
+      }
       const platform = state.tokens.kind === "PLATFORM";
-      const me = await api(platform ? "/api/platform/session" : "/api/auth/me");
+      let me = await api(platform ? "/api/platform/session" : "/api/auth/me");
+      if(platform && !me.membershipId && stored.activePropertyId){
+        const member=me.memberships.find(m=>m.property.id===stored.activePropertyId);
+        if(member){const selection=await api("/api/platform/workspace",{method:"POST",body:{membershipId:member.id}});state.tokens=selection.tokens;me=await api("/api/platform/session");}
+      }
       if (state.authEpoch !== restoreEpoch) return;
       if (
         !(

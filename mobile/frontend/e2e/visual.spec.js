@@ -37,7 +37,6 @@ for (const [width, height] of [
       ["resident", { id: "resident1" }, "04-resident"],
       ["residentForm", {}, "05-add-resident"],
       ["residentForm", { id: "resident1" }, "06-edit-resident"],
-      ["resetPassword", { id: "resident1" }, "07-reset-password"],
       ["rooms", {}, "08-rooms"],
       ["room", { id: "room1" }, "09-room"],
       ["roomForm", {}, "10-add-room"],

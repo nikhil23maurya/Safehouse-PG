@@ -6,13 +6,6 @@ const optional = z.string().trim().min(1).optional();
 export const platformConfig = z
   .object({
     PGONE_PLATFORM_ENABLED: z.enum(["true", "false"]).default("false"),
-    PGONE_PHONE_AUTH_ENABLED: z.enum(["true", "false"]).default("false"),
-    PGONE_CASHFREE_EMBEDDED_ENABLED: z.enum(["true", "false"]).default("false"),
-    PGONE_CASHFREE_PARTNER_API_KEY: optional,
-    PGONE_CASHFREE_ENV: z.enum(["LIVE", "TEST"]).default("LIVE"),
-    PGONE_FIREBASE_TESTING_APP_ID: optional,
-    PGONE_FIREBASE_WEB_APP_ID: optional,
-    PGONE_FIREBASE_WEB_API_KEY: optional,
     PGONE_CUSTOM_WEB_BILLING_ENABLED: z
       .enum(["true", "false"])
       .default("false"),

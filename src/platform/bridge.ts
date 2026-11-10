@@ -22,7 +22,8 @@ export async function platformWorkspaceBridge(
       "PLATFORM_NOT_ENABLED",
       "Account services are not activated yet.",
     );
-    const { membership } = await accountSession(header.slice(7));
+    const { account, membership } = await accountSession(header.slice(7));
+    assert(!account.passwordChangeRequired,403,"PASSWORD_CHANGE_REQUIRED","Change your temporary password before opening a workspace.");
     assert(
       membership && membership.actor && membership.actor.status === "ACTIVE",
       403,
@@ -90,7 +91,7 @@ export async function platformWorkspaceBridge(
     // merely writes. Prevent direct API calls / cached routes from bypassing
     // onboarding. Keep authentication, platform subscription and legal routes
     // outside this guard so unpaid owners can recover their account.
-    if (owner && path.startsWith("/api/owner/")) {
+    if (owner && path.startsWith("/api/owner/") && !/^\/api\/owner\/payments\/[a-zA-Z0-9_-]+\/receipt\.pdf$/.test(path)) {
       assert(
         await entitlement(membership.organisation.id),
         402,

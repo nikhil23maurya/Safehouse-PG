@@ -2,6 +2,7 @@ import { prisma } from "../db.js";
 import { assert } from "../errors.js";
 import { atomic, audit, ownerOrganisation } from "./service.js";
 import { hash, randomCode } from "./tokens.js";
+import { entitlement } from "./billing.js";
 import { STAFF_PERMISSIONS } from "./config.js";
 
 export async function createInvitation(
@@ -10,12 +11,13 @@ export async function createInvitation(
     organisationId: string;
     propertyId: string;
     role: "RESIDENT" | "STAFF";
-    phoneE164: string;
+    email: string;
     studentId?: string;
     permissions: string[];
   },
 ) {
   const org = await ownerOrganisation(accountId, input.organisationId);
+  assert(await entitlement(org.id),402,"SUBSCRIPTION_REQUIRED","Activate PGOne before inviting members.");
   const property = await prisma.property.findFirst({
     where: { id: input.propertyId, ownerId: org.legacyOwnerId },
   });
@@ -36,12 +38,8 @@ export async function createInvitation(
       "RESIDENT_REQUIRED",
       "Add the resident through Resident Management before inviting them.",
     );
-    assert(
-      `+91${student.mobile.replace(/\D/g, "").slice(-10)}` === input.phoneE164,
-      400,
-      "PHONE_MISMATCH",
-      "Use the resident's recorded mobile number.",
-    );
+    const actor = await prisma.user.findUniqueOrThrow({where:{id:student.userId}});
+    assert(actor.email?.trim().toLowerCase() === input.email.trim().toLowerCase(),400,"EMAIL_MISMATCH","Use the resident email recorded on this property.");
   }
   assert(
     input.permissions.every((p) => STAFF_PERMISSIONS.includes(p as any)),
@@ -56,7 +54,7 @@ export async function createInvitation(
         organisationId: org.id,
         propertyId: property.id,
         role: input.role,
-        phoneE164: input.phoneE164,
+        email: input.email.trim().toLowerCase(),
         studentId: input.role === "RESIDENT" ? input.studentId : null,
         permissions: input.role === "STAFF" ? input.permissions : [],
         tokenHash: hash(code),
@@ -88,14 +86,14 @@ export async function previewInvitation(accountId: string, code: string) {
     include: { property: true },
   });
   assert(
-    account.phoneE164 &&
+    account.credentialEmail &&
       invitation &&
-      invitation.phoneE164 === account.phoneE164 &&
-      invitation.status === "PENDING" &&
+      invitation.email === account.credentialEmail &&
+      ["PENDING","REQUESTED"].includes(invitation.status) &&
       invitation.expiresAt.getTime() > Date.now(),
     404,
     "INVITATION_UNAVAILABLE",
-    "This invitation is unavailable for your verified phone number. Ask your owner for a fresh invitation.",
+    "This invitation is unavailable for your confirmed email address. Ask your owner for a fresh invitation.",
   );
   return {
     id: invitation.id,
@@ -105,24 +103,34 @@ export async function previewInvitation(accountId: string, code: string) {
     expiresAt: invitation.expiresAt,
   };
 }
-export async function acceptInvitation(accountId: string, code: string) {
+export async function acceptInvitation(accountId: string, code: string, approval?: {ownerAccountId:string;invitationId:string}) {
   return atomic(async (tx) => {
     const account = await tx.pgAccount.findUniqueOrThrow({
       where: { id: accountId },
     });
     const invitation = await tx.pgInvitation.findUnique({
-      where: { tokenHash: hash(code) },
+      where: approval ? {id:approval.invitationId} : { tokenHash: hash(code) },
       include: { organisation: true },
     });
     assert(
-      account.phoneE164 &&
+      account.credentialEmail &&
         invitation &&
-        invitation.phoneE164 === account.phoneE164 &&
+        invitation.email === account.credentialEmail &&
         invitation.expiresAt.getTime() > Date.now(),
       404,
       "INVITATION_UNAVAILABLE",
-      "This invitation is unavailable for your verified phone number.",
+      "This invitation is unavailable for your confirmed email address.",
     );
+    if (approval) {
+      assert(invitation.organisation.ownerAccountId===approval.ownerAccountId && ["REQUESTED","ACCEPTED"].includes(invitation.status) && invitation.acceptedByAccountId===accountId,
+        403,"APPROVAL_NOT_ALLOWED","This invitation request cannot be approved by this owner.");
+    } else if (!account.emailVerified && invitation.status !== "ACCEPTED") {
+      assert(["PENDING","REQUESTED"].includes(invitation.status) && (!invitation.acceptedByAccountId || invitation.acceptedByAccountId===accountId),
+        409,"INVITATION_USED","Ask your owner for a new invitation.");
+      await tx.pgInvitation.update({where:{id:invitation.id},data:{status:"REQUESTED",acceptedByAccountId:accountId}});
+      await audit(tx,accountId,invitation.organisationId,"INVITATION_OWNER_APPROVAL_REQUESTED",invitation.id);
+      return {pendingOwnerApproval:true,invitationId:invitation.id};
+    }
     if (invitation.status === "ACCEPTED") {
       assert(
         invitation.acceptedByAccountId === accountId,
@@ -141,7 +149,7 @@ export async function acceptInvitation(accountId: string, code: string) {
       });
     }
     assert(
-      invitation.status === "PENDING",
+      invitation.status === "PENDING" || Boolean(approval && invitation.status === "REQUESTED"),
       409,
       "INVITATION_USED",
       "Ask your owner for a new invitation.",
@@ -155,14 +163,9 @@ export async function acceptInvitation(accountId: string, code: string) {
           status: "ACTIVE",
         },
       });
-      assert(
-        student &&
-          `+91${student.mobile.replace(/\D/g, "").slice(-10)}` ===
-            account.phoneE164,
-        409,
-        "RESIDENCY_CHANGED",
-        "Your residency has changed. Contact your owner.",
-      );
+      const actor = student ? await tx.user.findUnique({where:{id:student.userId}}) : null;
+      assert(student && actor?.email?.trim().toLowerCase() === account.credentialEmail,
+        409,"RESIDENCY_CHANGED","Your residency changed. Ask the owner for a new invitation.");
       const claim = await tx.pgMembership.findFirst({
         where: {
           actorUserId: student.userId,
@@ -188,7 +191,7 @@ export async function acceptInvitation(accountId: string, code: string) {
       "This invitation cannot grant owner access.",
     );
     const updated = await tx.pgInvitation.updateMany({
-      where: { id: invitation.id, status: "PENDING" },
+      where: { id: invitation.id, status: approval ? "REQUESTED" : "PENDING" },
       data: {
         status: "ACCEPTED",
         acceptedByAccountId: accountId,

@@ -1,18 +1,13 @@
 export const onboarding = {
   config: null,
-  phone: "",
-  attempt: "",
-  sentAt: 0,
-  error: "",
   intent: "OWNER",
-  authMode: "SIGN_UP",
   propertyKey: null,
 };
 export async function platformConfig(ctx) {
   if (onboarding.config) return onboarding.config;
   try {
     return (onboarding.config = await ctx.api(
-      `/api/platform/config?package=${encodeURIComponent(ctx.native.call("getPackageId") || "web")}`,
+      `/api/platform/config?package=${encodeURIComponent(ctx.native.call("getPackageId") || "web")}&distribution=${encodeURIComponent(ctx.native.call("getBillingDistribution") || "CONSUMPTION_ONLY")}`,
       { public: true, timeout: 10000 },
     ));
   } catch {

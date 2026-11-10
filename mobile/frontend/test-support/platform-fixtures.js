@@ -4,7 +4,8 @@ export function createPlatformFixtures() {
     id: "pg-account-1",
     fullName: "",
     phoneE164: "+919123456789",
-    email: null,
+    email: "rahul@example.test",
+    credentialReady:true,
     emailVerified: false,
     setupIntent: null,
   };
@@ -49,18 +50,18 @@ export function createPlatformFixtures() {
       if (path.endsWith("/config"))
         return {
           enabled: true,
-          phone: { projectId: "synthetic-test-project" },
+          authentication:"EMAIL_PASSWORD",phone:null,
           legal: {
             terms: "https://example.test/terms",
             privacy: "https://example.test/privacy",
           },
         };
-      if (path.endsWith("/phone")) return { tokens: tokens() };
+      if (path.endsWith("/register") || path.endsWith("/login")) return { tokens: tokens() };
       if (path.endsWith("/session")) return snapshot();
       if (path.endsWith("/profile")) {
         Object.assign(account, {
           fullName: body.fullName,
-          email: body.email,
+          contactPhone: body.contactPhone,
           setupIntent: body.intent,
         });
         return snapshot();

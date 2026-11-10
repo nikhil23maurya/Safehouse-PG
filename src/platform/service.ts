@@ -3,6 +3,7 @@ import { prisma } from "../db.js";
 import { AppError, assert } from "../errors.js";
 import { verifyToken } from "../security.js";
 import { platformClaims, platformPair } from "./tokens.js";
+import { issueSession } from "./sessions.js";
 
 export async function atomic<T>(
   action: (tx: Prisma.TransactionClient) => Promise<T>,
@@ -57,6 +58,12 @@ export async function accountSession(
     "SESSION_INVALID",
     "Sign in again to continue.",
   );
+  if (claims.sid) {
+    const active = await prisma.pgSession.findFirst({where:{id:claims.sid,accountId:account.id,revokedAt:null,expiresAt:{gt:new Date()}}});
+    assert(active,401,"SESSION_INVALID","This session was revoked. Sign in again.");
+  } else {
+    assert(!account.passwordHash,401,"SESSION_INVALID","Sign in with your email and password.");
+  }
   const membership = claims.membershipId
     ? await prisma.pgMembership.findFirst({
         where: {
@@ -101,6 +108,8 @@ export async function accountSnapshot(accountId: string) {
       email: account.email,
       emailVerified: account.emailVerified,
       setupIntent: account.setupIntent,
+      credentialReady: Boolean(account.passwordHash && account.credentialEmail),
+      contactPhone: account.contactPhone,
     },
     memberships: memberships.map((m) => ({
       id: m.id,
@@ -119,43 +128,6 @@ export async function accountSnapshot(accountId: string) {
       },
     })),
   };
-}
-export async function phoneAccount(
-  identity: {
-    uid: string;
-    phoneE164: string;
-  },
-  create = true,
-) {
-  return atomic(async (tx) => {
-    const existing = await tx.pgAccount.findFirst({
-      where: {
-        OR: [{ firebaseUid: identity.uid }, { phoneE164: identity.phoneE164 }],
-      },
-    });
-    if (existing) {
-      assert(
-        existing.status === "ACTIVE" &&
-          existing.firebaseUid === identity.uid &&
-          existing.phoneE164 === identity.phoneE164,
-        409,
-        "IDENTITY_CONFLICT",
-        "This number requires account recovery. It cannot claim another account automatically.",
-      );
-      return existing;
-    }
-    assert(
-      create,
-      404,
-      "PHONE_ACCOUNT_NOT_FOUND",
-      "This number has no PGOne phone account yet. Create an account, or use email sign-in for an existing password account.",
-    );
-    const account = await tx.pgAccount.create({
-      data: { firebaseUid: identity.uid, phoneE164: identity.phoneE164 },
-    });
-    await audit(tx, account.id, null, "PHONE_ACCOUNT_CREATED", account.id);
-    return account;
-  });
 }
 async function legacyOrganisation(
   tx: Prisma.TransactionClient,
@@ -194,6 +166,7 @@ export async function linkLegacy(
   accessToken: string,
   existingAccountId?: string,
   expectedVersion?: number,
+  provenTemporaryPassword = false,
 ) {
   const claims = verifyToken(accessToken, "access");
   return atomic(async (tx) => {
@@ -208,7 +181,7 @@ export async function linkLegacy(
       "Sign in again to link your existing account.",
     );
     assert(
-      !user.mustChangePassword,
+      !user.mustChangePassword || provenTemporaryPassword,
       409,
       "PASSWORD_CHANGE_REQUIRED",
       "Change your temporary password through existing account sign-in before linking.",
@@ -317,6 +290,7 @@ export async function saveProfile(
   input: {
     fullName: string;
     email?: string;
+    contactPhone?: string;
     intent: "OWNER" | "RESIDENT" | "STAFF";
   },
 ) {
@@ -325,13 +299,12 @@ export async function saveProfile(
     const account = await tx.pgAccount.findUniqueOrThrow({
       where: { id: accountId },
     });
-    const nextEmail = input.email?.trim().toLowerCase() || null;
     const updated = await tx.pgAccount.update({
       where: { id: accountId },
       data: {
         fullName: input.fullName.trim(),
-        email: nextEmail,
-        emailVerified: nextEmail === account.email && account.emailVerified,
+        ...(account.credentialEmail ? {} : input.email !== undefined ? {email: input.email.trim().toLowerCase() || null, emailVerified:false} : {}),
+        ...(input.contactPhone !== undefined ? {contactPhone:input.contactPhone || null} : {}),
         setupIntent: input.intent,
       },
     });
@@ -464,7 +437,7 @@ export async function ownerOrganisation(
 ) {
   const org = await prisma.pgOrganisation.findFirst({
     where: { id: organisationId, ownerAccountId: accountId },
-    include: { legacyOwner: { select: { status: true } } },
+    include: { legacyOwner: { select: { status: true } }, owner:true },
   });
   assert(
     org && org.legacyOwner.status === "ACTIVE",
@@ -472,6 +445,7 @@ export async function ownerOrganisation(
     "FORBIDDEN",
     "You do not have access to this organisation.",
   );
+  assert(!org.owner.passwordChangeRequired,403,"PASSWORD_CHANGE_REQUIRED","Change your temporary password first.");
   return org;
 }
 export async function membershipTokens(
@@ -499,5 +473,5 @@ export async function membershipTokens(
     "SESSION_INVALID",
     "Sign in again to choose a workspace.",
   );
-  return platformPair(account, membership.id);
+  return issueSession(account, membership.id);
 }

@@ -12,7 +12,5 @@ for (const marker of ['checkout.razorpay.com/v1/razorpay.js', '/subscription/aut
 for (const marker of ['base64 -d', 'patch-mobile-', 'git push', 'SafeHouse-Final-Live.apk']) assert(!workflow.includes(marker), `Obsolete build input/behavior: ${marker}`);
 assert(read('src/server.ts').includes('SAFEHOUSE_QR_SETTLEMENT_V2'));
 assert(read('mobile/app/src/main/java/com/safehouse/pg/MainActivity.java').includes('request.addRequestHeader("X-Property-Id", propertyId)'));
-const kyc = read('mobile/app/src/main/java/com/safehouse/pg/MerchantOnboardingActivity.java');
-assert(!kyc.includes('.addJavascriptInterface('), 'Provider KYC must have no PGOne native bridge');
-for (const marker of ['FLAG_SECURE', 'setAllowFileAccess(false)', 'setAllowContentAccess(false)', 'MIXED_CONTENT_NEVER_ALLOW']) assert(kyc.includes(marker));
+for (const marker of ['PGOnePhoneEvent', 'startPhoneSignIn', 'phoneScreen', 'otpScreen', 'cashfree.com']) assert(!bundle.includes(marker), `Retired account/provider code in Android bundle: ${marker}`);
 console.log('Maintained frontend source, restricted release inputs and settlement contract verified.');

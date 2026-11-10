@@ -2,17 +2,45 @@ import { brand } from "../components/icons.js";
 import { button, heading, notice } from "../components/ui.js";
 import { field, formValues } from "../components/forms.js";
 
+const accountPage = (title,description,body) => ({bare:true,title,
+  content:`<main class="login-page royal-page"><div class="login-inner"><div class="login-identity">${brand()}</div><div class="login-heading"><span class="royal-kicker">YOUR PG. BEAUTIFULLY MANAGED.</span><h1>${title}</h1><span class="gold-rule"></span><p>${description}</p></div>${body}</div><span class="login-footer">Your home, managed simply.</span></main>`});
+const emailField = () => field("email","Email address",{type:"email",required:true,placeholder:"you@example.com",attrs:'autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="254"'});
+const passwordField = (name,label,current=false) => field(name,label,{type:"password",required:true,
+  help:current?"":"Use 12–128 characters. A longer, unique password is best.",
+  attrs:`autocomplete="${current?"current-password":"new-password"}" ${current?"":'minlength="12"'} maxlength="128"`});
+const accountForm = (name,fields,label) => `<form data-form="${name}" novalidate><div class="form-error" role="alert"></div>${fields}${button(label,{type:"submit",kind:"primary block",glyph:"arrow"})}</form>`;
+const legalLinks = () => `<p class="legal-copy">By creating an account, you agree to our <button class="text-button" data-route="legal" data-params='{"kind":"terms"}'>Terms</button> and <button class="text-button" data-route="legal" data-params='{"kind":"privacy"}'>Privacy Policy</button>.</p>`;
 export function loginScreen(ctx) {
-  return {
-    bare: true,
-    title: "Sign in",
-    content: `<main class="login-page royal-page"><div class="login-inner"><div class="login-identity">${brand()}</div><div class="login-heading"><span class="royal-kicker">YOUR PG. YOUR PEACE OF MIND.</span><h1>Welcome back.</h1><span class="gold-rule"></span><p>Sign in to your PGOne account.<br>Everything you need, right where you left it.</p></div><form data-form="login" novalidate><div class="form-error" role="alert"></div>${field("email", "Email address", { type: "email", required: true, placeholder: "you@example.com", attrs: 'autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" enterkeyhint="next"' })}${field("password", "Password", { type: "password", required: true, placeholder: "Enter your password", attrs: 'autocomplete="current-password" maxlength="128" enterkeyhint="go"' })}${button("Sign in", { type: "submit", kind: "primary block", glyph: "arrow" })}</form>${button("Continue with mobile number", { route: "phone", params: { mode: "SIGN_IN" }, kind: "secondary block login-phone-link" })}<div class="login-support"><span>New here? Set up or join your PG with your mobile number.</span></div></div><span class="login-footer">Your home, managed simply.</span></main>`,
-    async submit(name, form) {
-      if (name !== "login") return;
-      const values = formValues(form);
-      await ctx.signIn(values.email.trim(), values.password);
-    },
-  };
+  return {...accountPage("Welcome back.","Sign in to your PGOne account.",
+    accountForm("login",emailField()+passwordField("password","Password",true),"Sign in")+
+    button("Forgot password?",{route:"forgotPassword",kind:"text-button block"})+
+    button("New to PGOne? Create account",{route:"signup",kind:"secondary block"})),
+    title:"Sign in",
+    async submit(name,form){if(name!=="login")return;const v=formValues(form);await ctx.signIn(v.email.trim(),v.password);}};
+}
+export function signupScreen(ctx) {
+  return {...accountPage("Create your account.","One account for your PG, your people and your everyday work.",
+    accountForm("signup",emailField()+passwordField("password","Password")+passwordField("confirmPassword","Confirm password"),"Create account")+
+    button("Already have an account? Sign in",{route:"login",kind:"secondary block"})+legalLinks()),
+    async submit(name,form){if(name!=="signup")return;const v=formValues(form);if(v.password!==v.confirmPassword)throw new Error("Passwords do not match.");
+      const result=await ctx.api("/api/platform/auth/register",{method:"POST",public:true,body:{email:v.email.trim(),password:v.password}});
+      ctx.markSaved();await ctx.acceptPlatform(result.tokens);}};
+}
+export function forgotPasswordScreen(ctx) {
+  return {...accountPage("Reset your password.","We’ll email a secure link that expires in 15 minutes.",
+    accountForm("forgotPassword",emailField(),"Send recovery link")+button("Back to sign in",{route:"login",kind:"secondary block"})+
+    `<div data-recovery-status role="status"></div><p class="legal-copy">Historical phone-only accounts without email credentials require assisted ownership recovery.</p>`),
+    async submit(name,form){if(name!=="forgotPassword")return;const v=formValues(form);
+      const result=await ctx.api("/api/platform/auth/forgot-password",{method:"POST",public:true,body:{email:v.email.trim()}});
+      document.querySelector("[data-recovery-status]").textContent=result.message;}};
+}
+export function enrolEmailScreen(ctx) {
+  return {...accountPage("Secure your email sign-in.","Your existing secure session identifies this account. Choose an email and password to keep the same PG records accessible.",
+    accountForm("enrolEmail",emailField()+passwordField("password","Password")+passwordField("confirmPassword","Confirm password"),"Save email and password")+
+    `<p data-enrol-status role="status"></p>`+button("Sign out",{action:"logout",kind:"secondary block"})),
+    async submit(name,form){if(name!=="enrolEmail")return;const v=formValues(form);if(v.password!==v.confirmPassword)throw new Error("Passwords do not match.");
+      const result=await ctx.api("/api/platform/auth/enrol-email",{method:"POST",body:{email:v.email.trim(),password:v.password}});
+      ctx.markSaved();await ctx.acceptPlatform(result.tokens);}};
 }
 
 export function passwordScreen(ctx) {
@@ -32,13 +60,13 @@ export function passwordScreen(ctx) {
           ? "Replace your temporary password to continue."
           : "Choose a strong password you haven’t used before.",
       ) +
-      `<form data-form="password" novalidate>${notice("Use at least 8 characters. A mix of letters, numbers and symbols is recommended.")}<div class="card"><div class="form-error" role="alert"></div>${field("currentPassword", "Current password", { type: "password", required: true, attrs: 'autocomplete="current-password" maxlength="128"' })}${field("newPassword", "New password", { type: "password", required: true, attrs: 'autocomplete="new-password" minlength="8" maxlength="128"' })}${field("confirmPassword", "Confirm new password", { type: "password", required: true, attrs: 'autocomplete="new-password" minlength="8" maxlength="128"' })}${button("Update password", { type: "submit", kind: "primary block" })}</div></form>`,
+      `<form data-form="password" novalidate>${notice("Use at least 12 characters. A mix of letters, numbers and symbols is recommended.")}<div class="card"><div class="form-error" role="alert"></div>${field("currentPassword", "Current password", { type: "password", required: true, attrs: 'autocomplete="current-password" maxlength="128"' })}${field("newPassword", "New password", { type: "password", required: true, attrs: 'autocomplete="new-password" minlength="12" maxlength="128"' })}${field("confirmPassword", "Confirm new password", { type: "password", required: true, attrs: 'autocomplete="new-password" minlength="12" maxlength="128"' })}${button("Update password", { type: "submit", kind: "primary block" })}</div></form>`,
     async submit(name, form) {
       if (name !== "password") return;
       const values = formValues(form);
       if (values.newPassword !== values.confirmPassword)
         throw new Error("The new passwords don’t match.");
-      const result = await ctx.api("/api/auth/change-password", {
+      const result = await ctx.api(ctx.snapshot.tokens?.kind === "PLATFORM" ? "/api/platform/auth/change-password" : "/api/auth/change-password", {
         method: "POST",
         body: {
           currentPassword: values.currentPassword,

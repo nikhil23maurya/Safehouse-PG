@@ -1,3 +1,4 @@
+import { phoneAccount } from "./legacy-fixtures.js";
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
@@ -14,7 +15,6 @@ process.env.PGONE_TERMS_URL = "https://example.test/terms";
 process.env.PGONE_PRIVACY_URL = "https://example.test/privacy";
 const { prisma } = await import("../src/db.js");
 const {
-  phoneAccount,
   saveProfile,
   createProperty,
   accountSnapshot,
@@ -336,11 +336,13 @@ test("isolated database: creation retries, invitations, access revocation and te
   await assert.rejects(() => membershipTokens(b.id, member.id), {
     code: "FORBIDDEN",
   });
+  await prisma.pgAccount.update({where:{id:b.id},data:{credentialEmail:`${suffix}@example.test`,emailVerified:true}});
+  await prisma.pgOrganisation.update({where:{id:p.organisationId},data:{legacyAccess:true}});
   const invite = await createInvitation(a.id, {
     organisationId: p.organisationId,
     propertyId: p.propertyId,
     role: "STAFF",
-    phoneE164: b.phoneE164!,
+    email: `${suffix}@example.test`,
     permissions: ["OCCUPANCY_READ"],
   });
   await assert.rejects(() => acceptInvitation(a.id, invite.code), {
@@ -386,7 +388,7 @@ test("isolated database: creation retries, invitations, access revocation and te
     organisationId: p.organisationId,
     propertyId: p.propertyId,
     role: "STAFF",
-    phoneE164: b.phoneE164!,
+    email: `${suffix}@example.test`,
     permissions: ["OCCUPANCY_READ"],
   });
   const revoked = await request(

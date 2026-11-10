@@ -43,7 +43,7 @@ jobs:
           gradle-version: '8.9'
       - name: Assemble non-debug release variant
         working-directory: mobile
-        run: gradle :app:assembleRelease --stacktrace
+        run: gradle :app:assembleRelease -PpgoneDistribution=SIDELOAD --stacktrace
       - name: Verify assembly and package identity
         shell: bash
         run: |

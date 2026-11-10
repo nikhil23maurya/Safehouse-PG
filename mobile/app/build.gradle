@@ -3,6 +3,7 @@ plugins {
 }
 
 android {
+    buildFeatures { buildConfig true }
     namespace 'com.safehouse.pg'
     compileSdk 35
 
@@ -10,19 +11,24 @@ android {
         applicationId 'com.safehouse.pg'
         minSdk 23
         targetSdk 35
-        versionCode 52
-        versionName '5.1.0'
+        versionCode 53
+        versionName '5.2.0'
         manifestPlaceholders = [appLabel: 'PGOne']
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        buildConfigField 'String', 'BILLING_DISTRIBUTION', '"CONSUMPTION_ONLY"'
     }
 
     buildTypes {
         debug {
+            buildConfigField 'String', 'BILLING_DISTRIBUTION', '"SIDELOAD"'
             applicationIdSuffix '.testing'
             versionNameSuffix '-testing'
             manifestPlaceholders = [appLabel: 'PGOne Testing']
         }
         release {
+            def channel = providers.gradleProperty('pgoneDistribution').getOrElse('CONSUMPTION_ONLY')
+            if (!(channel in ['SIDELOAD', 'CONSUMPTION_ONLY'])) throw new GradleException('Unsupported billing distribution')
+            buildConfigField 'String', 'BILLING_DISTRIBUTION', '"' + channel + '"'
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
@@ -36,7 +42,6 @@ dependencies {
     // SAFEHOUSE_NOTIFICATIONS_ANDROID_V1
     implementation platform('com.google.firebase:firebase-bom:34.17.0')
     implementation 'com.google.firebase:firebase-messaging'
-    implementation 'com.google.firebase:firebase-auth'
     // Local QR decoding only. No payment secrets stored on device.
     implementation 'com.google.zxing:core:3.5.3'
     androidTestImplementation 'androidx.test:runner:1.6.2'
@@ -56,6 +61,8 @@ tasks.named('preBuild').configure { dependsOn 'buildFrontend' }
 
 configurations.configureEach {
     resolutionStrategy {
+        // customui's POM requests LATEST; pin the inspected native payment core.
+        force 'com.razorpay:customui-core:3.10.20'
         force 'org.jetbrains.kotlin:kotlin-stdlib:1.8.22'
         force 'org.jetbrains.kotlin:kotlin-stdlib-jdk7:1.8.22'
         force 'org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.8.22'

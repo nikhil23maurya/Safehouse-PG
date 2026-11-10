@@ -9,10 +9,13 @@ type Claims = {
   typ: "access" | "refresh";
   exp: number;
   aud: "pgone-platform-v1";
+  sid?: string;
+  nonce?: string;
 };
 export function platformPair(
   account: { id: string; tokenVersion: number },
   membershipId: string | null = null,
+  session?: { id: string; nonce: string },
 ) {
   const issue = (typ: Claims["typ"], ttl: number) => {
     const claims: Claims = {
@@ -22,6 +25,7 @@ export function platformPair(
       typ,
       exp: Math.floor(Date.now() / 1000) + ttl,
       aud: "pgone-platform-v1",
+      ...(session ? { sid: session.id, ...(typ === "refresh" ? { nonce: session.nonce } : {}) } : {}),
     };
     const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
     const signature = crypto

@@ -16,7 +16,7 @@
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:studio": "prisma studio",
-    "prebuild": "node scripts/apply-safehouse2-patch.mjs && node scripts/apply-financial-hardening.mjs && node scripts/finalize-financial-source.mjs && node scripts/apply-runtime-stability.mjs && node scripts/apply-notifications-schema.mjs && node scripts/apply-notifications-backend.mjs"
+    "prebuild": "node scripts/apply-safehouse2-patch.mjs && node scripts/apply-financial-hardening.mjs && node scripts/finalize-financial-source.mjs && node scripts/apply-runtime-stability.mjs && node scripts/apply-notifications-schema.mjs && node scripts/apply-notifications-backend.mjs && node scripts/apply-email-journey.mjs"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.0.0",

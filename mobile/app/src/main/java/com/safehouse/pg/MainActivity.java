@@ -62,7 +62,6 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
     private View splashView;
     private FrameLayout hostView;
     private SessionVault sessionVault;
-    private PhoneSignIn phoneSignIn;
     ProviderQr providerQr = new ProviderQr(ProviderQr::load);
     private final java.util.concurrent.atomic.AtomicBoolean upiOpening = new java.util.concurrent.atomic.AtomicBoolean();
     private boolean pageReady = false;
@@ -87,7 +86,6 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         registerFcmReceiver();
         handleNotificationIntent(getIntent(), false);
         sessionVault = new SessionVault(this);
-        phoneSignIn = new PhoneSignIn(this, (attempt, type, value) -> callJs("window.PGOnePhoneEvent && window.PGOnePhoneEvent(" + q(attempt) + "," + q(type) + "," + q(value) + ");"));
         hostView = new FrameLayout(this);
         hostView.setBackgroundColor(Color.WHITE);
         splashView = buildSplash();
@@ -362,9 +360,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     public final class NativeBridge {
         @JavascriptInterface public String getPackageId() { return getPackageName(); }
-        @JavascriptInterface public void startPhoneSignIn(String config, String number, String attempt, boolean resend) { runOnUiThread(() -> phoneSignIn.start(config, number, attempt, resend)); }
-        @JavascriptInterface public void verifyPhoneCode(String code, String attempt) { runOnUiThread(() -> phoneSignIn.verify(code, attempt)); }
-        @JavascriptInterface public void cancelPhoneSignIn() { runOnUiThread(() -> phoneSignIn.cancel()); }
+        @JavascriptInterface public String getBillingDistribution() { return BuildConfig.BILLING_DISTRIBUTION; }
         @JavascriptInterface public void openLegalLink(String url) { runOnUiThread(() -> {
             try { Uri target = Uri.parse(url); if ("https".equals(target.getScheme()) && target.getHost() != null && target.getUserInfo() == null) startActivity(new Intent(Intent.ACTION_VIEW, target)); } catch (Exception ignored) { Toast.makeText(MainActivity.this, "This link is unavailable", Toast.LENGTH_SHORT).show(); }
         }); }
@@ -372,12 +368,6 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
             return android.provider.Settings.Global.getFloat(getContentResolver(), android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f;
         }
         @JavascriptInterface public String getSession() { return sessionVault.load(); }
-        @JavascriptInterface public void openMerchantOnboarding(String url) { runOnUiThread(() -> {
-            if (!MerchantOnboardingActivity.allowedInitialUrl(url)) {
-                Toast.makeText(MainActivity.this,"The secure onboarding link could not be verified.",Toast.LENGTH_LONG).show(); return;
-            }
-            startActivity(new Intent(MainActivity.this,MerchantOnboardingActivity.class).putExtra("onboardingUrl",url));
-        }); }
         @JavascriptInterface public boolean saveSession(String value) { return sessionVault.save(value); }
         @JavascriptInterface public void ready() {
             runOnUiThread(() -> {
@@ -418,7 +408,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         public void openPlanRazorpayUpi(String optionsJson) {
             runOnUiThread(() -> {
                 try {
-                    if (!getPackageName().endsWith(".testing")) {
+                    if (!"SIDELOAD".equals(BuildConfig.BILLING_DISTRIBUTION)) {
                         throw new IllegalArgumentException("In-app UPI billing is disabled in Google Play production builds");
                     }
                     if (planCustomRazorpay != null) {
@@ -458,14 +448,47 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                     payload.put("description", "PGOne monthly workspace access");
                     if (!contact.isEmpty()) payload.put("contact", contact);
                     if (!email.isEmpty()) payload.put("email", email);
-                    // Without upi_app_package_name Razorpay presents its supported
-                    // installed UPI apps rather than forcing a hardcoded app.
-                    planCustomRazorpay.submit(payload, new PaymentResultListener() {
-                        @Override public void onPaymentSuccess(String ignoredPaymentId) {
-                            runOnUiThread(() -> closePlanPayment("RETURNED_CHECK_PROVIDER"));
+                    final boolean[] discoveryFinished = {false};
+                    planPaymentWebView.postDelayed(() -> {
+                        if (!discoveryFinished[0] && order.equals(planOrderId)) {
+                            closePlanPayment("APP_DISCOVERY_TIMEOUT");
+                            Toast.makeText(MainActivity.this,"UPI app discovery timed out. Check your connection and payment status before retrying.",Toast.LENGTH_LONG).show();
                         }
-                        @Override public void onPaymentError(int code, String description) {
-                            runOnUiThread(() -> closePlanPayment("FAILED_OR_UNKNOWN_CHECK_PROVIDER"));
+                    },15000);
+                    Razorpay.getAppsWhichSupportUpi(MainActivity.this, new com.razorpay.RzpUpiSupportedAppsCallback() {
+                        @Override public void onReceiveUpiSupportedApps(java.util.List<com.razorpay.ApplicationDetails> discovered) {
+                            runOnUiThread(() -> {
+                                discoveryFinished[0] = true;
+                                if (!order.equals(planOrderId) || planCustomRazorpay == null) return;
+                                java.util.ArrayList<com.razorpay.ApplicationDetails> apps = new java.util.ArrayList<>();
+                                java.util.HashSet<String> packages = new java.util.HashSet<>();
+                                if (discovered != null) for (com.razorpay.ApplicationDetails app : discovered) {
+                                    String name=app.getPackageName();
+                                    if(name!=null && name.matches("[a-zA-Z0-9_.]+") && packages.add(name)) apps.add(app);
+                                }
+                                if (apps.isEmpty()) {
+                                    closePlanPayment("NO_SUPPORTED_APP");
+                                    Toast.makeText(MainActivity.this,"No supported UPI app was detected. Install or enable a UPI app, then check payment status before retrying.",Toast.LENGTH_LONG).show();
+                                    return;
+                                }
+                                String[] labels=new String[apps.size()];
+                                for(int i=0;i<apps.size();i++) labels[i]=apps.get(i).getAppName();
+                                new android.app.AlertDialog.Builder(MainActivity.this)
+                                    .setTitle("PGOne · Pay INR 249")
+                                    .setItems(labels,(dialog,which)->{
+                                        if(!order.equals(planOrderId) || planCustomRazorpay==null)return;
+                                        try {
+                                            payload.put("upi_app_package_name",apps.get(which).getPackageName());
+                                            planCustomRazorpay.submit(payload,new PaymentResultListener(){
+                                                @Override public void onPaymentSuccess(String ignoredPaymentId){runOnUiThread(()->closePlanPayment("RETURNED_CHECK_PROVIDER"));}
+                                                @Override public void onPaymentError(int code,String description){runOnUiThread(()->closePlanPayment("FAILED_OR_UNKNOWN_CHECK_PROVIDER"));}
+                                            });
+                                        } catch(Exception error){closePlanPayment("SDK_UNAVAILABLE");}
+                                    })
+                                    .setNegativeButton("Cancel",(dialog,which)->closePlanPayment("CANCELLED_CHECK_PROVIDER"))
+                                    .setOnCancelListener(dialog->closePlanPayment("CANCELLED_CHECK_PROVIDER"))
+                                    .show();
+                            });
                         }
                     });
                 } catch (Exception ignored) {
@@ -475,6 +498,20 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                 }
             });
         }
+
+        @JavascriptInterface public void openDirectOwnerUpi(String uri) { runOnUiThread(() -> {
+            try {
+                Uri target=Uri.parse(uri);
+                String address=target.getQueryParameter("pa"), amount=target.getQueryParameter("am");
+                if (!"upi".equals(target.getScheme()) || !"pay".equals(target.getHost()) ||
+                    address==null || !address.matches("[a-zA-Z0-9._-]{2,128}@[a-zA-Z0-9.-]{2,64}") ||
+                    amount==null || !amount.matches("[0-9]{1,9}\\.[0-9]{2}") || !"INR".equals(target.getQueryParameter("cu")))
+                    throw new IllegalArgumentException("Invalid owner payment details");
+                Intent intent=new Intent(Intent.ACTION_VIEW,target);
+                if (intent.resolveActivity(getPackageManager())==null) throw new ActivityNotFoundException();
+                startActivity(Intent.createChooser(intent,"Pay your PG owner"));
+            } catch(Exception error) { Toast.makeText(MainActivity.this,"No supported UPI app is available. Use the owner's UPI address in your payment app.",Toast.LENGTH_LONG).show(); }
+        }); }
 
         @JavascriptInterface public void openExternal(String url) { runOnUiThread(() -> MainActivity.this.openExternal(url)); }
 
@@ -612,14 +649,14 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                 try {
                     Uri uri = Uri.parse(url == null ? "" : url);
                     if (!"https".equals(uri.getScheme()) || !"safehouse-api.onrender.com".equals(uri.getHost()) ||
-                        uri.getPath() == null || !uri.getPath().matches("/api/(owner|student)/payments/[a-zA-Z0-9_-]+/receipt\\.pdf") || uri.getQuery() != null || uri.getUserInfo() != null) {
+                        (uri.getPort() != -1 && uri.getPort() != 443) || uri.getPath() == null || !(uri.getPath().matches("/api/(owner|student)/payments/[a-zA-Z0-9_-]+/receipt\\.pdf") || uri.getPath().matches("/api/platform/organisations/[a-zA-Z0-9_-]+/plan/receipts/[a-zA-Z0-9_-]+\\.pdf")) || uri.getQuery() != null || uri.getUserInfo() != null) {
                         Toast.makeText(MainActivity.this, "Invalid receipt link", Toast.LENGTH_SHORT).show(); return;
                     }
                     if (Build.VERSION.SDK_INT <= 28 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                         requestPermissions(new String[]{Manifest.permission.WRITE_EXTERNAL_STORAGE}, 9422);
                         Toast.makeText(MainActivity.this, "Allow storage access, then download the receipt again", Toast.LENGTH_LONG).show(); return;
                     }
-                    String safeName = fileName == null ? "SafeHouse-Receipt.pdf" : fileName.replaceAll("[^a-zA-Z0-9_.-]", "");
+                    String safeName = fileName == null ? "PGOne-Receipt.pdf" : fileName.replaceAll("[^a-zA-Z0-9_.-]", "");
                     DownloadManager.Request request = new DownloadManager.Request(uri);
                     request.setTitle(safeName);
                     request.setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED);

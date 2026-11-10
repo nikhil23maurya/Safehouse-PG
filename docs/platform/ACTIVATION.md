@@ -1,111 +1,45 @@
 # PGOne activation guide
 
-The user authorised main/production promotion. A merge does not activate Firebase or payment-provider accounts. Existing email/password accounts and legacy rent payments remain available. New provider flags default to disabled until configuration is supplied. Fresh CI migration/isolation verification is required before promotion; it does not establish live OTP or payment acceptance.
+## Email accounts
 
-## Firebase phone authentication
+PGOne uses email and password only. Phone authentication is retired on Android, browser billing and server APIs. Firebase Messaging is independent and may remain configured.
 
-1. Open the existing Firebase project → **Authentication → Sign-in method → Phone**. Enable it. Your configured testing numbers can be used after the client/server configuration below is installed; enabling testing numbers alone does not configure the app.
-2. In **Project settings → General**, register both Android apps, preserving these package IDs: production `com.safehouse.pg` and testing `com.safehouse.pg.testing`. Copy each app's public Firebase app ID. Do not substitute a registration token, FCM token or API access token.
-3. Add the actual signing certificate's **SHA-1 and SHA-256** under each Android app. For testing, use the certificate reported with the specific CI APK. A new CI debug certificate can require new fingerprints. Before release use the managed release certificate and Play App Signing certificate where applicable.
-4. In Authentication settings, allow the intended SMS regions, review SMS quota/billing, and add your own **test phone number + test code**. This code stays in Firebase; it is never hardcoded in the app. Real SMS needs the project's applicable billing/quota and app-verification setup.
-5. Configure the server's existing `FIREBASE_PROJECT_ID`, `FIREBASE_ANDROID_APP_ID` (production app), `FIREBASE_ANDROID_API_KEY`, `FIREBASE_SENDER_ID`, and `FIREBASE_SERVICE_ACCOUNT_JSON`. Supply the service-account credential through the deployment secret manager, never chat or Git. The service account must belong to this project and be authorised for Firebase Authentication verification/revocation checks.
-6. Add new server settings `PGONE_FIREBASE_TESTING_APP_ID` (testing app), `PGONE_PHONE_AUTH_ENABLED=true`, and HTTPS `PGONE_TERMS_URL` / `PGONE_PRIVACY_URL` pointing to your published policies. The phone registration screen requires both policies. Google sign-in is deliberately omitted until its real client/server integration is supplied.
-7. On an isolated staging database, apply the migration below, then set `PGONE_PLATFORM_ENABLED=true`. Verify `/api/platform/config?package=com.safehouse.pg.testing` returns a non-null `phone` configuration. This is public Firebase client configuration, never a service-account key.
-8. Install the testing APK. Test your Firebase test number, wrong code, resend cooldown, change number, process restart, expired verification, logout and restore. Then test actual SMS on a registered physical Android device. Firebase may open its official app-verification/reCAPTCHA screen; do not disable verification to hide it.
+New accounts collect only email, password and confirmation (confirmation stays on the device). Owner/resident/staff intent and profile details are collected afterward. `PgAccount` is canonical; legacy `User` records remain financial actors. An existing password or valid existing session proves legacy ownership. Email text alone never merges accounts. Ambiguous historical records need assisted recovery.
 
-The app uses official native Firebase Auth, then exchanges a freshly verified Firebase ID token with the server. The server checks project signature/audience, token revocation, phone provider, phone number and recent authentication. Selecting a role never authorises access to an existing property. Legacy linking requires successful existing authentication. Resident/staff invitations are owner-created, phone-bound and expire after seven days.
+The user deferred Resend activation on 10 November 2026. No email confirmation is required to register or sign in. Unconfirmed-email invitations require owner approval after independent identity verification; account/role/property binding is enforced by the backend. Recovery and optional confirmation links are implemented but unavailable until delivery is configured. Do not claim that an email was sent when this integration is unavailable.
 
-## Monthly access: ₹249, owner pays afresh each month
+Optional delivery settings, supplied only through Render Environment:
 
-The owner confirmed **manual monthly payments**, not an automatically renewing subscription. Each ₹249 capture purchases one calendar month. An early renewal starts at the existing paid expiry; otherwise the period starts when capture is verified. Renewal dates use Asia/Kolkata and retain the original day (31 January → 28/29 February → 31 March). No free trial or automatic debit is created.
+- `PGONE_MAIL_API_KEY`: an operator-owned Resend sending key.
+- `PGONE_MAIL_FROM`: an address on the operator's verified Resend domain.
+- `PGONE_ACCOUNT_WEB_ORIGIN=https://safehouse-api.onrender.com`.
 
-The Android Play build remains consumption-only. The separate `/billing/` website uses official Razorpay Custom Checkout `razorpay.js` and one-time UPI intent. It passes a server-created `order_id`, never `subscription_id`. The old recurring-create route returns 410; old records, cancellation/reconciliation and signed legacy webhooks remain for existing contracts. An existing recurring contract must be confirmed ended before a new manual payment can be started.
+A Netlify website URL is not an email sender. Do not fabricate a sender address. No delivery setting is needed for basic email/password registration or login.
 
-### Required production settings
+## Backend release
 
-1. Reuse existing `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET`. For a deliberately separate billing merchant, set **both** `PGONE_SUBSCRIPTION_KEY_ID` / `PGONE_SUBSCRIPTION_KEY_SECRET`; partial overrides stay unavailable and never mix accounts. Do not switch merchants after orders exist without a reconciliation plan.
-2. `PGONE_BILLING_WEB_ORIGIN=https://safehouse-api.onrender.com`. Preserve the existing CORS settings. The custom payment API requires this exact Origin, authenticated owner, fixed-price consent, `recurring=false` and an idempotency key.
-3. Configure `PGONE_TAX_BPS` for the actual seller tax treatment, explicitly `0` if appropriate. The total remains exactly ₹249. The receipt records the tax snapshot and access period; it is not represented as a statutory GST invoice. Confirm the business tax treatment before activation rather than guessing.
-4. Register **`https://safehouse-api.onrender.com/api/platform-webhooks/plan-payments`** in the same Razorpay merchant account. Use a dedicated `PGONE_SUBSCRIPTION_WEBHOOK_SECRET` if configured; otherwise the existing `RAZORPAY_WEBHOOK_SECRET` is used for this separate endpoint. Enable `payment.captured`, `order.paid`, `payment.failed` and applicable refund events. Preserve the old rent webhook unchanged.
-5. Confirm the merchant's one-time Custom Checkout/UPI method and payment-capture configuration. Access requires provider-confirmed **captured** payment and a fully paid matching order. An authorised-only payment is pending and grants no access. A Subscriptions product, provider plan ID or mandate cycles are **not needed**.
-6. After the configured checkout is verified, set `PGONE_CUSTOM_WEB_BILLING_ENABLED=true`. The flag never bypasses amount/currency/order/ownership/capture verification. No paid acceptance or merchant activation may be claimed from unit tests alone.
+Keep `PGONE_PLATFORM_ENABLED=true`. Preserve existing secrets, CORS, database connection and rent webhook. Apply the additive Prisma migrations through `npm run start:render`; do not reset the production database. CI initializes an isolated PostgreSQL database, seeds explicitly synthetic legacy money records, migrates, verifies them and restores a backup into a separate database. These are not copies of production customer data.
 
-Uncertain order creation is held and recovered by its provider receipt reference. It is not blindly retried. Repeated callbacks, webhook delivery or parallel reconciliation cannot extend access twice. The webhook validates raw-body HMAC, deduplicates events and refetches provider state. A refund monotonically revokes that receipt's period; other paid periods are retained at their original dates. Existing legacy workspace access is unchanged.
+A release requires green exact-commit platform/contract/Android checks. Then deploy reviewed `main` on Render and verify `/ready`, `/api/platform/config?package=web` and its `deploymentCommit`. Public config must report `authentication=EMAIL_PASSWORD` and `phone=null`. Check real signup/login after deployment without creating dummy production tenants.
 
-## Per-owner online rent collection
+## Manual monthly Razorpay billing
 
-1. Apply for **Cashfree Embedded Payments** partner access. Explain that PG owners are separate merchants, each with a provider-approved settlement bank relationship. Obtain the supported sandbox onboarding API/SDK contract, authentication, webhook signing and settlement/routing permissions.
-2. Confirm the exact current provider-required business, bank and KYC fields, any hosted-document flow, required disclosures and all activation/rejection/suspension states. Do not paste bank account numbers/PAN/documents into this chat.
-3. Until access is approved the app shows **Not connected / awaiting activation**, collects no bank/KYC documents and cannot claim to verify a bank account. Its `collectionEnabled` stays false. Database status text alone cannot turn on collection.
-4. The existing legacy rent engine settles Razorpay QR payments. It has no approved per-owner Cashfree payment adapter. A new adapter must reconcile captured payments through the existing transactional settlement interface; changing that frozen engine requires an explicit integration decision. New organisations are blocked from starting legacy shared-account online rent payments.
-5. After the approved adapter exists, verify distinct-owner routing, bank confirmation, pending/additional-information/rejected/approved/suspended KYC, signed event replay and refunds/settlement in the provider sandbox. Existing legacy rent collection remains unchanged.
+PGOne costs INR 249 for one calendar month, renewed by a fresh owner-initiated payment. No mandate or auto-debit. Early renewal extends the contiguous paid period at its original India calendar renewal day.
 
-## Migration and release order
+Use existing Razorpay credentials or a complete `PGONE_SUBSCRIPTION_KEY_ID`/`PGONE_SUBSCRIPTION_KEY_SECRET` pair. Partial overrides fail closed. Production requires live keys. The known business is not GST registered: `PGONE_TAX_BPS=0`; do not silently change its tax treatment. Total is always 24900 paise, INR, fixed by the server.
 
-- Review `prisma/migrations/20261109090000_pgone_platform/migration.sql` against a staging clone and take the normal database backup. It adds platform tables/indexes/check constraints and relaxes `User.email/passwordHash` to nullable for real phone-only actors. Existing values, financial tables and enum values are retained.
-- The existing Render start command runs `prisma migrate deploy` on its configured database. Main promotion includes this additive production migration under the user's release authorisation. Review the managed database recovery/backup policy before deployment. Do not roll back to old application code after creating phone-only actors without checking nullable-field compatibility.
-- Verify old password login, property permissions, resident management, invoices, manual payments, QR reconciliation, receipts and notifications alongside the new flows. The CI PostgreSQL instance is disposable and contains synthetic records only.
-- Publish neither a release nor real-payment activation from the testing APK alone. Managed signing, provider sandbox results, physical-device OTP/UPI/FCM and the release review remain required.
+Keep the existing plan-payment webhook at `https://safehouse-api.onrender.com/api/platform-webhooks/plan-payments`, using its configured secret. Events include `payment.captured`, `order.paid`, `payment.failed` and relevant refund events. Preserve the rent webhook. `PGONE_CUSTOM_WEB_BILLING_ENABLED=true` enables the separately branded web surface when configured. No Subscriptions product is needed.
 
-## Primary integration references
+The native Razorpay Custom SDK is available in the explicit `SIDELOAD` build distribution. The production package remains `com.safehouse.pg`; debug testing remains `com.safehouse.pg.testing`. Distribution is a build-time setting, independent of package identity. `assembleRelease -PpgoneDistribution=SIDELOAD` prepares the sideload release. The default release build is consumption-only. Do not upload a sideload purchase build to Google Play as compliant billing. Play sales require a separately implemented Play Billing/enrolled alternative program and its acceptance checks.
 
-- [Firebase Android phone authentication](https://firebase.google.com/docs/auth/android/phone-auth)
-- [Firebase server ID-token verification](https://firebase.google.com/docs/auth/admin/verify-id-tokens)
-- [Razorpay official Custom Checkout subscription documentation](https://github.com/razorpay/markdown-docs/blob/master/api/payments/subscriptions-custom.md)
-- [Razorpay Subscriptions API](https://razorpay.com/docs/api/payments/subscriptions/)
-- [Cashfree Embedded Payments](https://www.cashfree.com/embedded-payments/)
-- [Google Play payments policy](https://support.google.com/googleplay/android-developer/answer/10281818)
+Native/UPI return never activates a plan. Authenticated backend reconciliation verifies merchant, order, organisation, INR amount, capture, refunds and immutable receipt. A lost or uncertain request reuses/reconciles the one open order. Authorized-only or unknown payments remain pending. Exact physical UPI app handoff and real provider acceptance need an approved merchant/device and separately authorized transaction; mock tests cannot establish them.
 
-## Separate web billing build
+## Owner rent
 
-The root build compiles `web/billing/dist` and serves it at `/billing/`, with a scoped provider CSP and exact file allowlist. Android contains no link or code for the web purchase funnel.
+No active Cashfree implementation remains. Historical merchant records are retained. Ordinary Razorpay account keys do not prove Route/connected-merchant approval. Automated independent-owner settlement remains disabled until the provider arrangement is approved and integrated.
 
-Use the registered PGOne Billing Firebase Web app in the same project, with `PGONE_FIREBASE_WEB_APP_ID` and `PGONE_FIREBASE_WEB_API_KEY`. Authorise `safehouse-api.onrender.com`. Web session tokens use in-memory persistence. Owners may alternatively prove an existing email/password account and link it. Resident/staff memberships cannot purchase owner access.
+An owner may instead publish their actual direct UPI address after confirming their PGOne password. The resident sees the exact owner payee and amount, chooses an installed UPI app through Android and submits a bank reference. The state remains `PENDING_OWNER_CONFIRMATION`. The owner verifies their bank, records the actual bank transfer through the existing manual-payment flow and links that existing receipt. Linking is audited, idempotent and cannot add another invoice credit. No screenshot or app-return event settles rent. Payment history and provider source remain unchanged.
 
-Only SDK-confirmed UPI apps are offered. PGOne retains its own payment screens; mandatory payment-provider/UPI authorisation can appear. No Standard Checkout fallback, card input, UPI PIN input or fake payment success is added.
+## Signing and artifacts
 
-## Read-only payment preflight
-
-In the configured backend environment run:
-
-```text
-node --import tsx scripts/pgone-payment-preflight.mjs
-```
-
-This reports the credential source, missing monthly-payment settings, webhook-secret availability and HTTP status of a read-only Razorpay Orders request. It never prints credentials or customer/order/payment records. No plan, mandate, payment, merchant or transfer is created. A successful read is not proof of Custom Checkout approval or payment acceptance. No provider subscription plan or mandate is required. `ownerMerchantOnboardingImplemented=false` explicitly identifies the remaining bank/KYC and owner-wise rent integration gap; configuration cannot enable code that is not implemented.
-
-## Exact production policy values and signing status
-
-```text
-PGONE_TERMS_URL=https://safehouse-api.onrender.com/legal/terms
-PGONE_PRIVACY_URL=https://safehouse-api.onrender.com/legal/privacy
-PGONE_BILLING_WEB_ORIGIN=https://safehouse-api.onrender.com
-```
-
-The existing production Downloads APKs 5.0.0 and 5.0.1 use package `com.safehouse.pg` and the same public release certificate:
-
-```text
-SHA-1: 05:74:A5:E1:42:19:8D:49:DC:64:31:77:2E:DD:6B:35:2A:9E:C6:4C
-SHA-256: D2:07:3D:76:B1:4D:FA:AB:99:92:2B:AD:4B:DE:54:E3:D1:F9:04:FD:29:4B:F3:E7:76:BC:D3:35:4F:4A:95:E0
-```
-
-The user added both fingerprints to Firebase's production app. The original private release keystore has not been located; the user reports no keystore file. An APK contains the public certificate, not the private key. Do not silently replace this signing identity or require uninstalling an existing installation to conceal the missing update signer. CI provides an unsigned production assembly and a separate testing package. Use that testing APK's exact certificate under its separate Firebase app registration.
-
-### Signed production release pipeline (requires original keystore)
-
-A guarded manual Actions workflow now exists at `.github/workflows/pgone-production-signing.yml`. It does not create a new key and will refuse to publish any APK signed with a different certificate than the existing PGOne production APKs.
-
-Before running it, the original release-key custodian must configure a restricted GitHub Environment named `production-signing` with these secrets:
-
-- `PGONE_RELEASE_KEYSTORE_B64`: base64 of the original existing production keystore (not a generated replacement)
-- `PGONE_RELEASE_STORE_PASSWORD`: that keystore's password
-- `PGONE_RELEASE_KEY_ALIAS`: the original signing-key alias
-- `PGONE_RELEASE_KEY_PASSWORD`: that key's password
-
-Never copy these values into PRs, issues, docs or chat. The workflow accepts an **exact reviewed 40-character main commit SHA**, assembles a non-debug release, signs the APK, checks the package `com.safehouse.pg` and the original certificate SHA-256, and uploads a verified internal artifact if and only if all checks pass. A signed internal artifact is **not** proof that ₹249 payment acceptance, onboarding, per-owner rent collection, settlements, security, legal requirements or Play Store billing are live; those require separate acceptance testing before a public release.
-
-Without the original signing key, existing manually distributed `com.safehouse.pg` installations cannot be upgraded with a newly signed APK. The signed old APK contains only the public certificate, not the original private key.
-
-Firebase test numbers use their configured codes and send no SMS. Keep these entries out of app source and logs. They authenticate real Firebase identities, so use them only for internal verification and remove the entry before customer use of that account. A console test entry has been configured, but a real provider exchange remains pending deployment configuration. Real SMS requires Firebase Blaze billing and the applicable region, quota and app-verification setup.
-
-After deployment, check `/health`, `/ready`, `/api/platform/config?package=com.safehouse.pg`, its exact `deploymentCommit`, the two policy URLs and `/billing/`. A null `phone` requires checking both PGOne feature flags and the Firebase server settings above. Existing one-time rent credentials do not prove one-time Custom Checkout acceptance.
+Version 5.2.0, versionCode 53. Testing and production artifacts must be labelled accurately. The guarded production-signing workflow requires the original keystore and passwords/alias in the `production-signing` GitHub environment, plus an independently checked existing certificate and version. Missing original credentials block an upgrade-compatible production APK. Never create a replacement key or publish an unsigned/debug APK as production. Testing APK publication is permitted by the current brief and is labelled with its package, commit and debug signing status.

@@ -107,7 +107,17 @@ export async function reconcilePlanOrder(id: string, provider = new RazorpayPlan
   const candidates = list.items.filter((p: any) => p.status === "captured" || p.captured === true || p.status === "refunded");
   assert(candidates.length <= 1, 409, "MULTIPLE_PLAN_CAPTURES", "Multiple captures need support review; no extra access was granted.");
   let receipt = await prisma.pgPlanReceipt.findUnique({ where: { orderId: id } });
-  if (!candidates.length && !receipt) return local;
+  if (!candidates.length && !receipt) {
+    const status = list.items.some((p:any)=>p.status === "authorized") ? "VERIFYING" :
+      list.items.length && list.items.every((p:any)=>p.status === "failed") ? "FAILED" : "PENDING";
+    if(status !== local.status) return atomic(async tx=>{
+      const fresh=await tx.pgPlanOrder.findUniqueOrThrow({where:{id}});
+      if(!fresh.open)return fresh;
+      const updated=await tx.pgPlanOrder.update({where:{id},data:{status}});
+      await audit(tx,null,local.organisationId,"PLAN_ATTEMPT_STATUS_RECONCILED",id,{status});return updated;
+    });
+    return local;
+  }
   const paymentId = receipt?.providerPaymentId || candidates[0]?.id;
   assert(/^pay_[a-zA-Z0-9]+$/.test(paymentId || ""), 502, "PLAN_PAYMENT_MISMATCH", "Invalid payment confirmation.");
   const payment = await provider.payment(paymentId);
@@ -204,7 +214,7 @@ export async function createPlanOrder(accountId: string, organisationId: string,
     local = await reconcilePlanOrder(local.id, provider);
   }
   return { id: local.id, orderId: local.providerOrderId, keyId: local.providerKeyId,
-    amountPaise: 24900, currency: "INR", status: local.status, payable: local.open && local.status === "PENDING", recurring: false };
+    amountPaise: 24900, currency: "INR", status: local.status, payable: local.open && ["PENDING","FAILED"].includes(local.status), recurring: false };
 }
 
 export async function verifyPlanPayment(accountId: string, organisationId: string, id: string,

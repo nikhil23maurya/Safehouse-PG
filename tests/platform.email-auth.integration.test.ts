@@ -1,0 +1,102 @@
+import test,{after} from "node:test";
+import assert from "node:assert/strict";
+process.env.PGONE_PLATFORM_ENABLED="true";
+const url=new URL(process.env.DATABASE_URL || "invalid:");
+assert.equal(process.env.NODE_ENV,"test");
+assert.ok(["localhost","127.0.0.1"].includes(url.hostname));
+assert.equal(url.pathname,"/pgone_test");
+const {prisma}=await import("../src/db.js");
+const {registerEmail,loginEmail,requestEmailAction,consumeEmailAction,changeEmailPassword,upgradeLegacySession,enrolAuthenticatedEmail}=await import("../src/platform/email-auth.js");
+const {passwordMatches}=await import("../src/platform/passwords.js");
+const {issueSession,rotateSession}=await import("../src/platform/sessions.js");
+const {accountSession,saveProfile,createProperty}=await import("../src/platform/service.js");
+const {hashPassword,createTokenPair}=await import("../src/security.js");
+const {createInvitation,acceptInvitation}=await import("../src/platform/invitations.js");
+const password="correct horse private password";
+const email=()=>`${crypto.randomUUID()}@example.test`;
+after(async()=>{await prisma.$disconnect();});
+
+test("email registration normalizes identity, hashes passwords and prevents duplicate concurrent accounts",async()=>{
+  const address=email();
+  const results=await Promise.allSettled([registerEmail(address.toUpperCase(),password),registerEmail(` ${address} `,password)]);
+  assert.equal(results.filter(r=>r.status==="fulfilled").length,1);
+  const account=await prisma.pgAccount.findUniqueOrThrow({where:{credentialEmail:address}});
+  assert.equal(account.fullName,"");assert.equal(account.phoneE164,null);assert.equal(account.setupIntent,null);
+  assert.ok(account.passwordHash?.startsWith("scrypt-v2$"));assert.ok(await passwordMatches(password,account.passwordHash));
+  assert.equal((await loginEmail(address.toUpperCase(),password)).id,account.id);
+  await assert.rejects(()=>loginEmail(address,"wrong"),{code:"INVALID_CREDENTIALS"});
+});
+test("refresh rotates exactly once, replay revokes the family and password change revokes other logins",async()=>{
+  const account=await registerEmail(email(),password);
+  const first=await issueSession(account);const second=await issueSession(account);
+  const rotated=await rotateSession(first.refreshToken);
+  assert.notEqual(rotated.refreshToken,first.refreshToken);
+  await assert.rejects(()=>rotateSession(first.refreshToken),{code:"SESSION_REPLAY"});
+  await assert.rejects(()=>accountSession(rotated.accessToken),{code:"SESSION_INVALID"});
+  await accountSession(second.accessToken);
+  await changeEmailPassword(account.id,password,"another private password 123");
+  await assert.rejects(()=>accountSession(second.accessToken),{code:"SESSION_INVALID"});
+  await assert.rejects(()=>loginEmail(account.email!,password),{code:"INVALID_CREDENTIALS"});
+});
+test("email reset tokens are hashed, single-use, expiring and revoke all sessions",async()=>{
+  const account=await registerEmail(email(),password);const session=await issueSession(account);
+  let token="";await requestEmailAction(account.id,"RESET",async(to,purpose,value)=>{assert.equal(to,account.email);assert.equal(purpose,"RESET");token=value;});
+  const rows=await prisma.pgEmailAction.findMany({where:{accountId:account.id}});
+  assert.equal(rows.length,1);assert.notEqual(rows[0]!.tokenHash,token);assert.equal(rows[0]!.passwordHash,null);
+  await consumeEmailAction(token,"RESET","a replacement password 456");
+  await assert.rejects(()=>consumeEmailAction(token,"RESET","another private password"),{code:"EMAIL_LINK_INVALID"});
+  await assert.rejects(()=>accountSession(session.accessToken),{code:"SESSION_INVALID"});
+  assert.equal((await loginEmail(account.email!,"a replacement password 456")).id,account.id);
+  const other=await registerEmail(email(),password);let expired="";
+  await requestEmailAction(other.id,"RESET",async(_e,_p,t)=>{expired=t;});
+  await prisma.pgEmailAction.updateMany({where:{accountId:other.id},data:{expiresAt:new Date(0)}});
+  await assert.rejects(()=>consumeEmailAction(expired,"RESET",password),{code:"EMAIL_LINK_INVALID"});
+});
+test("a legacy password proves migration; email collisions never link historical memberships",async()=>{
+  const address=email();const user=await prisma.user.create({data:{email:address,fullName:"Existing owner",role:"OWNER",passwordHash:await hashPassword(password)}});
+  const property=await prisma.property.create({data:{ownerId:user.id,name:"Existing property"}});
+  const migrated=await loginEmail(address,password);
+  assert.equal(migrated.legacyUserId,user.id);assert.ok(migrated.passwordHash);
+  assert.equal((await prisma.user.findUniqueOrThrow({where:{id:user.id}})).passwordHash,null);
+  assert.equal(await prisma.pgMembership.count({where:{accountId:migrated.id,propertyId:property.id,role:"OWNER"}}),1);
+  assert.equal((await loginEmail(address,password)).id,migrated.id);
+  const collision=email();await prisma.user.create({data:{email:collision,fullName:"Historical owner",role:"OWNER",passwordHash:await hashPassword(password)}});
+  await prisma.pgAccount.create({data:{email:collision,phoneE164:`+919${String(Math.floor(Math.random()*1e9)).padStart(9,"0")}`}});
+  await assert.rejects(()=>loginEmail(collision,password),{code:"ACCOUNT_RECOVERY_REVIEW"});
+});
+test("invites bind the intended email and owner-approved identity, preserve roles and accept once",async()=>{
+  const owner=await registerEmail(email(),password);await saveProfile(owner.id,{fullName:"Invite owner",intent:"OWNER"});
+  const setup=await createProperty(owner.id,{name:"Invite House",city:"Pune",key:crypto.randomUUID()});
+  // Explicit isolated fixture grants an existing legacy entitlement, never a client paid flag.
+  await prisma.pgOrganisation.update({where:{id:setup.organisationId},data:{legacyAccess:true}});
+  const staff=await registerEmail(email(),password);const stranger=await registerEmail(email(),password);
+  const invite=await createInvitation(owner.id,{organisationId:setup.organisationId,propertyId:setup.propertyId,role:"STAFF",email:staff.email!,permissions:["OCCUPANCY_READ"]});
+  assert.equal((await acceptInvitation(staff.id,invite.code) as any).pendingOwnerApproval,true);
+  await assert.rejects(()=>acceptInvitation(staff.id,"",{ownerAccountId:stranger.id,invitationId:invite.id}),{code:"APPROVAL_NOT_ALLOWED"});
+  await assert.rejects(()=>acceptInvitation(stranger.id,invite.code),{code:"INVITATION_UNAVAILABLE"});
+  const member=await acceptInvitation(staff.id,"",{ownerAccountId:owner.id,invitationId:invite.id}) as any;assert.equal(member.role,"STAFF");assert.equal(member.actorUserId,null);
+  assert.equal((await acceptInvitation(staff.id,invite.code) as any).id,member.id);
+  assert.equal(await prisma.pgMembership.count({where:{accountId:staff.id,propertyId:setup.propertyId}}),1);
+});
+test("valid existing legacy sessions migrate to rotating canonical sessions and cannot be replayed",async()=>{
+  const user=await prisma.user.create({data:{email:email(),fullName:"Existing session owner",role:"OWNER",passwordHash:await hashPassword(password)}});
+  const property=await prisma.property.create({data:{ownerId:user.id,name:"Session property"}});
+  const old=createTokenPair(user);
+  const upgraded=await upgradeLegacySession(old.refreshToken);
+  assert.equal(upgraded.kind,"PLATFORM");
+  const session=await accountSession(upgraded.accessToken);
+  assert.equal(session.membership?.propertyId,property.id);
+  assert.equal(session.account.legacyUserId,user.id);
+  await assert.rejects(()=>upgradeLegacySession(old.refreshToken),{code:"SESSION_INVALID"});
+  assert.equal((await loginEmail(user.email!,password)).id,session.account.id);
+});
+test("a valid historical account session can enrol credentials without mail and without claiming another identity",async()=>{
+  const old=await prisma.pgAccount.create({data:{firebaseUid:`historical-${crypto.randomUUID()}`,fullName:"Existing PG owner"}});
+  const tokens=await issueSession(old);
+  const address=email();const updated=await enrolAuthenticatedEmail(old.id,old.tokenVersion,address,password);
+  assert.equal(updated.id,old.id);assert.equal(updated.emailVerified,false);
+  assert.equal((await loginEmail(address,password)).id,old.id);
+  await assert.rejects(()=>accountSession(tokens.accessToken),{code:"SESSION_INVALID"});
+  const another=await prisma.pgAccount.create({data:{firebaseUid:`historical-${crypto.randomUUID()}`}});
+  await assert.rejects(()=>enrolAuthenticatedEmail(another.id,another.tokenVersion,address,password),{code:"ACCOUNT_EXISTS"});
+});
