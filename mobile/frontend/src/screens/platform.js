@@ -1,3 +1,4 @@
+import {planCheckout} from "../payments/plan.js";
 import { brand, icon } from "../components/icons.js";
 import {
   esc,
@@ -189,7 +190,7 @@ export function joinWorkspaceScreen(ctx) {
   return {
     ...page(
       "Join your PG",
-      `${intro("YOU’RE INVITED", "Your place is waiting.", "Enter the invitation code shared by your PG owner. Use the email address they invited.")}${notice("Enter the private invitation from your owner. Your owner confirms your identity before access is granted.")}${button("Refresh workspaces",{action:"refreshEmail",kind:"secondary block"})}${form("invitation", field("code", "Invitation code", { required: true, attrs: 'minlength="43" maxlength="43" autocomplete="off" autocapitalize="none" spellcheck="false"' }), "Review invitation")}${button("Link an existing account", { route: "linkAccount", kind: "secondary block" })}<p class="legal-copy">Your owner controls property access and staff permissions.</p>`,
+      `${intro("YOU’RE INVITED", "Your place is waiting.", "Enter the invitation code shared by your PG owner. Use the email address they invited.")}${notice("Enter the private invitation from your owner. Your owner confirms your identity before access is granted.")}${button("Refresh workspaces",{action:"refreshEmail",kind:"secondary block"})}${form("invitation", field("code", "Invitation code", { required: true, attrs: 'minlength="43" maxlength="43" autocomplete="off" autocapitalize="none" spellcheck="false"' }), "Review invitation")}<p class="legal-copy">Your owner controls property access and staff permissions.</p>`,
       "workspaces",
     ),
     async action(name){if(name==="refreshEmail"){await ctx.refreshPlatform();await ctx.navigate("workspaces");}},
@@ -229,7 +230,7 @@ export async function subscriptionScreen(ctx) {
   const paymentState=ctx.snapshot.platform?.journey?.state;
   const canPayHere = cfg.androidBilling === "CUSTOM_UPI_INTENT" &&
     ctx.native.has("openPlanRazorpayUpi") && data.configured === true;
-  let pendingOrderId = null;
+  planCheckout.restore(ctx.native,org.id);
   let preparing = false;
   let checking = false;
   const refreshPaidState = async () => {
@@ -249,29 +250,35 @@ export async function subscriptionScreen(ctx) {
       }
     } finally { checking = false; }
   };
-  const handlePlanResult = async (orderId, result) => {
-    if (pendingOrderId !== orderId) return;
-    pendingOrderId = null;
-    try { await refreshPaidState(); }
-    catch {
-      ctx.toast("Razorpay confirmation is pending. Do not pay twice; check activation again.", "error");
-    }
+  const paintStatus = () => {
+    const status=document.querySelector('[data-plan-checkout-status]');
+    if(status)status.textContent=planCheckout.organisationId===org.id?planCheckout.message:"";
+    const pay=document.querySelector('[data-action="planPay"]');if(pay)pay.disabled=planCheckout.busy;
   };
-  const previousHandler = window.PGOnePlanPaymentResult;
-  window.PGOnePlanPaymentResult = handlePlanResult;
   return {
     ...page(
       active ? "PGOne activated" : "Activate PGOne",
-      `${intro(active ? "ACCESS CONFIRMED" : "ACTIVATE YOUR PROPERTY", active ? "You're ready to manage your PG." : "Your PG is ready. One last step.", active ? "Your monthly PGOne access has been verified." : "Your property is saved. Make a secure ₹249 UPI payment to activate your management dashboard.")}<div class="royal-plan"><span class="plan-name">PGOne · One plan</span><div class="plan-price">₹249<small>/ month</small></div><p>One payment covers one calendar month · no automatic debit</p><p>${data.tax?.rateBps===0?"₹249 total. GST is not charged.":"₹249 total, including applicable tax."}</p><ul>${["Manage rooms and residents", "Track rent, receipts and dues", "Manage staff access", "Enable online rent collection after separate merchant approval"].map(t => `<li>${icon("check")}${t}</li>`).join("")}</ul></div><div class="subscription-state">${badge(active ? "ACTIVE" : "ACTIVATION REQUIRED", active ? "green" : "neutral")}${data.accessEnd ? `<p>Access ends ${date(data.accessEnd)}</p>` : ""}</div>${paymentState && paymentState!=="SUBSCRIPTION_ACTIVE" ? notice(paymentState.replaceAll("_"," ").toLowerCase()) : ""}${active ? `${canPayHere ? primary("Renew for ₹249 with UPI",{action:"planPay",glyph:"arrow"}) : ""}${primary("Enter my dashboard", { route: "ownerHome", glyph: "arrow" })}${button("Set up rent collection", { route: "merchant", kind: "secondary block" })}` : `${canPayHere ? `${primary("Pay ₹249 securely with UPI", { action: "planPay", glyph: "arrow" })}${notice("Select your installed UPI app in Razorpay's secure flow. Approve payment inside the UPI app. Dashboard unlocks only after the payment is verified.")}` : notice(cfg.androidBilling === "CONSUMPTION_ONLY" ? "This distribution does not sell subscriptions in-app. You may use an existing subscription purchased through an authorised channel." : "Razorpay is not activated for in-app payments on this sideloaded build. PGOne needs live merchant keys, tax settings and payment webhooks before a real charge can be accepted.")}${data.pendingOrder ? notice("A previous payment is under verification. Check its status before making another payment.") : ""}${primary("Check payment status", { action: "subscriptionRefresh", glyph: "refresh" })}${button("Switch workspace", { route: "workspaces", kind: "secondary block" })}`}${data.subscription?.payments?.length ? `<h2 class="royal-section-title">Verified payment history</h2>${data.subscription.payments.map(p => card(`<strong>₹${(p.amountPaise / 100).toFixed(2)}</strong><p>${date(p.paidAt)} · ${esc(p.receiptNumber)}</p>${button("Download receipt",{action:"planReceipt",kind:"text-button",attrs:`data-id="${esc(p.id)}" data-number="${esc(p.receiptNumber)}"`})}`)).join("")}` : ""}<p class="legal-copy">₹249 is a one-time manual payment for one calendar month. UPI authorisation happens in your chosen UPI app. No UPI PIN is collected by PGOne. Razorpay confirms capture on our backend; returning to this screen is not proof of payment. Rent settlement is separate.</p>`,
+      `${intro(active ? "ACCESS CONFIRMED" : "ACTIVATE YOUR PROPERTY", active ? "You're ready to manage your PG." : "Your PG is ready. One last step.", active ? "Your monthly PGOne access has been verified." : "Your property is saved. Make a secure ₹249 UPI payment to activate your management dashboard.")}<div class="royal-plan"><span class="plan-name">PGOne · One plan</span><div class="plan-price">₹249<small>/ month</small></div><p>One payment covers one calendar month · no automatic debit</p><p>${data.tax?.rateBps===0?"₹249 total. GST is not charged.":"₹249 total, including applicable tax."}</p><ul>${["Manage rooms and residents", "Track rent, receipts and dues", "Manage staff access", "Enable online rent collection after separate merchant approval"].map(t => `<li>${icon("check")}${t}</li>`).join("")}</ul></div><div class="subscription-state">${badge(active ? "ACTIVE" : "ACTIVATION REQUIRED", active ? "green" : "neutral")}${data.accessEnd ? `<p>Access ends ${date(data.accessEnd)}</p>` : ""}</div>${paymentState && paymentState!=="SUBSCRIPTION_ACTIVE" ? notice(paymentState.replaceAll("_"," ").toLowerCase()) : ""}${active ? `${canPayHere ? primary("Renew for ₹249 with UPI",{action:"planPay",glyph:"arrow"}) : ""}${primary("Enter my dashboard", { route: "ownerHome", glyph: "arrow" })}${button("Set up rent collection", { route: "merchant", kind: "secondary block" })}` : `${canPayHere ? `${primary("Pay ₹249 securely with UPI", { action: "planPay", glyph: "arrow" })}${notice("Select your installed UPI app in Razorpay's secure flow. Approve payment inside the UPI app. Dashboard unlocks only after the payment is verified.")}` : notice(cfg.androidBilling === "CONSUMPTION_ONLY" ? "This distribution does not sell subscriptions in-app. You may use an existing subscription purchased through an authorised channel." : "Razorpay is not activated for in-app payments on this sideloaded build. PGOne needs live merchant keys, tax settings and payment webhooks before a real charge can be accepted.")}${data.pendingOrder ? notice("A previous payment is under verification. Check its status before making another payment.") : ""}${primary("Check payment status", { action: "subscriptionRefresh", glyph: "refresh" })}${button("Switch workspace", { route: "workspaces", kind: "secondary block" })}`}${data.subscription?.payments?.length ? `<h2 class="royal-section-title">Verified payment history</h2>${data.subscription.payments.map(p => card(`<strong>₹${(p.amountPaise / 100).toFixed(2)}</strong><p>${date(p.paidAt)} · ${esc(p.receiptNumber)}</p>${button("Download receipt",{action:"planReceipt",kind:"text-button",attrs:`data-id="${esc(p.id)}" data-number="${esc(p.receiptNumber)}"`})}`)).join("")}` : ""}<p data-plan-checkout-status role="status" aria-live="polite"></p><p class="legal-copy">₹249 is a one-time manual payment for one calendar month. UPI authorisation happens in your chosen UPI app. No UPI PIN is collected by PGOne. Razorpay confirms capture on our backend; returning to this screen is not proof of payment. Rent settlement is separate.</p>`,
       "workspaces",
     ),
+    onPlanResult: async () => {
+      paintStatus();
+      if(planCheckout.busy)return;
+      try {
+        await ctx.api(`/api/platform/organisations/${org.id}/subscription/recheck`,{method:"POST"});
+        if(await ctx.refreshPaidAccess())await ctx.navigate("setupReady",{},{replace:true});
+      } catch { ctx.toast("Payment confirmation is pending. Check status before paying again.","error"); }
+    },
     async action(name,el) {
       if(name==="planReceipt")return ctx.downloadAccountReceipt(`/api/platform/organisations/${org.id}/plan/receipts/${el.dataset.id}.pdf`,el.dataset.number);
-      if (name === "subscriptionRefresh") return refreshPaidState();
+      if (name === "subscriptionRefresh") {
+        await platformConfig(ctx,{force:true});
+        return refreshPaidState();
+      }
       if (name !== "planPay") return;
       if (!canPayHere) throw new Error("Razorpay in-app UPI payment is not configured.");
       if (preparing) return;
-      if (pendingOrderId) throw new Error("The previous payment is still open. Check status before retrying.");
+      if (planCheckout.busy) throw new Error("Finish or cancel the open UPI checkout first.");
       preparing = true;
       try {
       const order = await ctx.api(`/api/platform/organisations/${org.id}/plan/android/orders`, {
@@ -285,27 +292,26 @@ export async function subscriptionScreen(ctx) {
           order.recurring !== false) {
         throw new Error("The payment provider returned an invalid ₹249 order.");
       }
-      pendingOrderId = order.orderId;
+      planCheckout.begin(org.id,order.orderId);
       const account = ctx.snapshot.platform?.account || {};
       ctx.native.call("openPlanRazorpayUpi", JSON.stringify({
-        key: order.keyId,
+        organisationId:org.id, key: order.keyId,
         order_id: order.orderId,
         amount: 24900, currency: "INR",
                 email: account.email || "",
+        contact: /^(\+91)?[6-9][0-9]{9}$/.test((account.contactPhone||"").replace(/[ ()-]/g,"")) ? account.contactPhone.replace(/[ ()-]/g,"") : "",
       }));
-      ctx.toast("Choose a UPI app to approve your ₹249 payment.");
+      paintStatus();
       } finally { preparing = false; }
     },
     mount() {
+      paintStatus();
       if (data.pendingOrder && !onboarding.recheckedOrderIds?.has(data.pendingOrder.id)) {
         (onboarding.recheckedOrderIds ||= new Set()).add(data.pendingOrder.id);
         void refreshPaidState().catch(()=>ctx.toast("Payment verification is pending. Check status before paying again.","error"));
       }
     },
-    unmount() {
-      if (window.PGOnePlanPaymentResult === handlePlanResult)
-        window.PGOnePlanPaymentResult = previousHandler;
-    },
+
   };
 }
 

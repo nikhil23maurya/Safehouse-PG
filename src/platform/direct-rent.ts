@@ -8,6 +8,32 @@ import {passwordMatches} from "./passwords.js";
 import {randomCode} from "./tokens.js";
 
 const vpa=z.string().trim().toLowerCase().regex(/^[a-z0-9._-]{2,128}@[a-z0-9.-]{2,64}$/);
+export function directClaimIssue(claim:any,invoice:any,payee:any) {
+  if(claim.status==="OWNER_CONFIRMED")return null;
+  if(!invoice || invoice.status!=="DUE" || invoice.totalPaise<=invoice.paidPaise)return "This invoice is already settled or being processed. Ask your owner to reconcile the existing payment reference.";
+  if(claim.amountPaise!==invoice.totalPaise-invoice.paidPaise)return "The invoice balance changed after this request. Do not pay this old amount. Ask your owner to reconcile the existing reference.";
+  if(!payee?.enabled || payee.revision!==claim.payeeRevision || payee.upiAddress!==claim.payeeAddress || payee.payeeName!==claim.payeeName)return "Your owner's payment details changed. Do not pay this old request. Ask your owner to review it.";
+  return null;
+}
+export async function directRentStatus(accountId:string,membershipId:string,invoiceId:string) {
+  const member=await prisma.pgMembership.findFirst({where:{id:membershipId,accountId,role:"RESIDENT",status:"ACTIVE"}});
+  assert(member?.actorUserId,403,"RESIDENT_REQUIRED","Select your active resident workspace.");
+  const student=await prisma.student.findFirst({where:{userId:member.actorUserId,propertyId:member.propertyId,status:"ACTIVE"}});
+  assert(student,403,"RESIDENT_INACTIVE","This residency is not active.");
+  const invoice=await prisma.rentInvoice.findFirst({where:{id:invoiceId,studentId:student.id,propertyId:member.propertyId}});
+  assert(invoice,404,"INVOICE_NOT_FOUND","This invoice does not belong to your residency.");
+  const [claim,payee,open]=await Promise.all([
+    prisma.pgDirectRentClaim.findFirst({where:{invoiceId,accountId,propertyId:member.propertyId},orderBy:{createdAt:"desc"}}),
+    prisma.pgOwnerUpi.findUnique({where:{propertyId:member.propertyId}}),
+    prisma.paymentAttempt.findFirst({where:{invoiceId,status:{in:["CREATED","VERIFIED"]}}}),
+  ]);
+  const issue=claim ? directClaimIssue(claim,invoice,payee) : null;
+  const settled=["PAID","WAIVED"].includes(invoice.status)||invoice.totalPaise<=invoice.paidPaise;
+  const payable=Boolean(claim && !issue && !settled && !open && claim.status==="PENDING_OWNER_CONFIRMATION" && !claim.bankReference);
+  return {claim,remainingPaise:Math.max(0,invoice.totalPaise-invoice.paidPaise),settled,issue,
+    ownerConfigured:Boolean(payee?.enabled),canPrepare:!claim&&!settled&&!open&&Boolean(payee?.enabled),
+    payable,intent:payable?directIntent(claim!):null,providerVerified:false};
+}
 export async function createDirectClaim(accountId:string,membershipId:string,invoiceId:string,key:string) {
   return atomic(async tx=>{
     const member=await tx.pgMembership.findFirst({where:{id:membershipId,accountId,role:"RESIDENT",status:"ACTIVE"}});
@@ -15,15 +41,19 @@ export async function createDirectClaim(accountId:string,membershipId:string,inv
     const student=await tx.student.findFirst({where:{userId:member.actorUserId,propertyId:member.propertyId,status:"ACTIVE"}});
     assert(student,403,"RESIDENT_INACTIVE","This residency is not active.");
     const prior=await tx.pgDirectRentClaim.findUnique({where:{accountId_requestKey:{accountId,requestKey:key}}});
-    if(prior){assert(prior.invoiceId===invoiceId&&prior.propertyId===member.propertyId,409,"IDEMPOTENCY_CONFLICT","This request belongs to a different invoice.");return prior;}
+    if(prior)assert(prior.invoiceId===invoiceId&&prior.propertyId===member.propertyId,409,"IDEMPOTENCY_CONFLICT","This request belongs to a different invoice.");
     const invoice=await tx.rentInvoice.findFirst({where:{id:invoiceId,studentId:student.id,propertyId:member.propertyId}});
     const payee=await tx.pgOwnerUpi.findUnique({where:{propertyId:member.propertyId}});
+    const existing=prior || await tx.pgDirectRentClaim.findFirst({where:{invoiceId,accountId,status:"PENDING_OWNER_CONFIRMATION"}});
+    if(existing){
+      if(existing.status==="OWNER_CONFIRMED")return existing;
+      assert(!directClaimIssue(existing,invoice,payee),409,"RENT_REQUEST_CHANGED",directClaimIssue(existing,invoice,payee) || "Review this payment first.");
+      return existing;
+    }
     assert(invoice&&invoice.status==="DUE"&&invoice.totalPaise>invoice.paidPaise,409,"RENT_NOT_PAYABLE","This rent is not currently payable.");
     assert(payee?.enabled,409,"OWNER_UPI_UNAVAILABLE","Your owner has not supplied a direct UPI address. Ask your owner for payment arrangements.");
     const open=await tx.paymentAttempt.findFirst({where:{invoiceId,status:{in:["CREATED","VERIFIED"]}}});
     assert(!open,409,"PAYMENT_ATTEMPT_OPEN","Check the existing provider payment before sending a separate bank transfer.");
-    const existing=await tx.pgDirectRentClaim.findFirst({where:{invoiceId,accountId,status:"PENDING_OWNER_CONFIRMATION"}});
-    if(existing)return existing; // Network retries or another device never encourage a second transfer.
     const claim=await tx.pgDirectRentClaim.create({data:{accountId,invoiceId,studentId:student.id,propertyId:member.propertyId,requestKey:key,
       payeeAddress:payee.upiAddress,payeeName:payee.payeeName,payeeRevision:payee.revision,
       amountPaise:invoice.totalPaise-invoice.paidPaise,reference:`PGO${randomCode().slice(0,24)}`}});
@@ -74,11 +104,15 @@ directRentRouter.post("/owner",async(req,res)=>{
     await audit(tx,account.id,membership.organisationId,"DIRECT_OWNER_UPI_UPDATED",membership.propertyId,{enabled:input.enabled});});
   res.json({ok:true});
 });
+directRentRouter.get("/invoices/:id",async(req,res)=>{
+  const {account,membership}=await session(req);assert(membership,403,"WORKSPACE_REQUIRED","Select your residency.");
+  res.json(await directRentStatus(account.id,membership.id,String(req.params.id)));
+});
 directRentRouter.post("/invoices/:id",async(req,res)=>{
   const {account,membership}=await session(req);assert(membership,403,"WORKSPACE_REQUIRED","Select your residency.");
   const {key}=z.object({key:z.string().regex(/^[A-Za-z0-9_-]{16,100}$/)}).parse(req.body);
   const claim=await createDirectClaim(account.id,membership.id,String(req.params.id),key);
-  res.json({claim,intent:directIntent(claim),providerVerified:false});
+  res.json(await directRentStatus(account.id,membership.id,String(req.params.id)));
 });
 directRentRouter.post("/claims/:id/reference",async(req,res)=>{
   const {account,membership}=await session(req);assert(membership?.role==="RESIDENT",403,"FORBIDDEN","Select your residency.");

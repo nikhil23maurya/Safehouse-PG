@@ -61,7 +61,7 @@ export async function platform(page, { billing = false } = {}) {
       data = {
         enabled: true,
         androidBilling: billing ? "CUSTOM_UPI_INTENT" : "NOT_CONFIGURED",
-        authentication:"EMAIL_PASSWORD",phone:null,
+        authentication:"EMAIL_PASSWORD",phone:null,recoveryAvailable:true,
         legal: {
           terms: "https://example.test/terms",
           privacy: "https://example.test/privacy",

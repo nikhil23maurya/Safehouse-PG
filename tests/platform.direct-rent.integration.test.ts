@@ -4,7 +4,7 @@ process.env.PGONE_PLATFORM_ENABLED="true";
 const {prisma}=await import("../src/db.js");
 const {registerEmail}=await import("../src/platform/email-auth.js");
 const {saveProfile,createProperty}=await import("../src/platform/service.js");
-const {createDirectClaim,confirmDirectClaim,directIntent}=await import("../src/platform/direct-rent.js");
+const {createDirectClaim,confirmDirectClaim,directIntent,directRentStatus}=await import("../src/platform/direct-rent.js");
 after(async()=>{await prisma.$disconnect();});
 test("direct owner transfer references never credit rent; one existing manual bank receipt confirms once",async()=>{
   const owner=await registerEmail(`${crypto.randomUUID()}@example.test`,"private test password 123");
@@ -23,6 +23,16 @@ test("direct owner transfer references never credit rent; one existing manual ba
   assert.equal((await prisma.rentInvoice.findUniqueOrThrow({where:{id:invoice.id}})).paidPaise,0);
   await assert.rejects(()=>createDirectClaim(owner.id,member.id,invoice.id,crypto.randomUUID()),{code:"RESIDENT_REQUIRED"});
   await assert.rejects(()=>confirmDirectClaim(owner.id,setup.propertyId,a.id,"not-a-payment"),{code:"BANK_REFERENCE_REQUIRED"});
+  await prisma.rentInvoice.update({where:{id:invoice.id},data:{paidPaise:100}});
+  await assert.rejects(()=>createDirectClaim(resident.id,member.id,invoice.id,crypto.randomUUID()),{code:"RENT_REQUEST_CHANGED"});
+  await assert.rejects(()=>createDirectClaim(resident.id,member.id,invoice.id,a.requestKey),{code:"RENT_REQUEST_CHANGED"});
+  const changed=await directRentStatus(resident.id,member.id,invoice.id);
+  assert.equal(changed.payable,false);assert.equal(changed.intent,null);assert.match(changed.issue!,/balance changed/);
+  await prisma.rentInvoice.update({where:{id:invoice.id},data:{paidPaise:0}});
+  await prisma.pgOwnerUpi.update({where:{propertyId:setup.propertyId},data:{revision:{increment:1}}});
+  assert.equal((await directRentStatus(resident.id,member.id,invoice.id)).payable,false);
+  await assert.rejects(()=>createDirectClaim(resident.id,member.id,invoice.id,crypto.randomUUID()),{code:"RENT_REQUEST_CHANGED"});
+  await prisma.pgOwnerUpi.update({where:{propertyId:setup.propertyId},data:{revision:a.payeeRevision}});
   await prisma.pgDirectRentClaim.update({where:{id:a.id},data:{bankReference:"123456789012"}});
   await assert.rejects(()=>confirmDirectClaim(owner.id,setup.propertyId,a.id,"not-a-payment"),{code:"MANUAL_RECEIPT_MISMATCH"});
   // Existing manual-payment service result, isolated fixture only. Linking must not post again.
@@ -33,6 +43,8 @@ test("direct owner transfer references never credit rent; one existing manual ba
   await confirmDirectClaim(owner.id,setup.propertyId,a.id,payment.receiptNumber);
   const repeat=await confirmDirectClaim(owner.id,setup.propertyId,a.id,payment.id);
   assert.equal(repeat.status,"OWNER_CONFIRMED");
+  const settled=await directRentStatus(resident.id,member.id,invoice.id);
+  assert.equal(settled.claim?.id,a.id);assert.equal(settled.settled,true);assert.equal(settled.payable,false);assert.equal(settled.intent,null);
   assert.equal(await prisma.payment.count({where:{invoiceId:invoice.id}}),before);
   assert.equal((await prisma.rentInvoice.findUniqueOrThrow({where:{id:invoice.id}})).paidPaise,850099);
 });

@@ -1,7 +1,7 @@
 name: Verify PGOne Platform
 on:
   pull_request:
-    paths: ['src/**', 'prisma/**', 'tests/**', 'web/billing/**', 'package.json', 'scripts/pgone-payment-preflight.mjs', '.github/workflows/pgone-platform.yml']
+    paths: ['src/**', 'prisma/**', 'tests/**', 'web/billing/**', 'package.json', 'scripts/pgone-payment-preflight.mjs', 'scripts/apply-email-journey.mjs', 'docs/operations/**', '.github/workflows/pgone-platform.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -56,3 +56,13 @@ jobs:
           echo "Synthetic legacy financial backup restored and verified in a separate CI database."
       - name: Verify the actual HTTP backend journey
         run: node --import tsx --test tests/platform.http.integration.test.ts
+
+      - name: Verify the one-time reset only against the separate restored CI database
+        shell: bash
+        run: |
+          set -euo pipefail
+          PG_CONTAINER=$(docker ps --filter ancestor=postgres:16 --format '{{.ID}}' | head -n 1)
+          docker exec -i "$PG_CONTAINER" psql -v ON_ERROR_STOP=1 -U ci -d pgone_restore < docs/operations/RESET-PGONE-DEMO-DATA.sql
+          REMAINING=$(docker exec "$PG_CONTAINER" psql -U ci -d pgone_restore -tAc 'SELECT count(*) FROM "PgAccount";')
+          test "$REMAINING" = "0"
+          echo "One-time reset verified in the isolated restored CI database; production was not touched."

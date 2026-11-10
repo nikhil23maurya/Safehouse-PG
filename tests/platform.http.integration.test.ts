@@ -15,6 +15,8 @@ test("real backend email signup through owner activation, restoration and logout
   const email=`http-${crypto.randomUUID()}@example.test`,password="Private HTTP password 123!";
   assert.equal((await request("/api/platform/auth/register",{email,password,role:"OWNER"})).status,400);
   const registered=await request("/api/platform/auth/register",{email,password});assert.equal(registered.status,201);
+  const legacyRejected=await request("/api/auth/login",{email,password});
+  assert.equal(legacyRejected.status,426);assert.equal(legacyRejected.body.error.code,"APP_UPDATE_REQUIRED");
   const accountToken=registered.body.tokens.accessToken;
   assert.equal((await request("/api/platform/session",undefined,accountToken)).body.user.role,"ACCOUNT");
   assert.equal((await request("/api/platform/auth/register",{email:email.toUpperCase(),password})).status,409);

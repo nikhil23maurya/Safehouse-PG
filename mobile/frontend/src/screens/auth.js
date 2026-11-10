@@ -1,3 +1,4 @@
+import {platformConfig} from "../platform/client.js";
 import { brand } from "../components/icons.js";
 import { button, heading, notice } from "../components/ui.js";
 import { field, formValues } from "../components/forms.js";
@@ -26,7 +27,10 @@ export function signupScreen(ctx) {
       const result=await ctx.api("/api/platform/auth/register",{method:"POST",public:true,body:{email:v.email.trim(),password:v.password}});
       ctx.markSaved();await ctx.acceptPlatform(result.tokens);}};
 }
-export function forgotPasswordScreen(ctx) {
+export async function forgotPasswordScreen(ctx) {
+  const config=await platformConfig(ctx,{force:true});
+  if(!config.recoveryAvailable)return accountPage("Password recovery is unavailable.","Email recovery has not been activated for PGOne yet.",
+    notice("If you are still signed in on another device, use Change password there. Otherwise contact your PGOne operator to verify account ownership. A new signup does not recover your existing records.")+button("Back to sign in",{route:"login",kind:"secondary block"}));
   return {...accountPage("Reset your password.","We’ll email a secure link that expires in 15 minutes.",
     accountForm("forgotPassword",emailField(),"Send recovery link")+button("Back to sign in",{route:"login",kind:"secondary block"})+
     `<div data-recovery-status role="status"></div><p class="legal-copy">Historical phone-only accounts without email credentials require assisted ownership recovery.</p>`),

@@ -115,7 +115,7 @@ jobs:
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging "$APK" > diagnostics/apk/package.txt
           grep -q "name='com.safehouse.pg.testing'" diagnostics/apk/package.txt
           SOURCE_SHA="$(git rev-parse HEAD)"
-          NAME="PGOne-5.2.0-testing-${SOURCE_SHA:0:12}.apk"
+          NAME="PGOne-5.2.1-testing-${SOURCE_SHA:0:12}.apk"
           cp "$APK" "diagnostics/apk/$NAME"
           (cd diagnostics/apk && sha256sum "$NAME" > "$NAME.sha256")
           printf 'commit=%s\nrun_id=%s\nkind=debug/testing\napplication_id=com.safehouse.pg.testing\n' "$SOURCE_SHA" "$GITHUB_RUN_ID" > diagnostics/apk/build-provenance.txt

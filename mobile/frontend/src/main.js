@@ -1,3 +1,4 @@
+import {planCheckout} from "./payments/plan.js";
 import {
   state,
   currentPeriod,
@@ -199,6 +200,9 @@ function clearSession() {
   });
   dirty = false;
   onboarding.propertyKey = null;
+  onboarding.config = null;
+  onboarding.configFetchedAt = 0;
+  planCheckout.clear();
   onboarding.attempt = "";
   onboarding.exchangeAttempt = "";
   onboarding.sentAt = 0;
@@ -547,6 +551,12 @@ window.SafeHousePaymentError = () => {
   toast("Check payment status before trying again.");
   void payment.resume();
 };
+window.PGOnePlanPaymentResult=(order,status,message)=>{
+  const org=state.platform?.memberships?.find(m=>m.id===state.platform.membershipId)?.organisation;
+  if(state.tokens?.kind!=="PLATFORM" || !org || planCheckout.organisationId!==org.id)return;
+  if(planCheckout.receive(order,status,message))void screen?.onPlanResult?.();
+};
+window.PGOneDirectUpiResult=(opened,message)=>screen?.directUpiResult?.(opened,message);
 // The native Custom SDK returns a UPI-app result, never an entitlement.
 window.PGOnePlanPaymentError = (message) => {
   toast(message || "UPI checkout could not open. Check payment status before retrying.", "error");
@@ -714,6 +724,10 @@ async function render() {
   const seq = ++sequence;
   screen?.unmount?.();
   screen = null;
+  // During async route resolution, the previous form must not accept input
+  // that would be discarded when the destination screen replaces it.
+  if(document.getElementById("app").dataset.screen!==state.route.name)
+    document.querySelectorAll("#app input,#app button,#app select,#app textarea").forEach(el=>{el.disabled=true;});
   clearTimeout(loadingTimer);
   const snapshot = {
       ...state,
