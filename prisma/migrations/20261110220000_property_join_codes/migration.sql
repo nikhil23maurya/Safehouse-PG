@@ -1,4 +1,5 @@
 -- Additive only. Existing accounts, memberships and financial records are preserved.
+BEGIN;
 CREATE TABLE "PgJoinCode" (
   "propertyId" TEXT PRIMARY KEY,
   "organisationId" TEXT NOT NULL,
@@ -31,3 +32,13 @@ DO $$ BEGIN
     REVOKE ALL ON TABLE "PgJoinCode", "PgJoinCodeAttempt" FROM authenticated;
   END IF;
 END $$;
+-- New PG-code members are ACTIVE but unassigned. Owner/staff invariants and
+-- the unique active-resident actor index remain intact. No existing row changes.
+-- The unchanged legacy financial bridge requires an active actor and Student.
+ALTER TABLE "PgMembership" DROP CONSTRAINT "PgMembership_actor_check";
+ALTER TABLE "PgMembership" ADD CONSTRAINT "PgMembership_actor_check" CHECK (
+  ("role" = 'STAFF' AND "actorUserId" IS NULL)
+  OR ("role" = 'OWNER' AND "actorUserId" IS NOT NULL)
+  OR ("role" = 'RESIDENT' AND ("actorUserId" IS NOT NULL OR cardinality("permissions") = 0))
+);
+COMMIT;

@@ -61,6 +61,21 @@ test("join guessing is persistently rate limited per account",async()=>{
  const r=await account();for(let i=0;i<20;i++)await assert.rejects(()=>joinProperty(r.id,"invalid"),{code:"PG_CODE_UNAVAILABLE"});
  await assert.rejects(()=>joinProperty(r.id,"invalid"),{code:"PG_JOIN_RATE_LIMIT"});
 });
+test("exact-order payment status never substitutes existing entitlement, another order or a refunded receipt",async()=>{
+ const {a,setup}=await owner(),foreign=await owner();
+ const member=await prisma.pgMembership.findFirstOrThrow({where:{accountId:a.id,propertyId:setup.propertyId,role:"OWNER"}});
+ const tokens=await membershipTokens(a.id,member.id),providerOrderId=`order_${crypto.randomUUID().replaceAll("-","")}`;
+ const order=await prisma.pgPlanOrder.create({data:{organisationId:setup.organisationId,requestKey:crypto.randomUUID(),receiptReference:crypto.randomUUID(),providerOrderId,providerKeyId:"rzp_test_SYNTHETIC",taxPaise:0,status:"VERIFYING"}});
+ const get=()=>fetch(`${base}/api/platform/organisations/${setup.organisationId}/plan/orders/${providerOrderId}/state`,{headers:{authorization:`Bearer ${tokens.accessToken}`}});
+ await prisma.pgOrganisation.update({where:{id:setup.organisationId},data:{legacyAccess:true}});
+ let response=await get();assert.equal(response.status,200);assert.equal((await response.json() as any).captured,false);
+ const now=new Date(),receipt=await prisma.pgPlanReceipt.create({data:{organisationId:setup.organisationId,orderId:order.id,providerPaymentId:`pay_${crypto.randomUUID().replaceAll("-","")}`,receiptNumber:`SYNTHETIC-${crypto.randomUUID()}`,amountPaise:24900,taxPaise:0,paidAt:now,periodStart:now,periodEnd:new Date(now.getTime()+30*86400000),anchorDay:now.getUTCDate()}});
+ const verified:any=await (await get()).json();assert.equal(verified.captured,true);assert.equal(verified.receipt.number,receipt.receiptNumber);
+ const outsider=await prisma.pgMembership.findFirstOrThrow({where:{accountId:foreign.a.id,role:"OWNER"}}),otherTokens=await membershipTokens(foreign.a.id,outsider.id);
+ response=await fetch(`${base}/api/platform/organisations/${setup.organisationId}/plan/orders/${providerOrderId}/state`,{headers:{authorization:`Bearer ${otherTokens.accessToken}`}});assert.equal(response.status,403);
+ await prisma.pgPlanReceipt.update({where:{id:receipt.id},data:{refundedPaise:1}});
+ const refunded:any=await (await get()).json();assert.equal(refunded.captured,false);assert.equal(refunded.receipt,null);
+});
 test("UPI save survives reread, is idempotent and wrong password is a form error without logout",async()=>{
  const {a,setup}=await owner();await prisma.pgOrganisation.update({where:{id:setup.organisationId},data:{legacyAccess:true}});
  const m=await prisma.pgMembership.findFirstOrThrow({where:{accountId:a.id,propertyId:setup.propertyId,role:"OWNER"}});
