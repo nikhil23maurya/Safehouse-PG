@@ -167,6 +167,23 @@ export async function changeEmailPassword(accountId:string,currentPassword:strin
   });
 }
 
+// Existing encrypted sessions prove the historical account. Email text is never a linking key.
+export async function enrolAuthenticatedEmail(accountId:string,expectedVersion:number,email:string,password:string) {
+  email=emailInput.parse(email);const digest=await passwordHash(passwordInput.parse(password));
+  return atomic(async tx=>{
+    const account=await tx.pgAccount.findUniqueOrThrow({where:{id:accountId}});
+    assert(account.status==="ACTIVE"&&account.tokenVersion===expectedVersion&&!account.passwordHash,
+      409,"ACCOUNT_CHANGED","This account already has credentials or its session changed. Sign in again.");
+    const conflicts=await tx.pgAccount.count({where:{id:{not:account.id},OR:[{credentialEmail:email},{email:{equals:email,mode:"insensitive"}}]}});
+    const legacy=await tx.user.count({where:{email:{equals:email,mode:"insensitive"},id:{not:account.legacyUserId || ""}}});
+    assert(!conflicts&&!legacy,409,"ACCOUNT_EXISTS","This email belongs to another account. Use a different email or assisted recovery; accounts cannot be merged here.");
+    const updated=await tx.pgAccount.update({where:{id:account.id},data:{email,credentialEmail:email,passwordHash:digest,emailVerified:false,tokenVersion:{increment:1}}});
+    await tx.pgSession.updateMany({where:{accountId:account.id,revokedAt:null},data:{revokedAt:new Date()}});
+    await audit(tx,account.id,null,"AUTHENTICATED_EMAIL_CREDENTIALS_ENROLLED",account.id);
+    return updated;
+  });
+}
+
 export const emailAuthRouter = express.Router();
 const limiter = rateLimit({windowMs:15*60000,limit:20,standardHeaders:"draft-8",legacyHeaders:false});
 emailAuthRouter.use(limiter,(_req,res,next)=>{res.setHeader("Cache-Control","no-store");next();});
@@ -203,9 +220,10 @@ emailAuthRouter.post("/email-link",async(req,res)=>{
   await requestEmailAction(account.id,"VERIFY"); res.json({ok:true});
 });
 emailAuthRouter.post("/enrol-email",async(req,res)=>{
-  const {account} = await current(req);
+  const {account,membership} = await current(req);
   const input = credentials.extend({password:passwordInput}).parse(req.body);
-  await requestEmailAction(account.id,"ENROL",sendAccountEmail,input); res.json({ok:true});
+  const updated=await enrolAuthenticatedEmail(account.id,account.tokenVersion,input.email,input.password);
+  res.json({ok:true,tokens:await issueSession(updated,membership?.id || null)});
 });
 emailAuthRouter.post("/complete",async(req,res)=>{
   const input = z.object({token:tokenInput,purpose:z.enum(["RESET","VERIFY","ENROL"]),password:passwordInput.optional()}).strict().parse(req.body);

@@ -35,12 +35,12 @@ export function forgotPasswordScreen(ctx) {
       document.querySelector("[data-recovery-status]").textContent=result.message;}};
 }
 export function enrolEmailScreen(ctx) {
-  return {...accountPage("Secure your email sign-in.","You’re signed in to an existing account. Confirm an email and choose a password to keep these records accessible.",
-    accountForm("enrolEmail",emailField()+passwordField("password","Password")+passwordField("confirmPassword","Confirm password"),"Email confirmation link")+
+  return {...accountPage("Secure your email sign-in.","Your existing secure session identifies this account. Choose an email and password to keep the same PG records accessible.",
+    accountForm("enrolEmail",emailField()+passwordField("password","Password")+passwordField("confirmPassword","Confirm password"),"Save email and password")+
     `<p data-enrol-status role="status"></p>`+button("Sign out",{action:"logout",kind:"secondary block"})),
     async submit(name,form){if(name!=="enrolEmail")return;const v=formValues(form);if(v.password!==v.confirmPassword)throw new Error("Passwords do not match.");
-      await ctx.api("/api/platform/auth/enrol-email",{method:"POST",body:{email:v.email.trim(),password:v.password}});
-      document.querySelector("[data-enrol-status]").textContent="Check your email to confirm ownership. Then sign in with your email and password.";}};
+      const result=await ctx.api("/api/platform/auth/enrol-email",{method:"POST",body:{email:v.email.trim(),password:v.password}});
+      ctx.markSaved();await ctx.acceptPlatform(result.tokens);}};
 }
 
 export function passwordScreen(ctx) {

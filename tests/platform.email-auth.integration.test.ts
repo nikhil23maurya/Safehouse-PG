@@ -6,7 +6,7 @@ assert.equal(process.env.NODE_ENV,"test");
 assert.ok(["localhost","127.0.0.1"].includes(url.hostname));
 assert.equal(url.pathname,"/pgone_test");
 const {prisma}=await import("../src/db.js");
-const {registerEmail,loginEmail,requestEmailAction,consumeEmailAction,changeEmailPassword,upgradeLegacySession}=await import("../src/platform/email-auth.js");
+const {registerEmail,loginEmail,requestEmailAction,consumeEmailAction,changeEmailPassword,upgradeLegacySession,enrolAuthenticatedEmail}=await import("../src/platform/email-auth.js");
 const {passwordMatches}=await import("../src/platform/passwords.js");
 const {issueSession,rotateSession}=await import("../src/platform/sessions.js");
 const {accountSession,saveProfile,createProperty}=await import("../src/platform/service.js");
@@ -89,4 +89,14 @@ test("valid existing legacy sessions migrate to rotating canonical sessions and 
   assert.equal(session.account.legacyUserId,user.id);
   await assert.rejects(()=>upgradeLegacySession(old.refreshToken),{code:"SESSION_INVALID"});
   assert.equal((await loginEmail(user.email!,password)).id,session.account.id);
+});
+test("a valid historical account session can enrol credentials without mail and without claiming another identity",async()=>{
+  const old=await prisma.pgAccount.create({data:{firebaseUid:`historical-${crypto.randomUUID()}`,fullName:"Existing PG owner"}});
+  const tokens=await issueSession(old);
+  const address=email();const updated=await enrolAuthenticatedEmail(old.id,old.tokenVersion,address,password);
+  assert.equal(updated.id,old.id);assert.equal(updated.emailVerified,false);
+  assert.equal((await loginEmail(address,password)).id,old.id);
+  await assert.rejects(()=>accountSession(tokens.accessToken),{code:"SESSION_INVALID"});
+  const another=await prisma.pgAccount.create({data:{firebaseUid:`historical-${crypto.randomUUID()}`}});
+  await assert.rejects(()=>enrolAuthenticatedEmail(another.id,another.tokenVersion,address,password),{code:"ACCOUNT_EXISTS"});
 });
