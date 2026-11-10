@@ -10,7 +10,10 @@ import {
   STAFF_PERMISSIONS,
   subscriptionCredentials,
 } from "./config.js";
-import { phoneConfig, verifyPhoneIdentity } from "./identity.js";
+import { emailAuthRouter, mailReady } from "./email-auth.js";
+import { issueSession, rotateSession } from "./sessions.js";
+import { journey } from "./journey.js";
+import { directRentRouter } from "./direct-rent.js";
 import {
   accountSession,
   accountSnapshot,
@@ -20,7 +23,6 @@ import {
   linkLegacy,
   membershipTokens,
   ownerOrganisation,
-  phoneAccount,
   saveProfile,
 } from "./service.js";
 import { platformPair } from "./tokens.js";
@@ -43,7 +45,7 @@ import {
   verifyAuthorisation,
 } from "./web-billing.js";
 import { createPlanOrder, planProviderConfigured, manualPlanStatus, recheckPlanPayments, verifyPlanPayment } from "./plan-payments.js";
-import { beginMerchantSetup, merchantProfileInput, merchantBankInput, submitMerchantBank, merchantOnboardingLink, syncMerchantRecord } from "./cashfree-merchant.js";
+
 
 export const platformRouter = express.Router();
 const limited = rateLimit({
@@ -66,7 +68,9 @@ platformRouter.get("/config", (req, res) => {
   const packageId = String(req.query.package || "web");
   res.json({
     enabled: platformEnabled(),
-    phone: phoneConfig(packageId),
+    phone: null,
+    authentication: "EMAIL_PASSWORD",
+    recoveryAvailable: mailReady(),
     googleEnabled: false,
     customWebBilling: {
       enabled: customWebBillingEnabled(),
@@ -155,32 +159,14 @@ platformRouter.use((_req, _res, next) => {
   );
   next();
 });
-platformRouter.post("/phone", limited, async (req, res) => {
-  const { idToken, mode } = z
-    .object({
-      idToken: z.string().min(100).max(10000),
-      mode: z.enum(["SIGN_UP", "SIGN_IN"]).default("SIGN_UP"),
-    })
-    .parse(req.body);
-  const account = await phoneAccount(
-    await verifyPhoneIdentity(idToken),
-    mode === "SIGN_UP",
-  );
-  res.json({
-    tokens: platformPair(account),
-    ...(await accountSnapshot(account.id)),
-  });
+platformRouter.post("/phone", (_req,_res) => {
+  assert(false,410,"PHONE_AUTH_RETIRED","Use your email and password. Historical phone-only accounts require ownership recovery.");
 });
-platformRouter.post("/refresh", limited, async (req, res) => {
-  const { refreshToken } = z
-    .object({ refreshToken: z.string().max(8192) })
-    .parse(req.body);
-  const { account, membership } = await accountSession(
-    refreshToken,
-    "refresh",
-    true,
-  );
-  res.json({ tokens: platformPair(account, membership?.id || null) });
+platformRouter.use("/auth",emailAuthRouter);
+platformRouter.use("/rent",directRentRouter);
+platformRouter.post("/refresh",limited,async(req,res)=>{
+  const {refreshToken} = z.object({refreshToken:z.string().max(8192)}).parse(req.body);
+  res.json({tokens:await rotateSession(refreshToken)});
 });
 platformRouter.get("/session", async (req, res) => {
   const { account, membership } = await session(req);
@@ -224,20 +210,21 @@ platformRouter.get("/session", async (req, res) => {
     ...snapshot,
     memberships,
     membershipId: membership?.id || null,
+    journey: await journey(account,membership),
     user: membership
       ? {
           id: membership.actorUserId || account.id,
           fullName: account.fullName,
           email: account.email,
           role: membership.role === "RESIDENT" ? "STUDENT" : membership.role,
-          mustChangePassword: false,
+          mustChangePassword: account.passwordChangeRequired,
         }
       : {
           id: account.id,
           fullName: account.fullName,
           email: account.email,
           role: "ACCOUNT",
-          mustChangePassword: false,
+          mustChangePassword: account.passwordChangeRequired,
         },
     property: membership
       ? {
@@ -274,7 +261,7 @@ platformRouter.post("/link-legacy", limited, async (req, res) => {
     current?.account.tokenVersion,
   );
   res.json({
-    tokens: platformPair(account),
+    tokens: await issueSession(account),
     ...(await accountSnapshot(account.id)),
   });
 });
@@ -283,7 +270,7 @@ platformRouter.post("/profile", async (req, res) => {
   const input = z
     .object({
       fullName: z.string().trim().min(2).max(100),
-      email: z.union([z.email(), z.literal("")]).optional(),
+      contactPhone: z.string().trim().regex(/^[+0-9 ()-]{0,25}$/).optional(),
       intent: z.enum(["OWNER", "RESIDENT", "STAFF"]),
     })
     .parse(req.body);
@@ -292,6 +279,7 @@ platformRouter.post("/profile", async (req, res) => {
 });
 platformRouter.post("/properties", async (req, res) => {
   const { account } = await session(req);
+  assert(!account.passwordChangeRequired,403,"PASSWORD_CHANGE_REQUIRED","Change your temporary password first.");
   const input = z
     .object({
       name: z.string().trim().min(2).max(120),
@@ -325,7 +313,7 @@ platformRouter.post("/invitations", limited, async (req, res) => {
       organisationId: id,
       propertyId: id,
       role: z.enum(["RESIDENT", "STAFF"]),
-      phoneE164: z.string().regex(/^\+91[6-9]\d{9}$/),
+      email: z.string().trim().toLowerCase().max(254).pipe(z.email()),
       studentId: id.optional(),
       permissions: z.array(z.enum(STAFF_PERMISSIONS)).max(2).default([]),
     })
@@ -360,7 +348,7 @@ platformRouter.get("/organisations/:id/invitations", async (req, res) => {
         i.status === "PENDING" && i.expiresAt < new Date()
           ? "EXPIRED"
           : i.status,
-      phoneLast4: i.phoneE164.slice(-4),
+      email: i.email,
       expiresAt: i.expiresAt,
     })),
   });
@@ -405,13 +393,13 @@ platformRouter.post("/memberships/:id/revoke", async (req, res) => {
       where: { id: member.id },
       data: { status: "REVOKED" },
     });
-    if (member.account.phoneE164)
+    if (member.account.credentialEmail)
       await tx.pgInvitation.updateMany({
         where: {
           organisationId: member.organisationId,
           propertyId: member.propertyId,
           role: member.role,
-          phoneE164: member.account.phoneE164,
+          email: member.account.credentialEmail,
           status: "PENDING",
         },
         data: { status: "REVOKED" },
@@ -494,30 +482,8 @@ platformRouter.get("/organisations/:id/merchant", async (req, res) => {
   const { account } = await session(req);
   res.json(await merchantStatus(account.id, id.parse(req.params.id)));
 });
-platformRouter.post("/organisations/:id/merchant/profile", limited, async (req,res) => {
-  const { account } = await session(req);
-  const organisationId = id.parse(req.params.id);
-  await beginMerchantSetup(account.id, organisationId, merchantProfileInput.parse(req.body));
-  res.json(await merchantStatus(account.id,organisationId));
-});
-platformRouter.post("/organisations/:id/merchant/bank", limited, async (req,res) => {
-  const { account } = await session(req);
-  const organisationId = id.parse(req.params.id);
-  await submitMerchantBank(account.id,organisationId,merchantBankInput.parse(req.body));
-  res.json(await merchantStatus(account.id,organisationId));
-});
-platformRouter.post("/organisations/:id/merchant/onboarding-link", limited, async (req,res) => {
-  const { account } = await session(req);
-  res.setHeader("Cache-Control","no-store");
-  res.setHeader("Referrer-Policy","no-referrer");
-  res.json(await merchantOnboardingLink(account.id,id.parse(req.params.id)));
-});
-platformRouter.post("/organisations/:id/merchant/recheck", limited, async (req,res) => {
-  const { account } = await session(req);
-  const organisationId = id.parse(req.params.id);
-  await ownerOrganisation(account.id,organisationId);
-  await syncMerchantRecord(organisationId);
-  res.json(await merchantStatus(account.id,organisationId));
+platformRouter.post("/organisations/:id/merchant/:action", (_req,_res)=>{
+  assert(false,410,"MERCHANT_SETUP_UNAVAILABLE","Automated owner settlement requires an approved Razorpay connected-merchant arrangement. Use manual rent recording.");
 });
 platformRouter.get("/staff", async (req, res) => {
   const { membership } = await session(req);

@@ -75,6 +75,8 @@ model User {
 }
 
 model Property {
+  ownerUpi PgOwnerUpi?
+  directRentClaims PgDirectRentClaim[]
   id        String   @id @default(cuid())
   name      String
   currency  String   @default("INR")
@@ -101,6 +103,8 @@ model Property {
 // PGOne platform expansion: new identities/memberships supplement legacy actors.
 // Existing financial tables, identifiers and values are retained.
 model PgAccount {
+  ownerUpi PgOwnerUpi[]
+  directRentClaims PgDirectRentClaim[]
   id String @id @default(cuid())
   firebaseUid String? @unique
   phoneE164 String? @unique
@@ -108,6 +112,12 @@ model PgAccount {
   fullName String @default("")
   email String?
   emailVerified Boolean @default(false)
+  credentialEmail String? @unique
+  contactPhone String?
+  passwordHash String?
+  passwordChangeRequired Boolean @default(false)
+  sessions PgSession[]
+  emailActions PgEmailAction[]
   status String @default("ACTIVE")
   tokenVersion Int @default(0)
   setupIntent String?
@@ -175,7 +185,8 @@ model PgInvitation {
   organisationId String
   propertyId String
   role String
-  phoneE164 String
+  phoneE164 String?
+  email String?
   studentId String?
   permissions String[] @default([])
   tokenHash String @unique
@@ -335,6 +346,7 @@ model Room {
 }
 
 model Student {
+  directRentClaims PgDirectRentClaim[]
   id                   String        @id @default(cuid())
   propertyId           String
   userId               String        @unique
@@ -384,6 +396,7 @@ model RentRevision {
 }
 
 model RentInvoice {
+  directRentClaims PgDirectRentClaim[]
   id                    String        @id @default(cuid())
   propertyId            String
   studentId             String
@@ -434,6 +447,7 @@ model PaymentAttempt {
 }
 
 model Payment {
+  directRentClaim PgDirectRentClaim?
   id                String        @id @default(cuid())
   propertyId        String
   studentId         String
@@ -536,4 +550,73 @@ model AuditLog {
   actor    User?    @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([propertyId, createdAt])
+}
+
+
+// Server-only credentials. No public Data API grants or client-side policies.
+model PgSession {
+  id String @id @default(cuid())
+  accountId String
+  refreshHash String @unique
+  upgradeHash String? @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  account PgAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  @@index([accountId, revokedAt])
+}
+
+model PgEmailAction {
+  id String @id @default(cuid())
+  accountId String
+  email String
+  purpose String
+  tokenHash String @unique
+  passwordHash String?
+  expiresAt DateTime
+  usedAt DateTime?
+  createdAt DateTime @default(now())
+  account PgAccount @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  @@index([accountId, purpose, createdAt])
+}
+
+
+model PgOwnerUpi {
+  property Property @relation(fields:[propertyId], references:[id], onDelete:Restrict)
+  owner PgAccount @relation(fields:[ownerAccountId], references:[id], onDelete:Restrict)
+  propertyId String @id
+  ownerAccountId String
+  upiAddress String
+  payeeName String
+  enabled Boolean @default(true)
+  revision Int @default(1)
+  updatedAt DateTime @updatedAt
+}
+
+model PgDirectRentClaim {
+  property Property @relation(fields:[propertyId], references:[id], onDelete:Restrict)
+  invoice RentInvoice @relation(fields:[invoiceId], references:[id], onDelete:Restrict)
+  student Student @relation(fields:[studentId], references:[id], onDelete:Restrict)
+  account PgAccount @relation(fields:[accountId], references:[id], onDelete:Restrict)
+  confirmedPayment Payment? @relation(fields:[confirmedPaymentId], references:[id], onDelete:Restrict)
+  id String @id @default(cuid())
+  propertyId String
+  invoiceId String
+  studentId String
+  accountId String
+  requestKey String
+  payeeAddress String
+  payeeName String
+  payeeRevision Int
+  amountPaise Int
+  reference String @unique
+  status String @default("PENDING_OWNER_CONFIRMATION")
+  bankReference String?
+  confirmedPaymentId String? @unique
+  createdAt DateTime @default(now())
+  confirmedAt DateTime?
+  @@unique([accountId, requestKey])
+  @@index([propertyId, status])
+  @@index([invoiceId, createdAt])
 }

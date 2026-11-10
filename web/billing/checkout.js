@@ -45,7 +45,7 @@ export class CustomUpiPayment {
     if (this.busy) return false;
     if (
       !/^order_[a-zA-Z0-9]+$/.test(orderId) ||
-      !/^[6-9]\d{9}$/.test(contact) ||
+      (contact && !/^(\+91)?[6-9]\d{9}$/.test(contact)) ||
       !this.appIds.has(app)
     )
       throw new Error(
@@ -59,7 +59,7 @@ export class CustomUpiPayment {
           currency: "INR",
           order_id: orderId,
           method: "upi",
-          contact,
+          ...(contact ? {contact} : {}),
           email,
         },
         { app },

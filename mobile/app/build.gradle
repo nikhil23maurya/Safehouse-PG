@@ -36,7 +36,6 @@ dependencies {
     // SAFEHOUSE_NOTIFICATIONS_ANDROID_V1
     implementation platform('com.google.firebase:firebase-bom:34.17.0')
     implementation 'com.google.firebase:firebase-messaging'
-    implementation 'com.google.firebase:firebase-auth'
     // Local QR decoding only. No payment secrets stored on device.
     implementation 'com.google.zxing:core:3.5.3'
     androidTestImplementation 'androidx.test:runner:1.6.2'

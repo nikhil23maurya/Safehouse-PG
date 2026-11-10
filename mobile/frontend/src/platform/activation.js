@@ -2,6 +2,7 @@
 // The property and membership must both belong to the selected workspace.
 export function ownerActivationRoute(snapshot, requested) {
   if (snapshot.tokens?.kind !== "PLATFORM" || snapshot.user?.role !== "OWNER") return requested;
+  if (["subscription","workspaces","password","legal","enrolEmail","setupProfile","setupProperty","chooseRole"].includes(requested)) return requested;
   const membership = snapshot.platform?.memberships?.find((m) =>
     m.id === snapshot.platform?.membershipId &&
     m.role === "OWNER" &&

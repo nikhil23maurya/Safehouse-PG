@@ -38,10 +38,6 @@
             </intent-filter>
         </service>
         <activity
-            android:name=".MerchantOnboardingActivity"
-            android:exported="false"
-            android:windowSoftInputMode="adjustResize" />
-        <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTop"

@@ -16,7 +16,7 @@ import {
   showFormError,
   validateForm,
 } from "./components/forms.js";
-import { loginScreen, passwordScreen } from "./screens/auth.js";
+import { loginScreen, signupScreen, forgotPasswordScreen, enrolEmailScreen, passwordScreen } from "./screens/auth.js";
 import { ownerHomeScreen, studentHomeScreen } from "./screens/dashboards.js";
 import {
   residentsScreen,
@@ -42,11 +42,10 @@ import {
   propertiesScreen,
   propertyFormScreen,
 } from "./screens/profile.js";
+import { ownerDirectRentScreen, directRentScreen } from "./screens/direct-rent.js";
 import { paymentScreen } from "./screens/payment.js";
 import {
   welcomeScreen,
-  phoneScreen,
-  otpScreen,
   chooseRoleScreen,
   setupProfileScreen,
   setupPropertyScreen,
@@ -56,8 +55,6 @@ import {
   linkAccountScreen,
   subscriptionScreen,
   merchantScreen,
-  merchantProfileScreen,
-  merchantBankScreen,
   invitationsScreen,
   staffScreen,
   legalScreen,
@@ -67,8 +64,9 @@ import { ownerActivationRoute, ownerHasPaidAccess } from "./platform/activation.
 
 const routes = {
   welcome: [welcomeScreen, null],
-  phone: [phoneScreen, null],
-  otp: [otpScreen, null],
+  signup: [signupScreen, null],
+  forgotPassword: [forgotPasswordScreen, null],
+  enrolEmail: [enrolEmailScreen, "PLATFORM"],
   legal: [legalScreen, null],
   chooseRole: [chooseRoleScreen, "PLATFORM"],
   setupProfile: [setupProfileScreen, "PLATFORM"],
@@ -79,8 +77,7 @@ const routes = {
   linkAccount: [linkAccountScreen, "PLATFORM"],
   subscription: [subscriptionScreen, "PLATFORM"],
   merchant: [merchantScreen, "PLATFORM"],
-  merchantProfile: [merchantProfileScreen, "PLATFORM"],
-  merchantBank: [merchantBankScreen, "PLATFORM"],
+
   invitations: [invitationsScreen, "PLATFORM"],
   staffHome: [staffScreen, "PLATFORM"],
   login: [loginScreen, null],
@@ -100,7 +97,8 @@ const routes = {
   studentHome: [studentHomeScreen, "STUDENT"],
   invoices: [invoicesScreen, "STUDENT"],
   history: [paymentsScreen, "STUDENT"],
-  payment: [paymentScreen, "STUDENT"],
+  payment: [(ctx)=>ctx.snapshot.tokens?.kind === "PLATFORM" && !ctx.snapshot.platform?.memberships?.find(m=>m.id===ctx.snapshot.platform.membershipId)?.organisation?.legacyAccess ? directRentScreen(ctx) : paymentScreen(ctx), "STUDENT"],
+  ownerDirectRent: [ownerDirectRentScreen,"OWNER"],
   invoice: [invoiceScreen, "BOTH"],
   profile: [profileScreen, "BOTH"],
   notifications: [notificationsScreen, "BOTH"],
@@ -148,7 +146,8 @@ let pendingNotificationRoute = null;
 let restoringMetadata = null;
 function postAuthRoute() {
   if (state.user?.mustChangePassword) return "password";
-  if (pendingNotificationRoute === null) return home();
+  if (state.tokens?.kind === "PLATFORM" && state.platform?.account?.credentialReady === false) return "enrolEmail";
+  if (pendingNotificationRoute === null) return state.platform?.journey?.screen || home();
   const target = notificationRoute(pendingNotificationRoute, state.user?.role);
   pendingNotificationRoute = null;
   return target;
@@ -205,7 +204,6 @@ function clearSession() {
   onboarding.attempt = "";
   onboarding.exchangeAttempt = "";
   onboarding.sentAt = 0;
-  native.call("cancelPhoneSignIn");
   try {
     native.save(null);
   } catch {
@@ -220,10 +218,9 @@ const api = createApiClient({
     persist();
   },
   onExpired: () => {
-    const phone = state.tokens?.kind === "PLATFORM";
     clearSession();
     toast("Your session expired. Please sign in again.", "error");
-    void navigate(phone ? "phone" : "login", phone ? { mode: "SIGN_IN" } : {}, { replace: true, force: true });
+    void navigate("login", {}, { replace: true, force: true });
   },
 });
 
@@ -296,6 +293,7 @@ function guardedRoute(name) {
   )
     return home();
   if (state.user.mustChangePassword) return "password";
+  if (state.tokens?.kind === "PLATFORM" && state.platform?.account?.credentialReady === false && name !== "legal") return "enrolEmail";
   const role = routes[name]?.[1];
   if (
     !routes[name] ||
@@ -325,14 +323,6 @@ async function navigate(
   )
     return;
   if (!force && !(await canLeave())) return;
-  if (
-    ["phone", "otp"].includes(state.route.name) &&
-    !["phone", "otp"].includes(next)
-  ) {
-    onboarding.attempt = "";
-    onboarding.exchangeAttempt = "";
-    native.call("cancelPhoneSignIn");
-  }
   if (rootRoutes.has(next) && rootRoutes.has(state.route.name)) replace = true;
   dirty = false;
   state.route = { name: next, params: next === name ? params : {} };
@@ -393,38 +383,10 @@ window.addEventListener("popstate", async (event) => {
   await render();
 });
 
-async function signIn(email, password) {
-  const result = await api("/api/auth/login", {
-    method: "POST",
-    public: true,
-    body: { email, password },
-  });
-  if (
-    !["OWNER", "STUDENT"].includes(result.user?.role) ||
-    !result.tokens?.accessToken ||
-    !result.tokens?.refreshToken
-  )
-    throw new Error("The server returned an invalid account response.");
-  state.authEpoch++;
-  cache.clear();
-  Object.assign(state, {
-    tokens: result.tokens,
-    user: result.user,
-    property: result.property || null,
-    properties: result.properties || [],
-    student: result.student || null,
-    pendingPayment: null,
-  });
-  state.period = currentPeriod(state.property?.timezone);
-  try {
-    persist();
-  } catch (error) {
-    clearSession();
-    throw error;
-  }
-  dirty = false;
-  await navigate(postAuthRoute(), {}, { replace: true, force: true });
-  void setupPush().catch(() => {});
+async function signIn(email,password) {
+  const result = await api("/api/platform/auth/login",{method:"POST",public:true,body:{email,password}});
+  await acceptPlatform(result.tokens);
+  void setupPush().catch(()=>{});
 }
 
 async function refreshPlatform() {
@@ -455,7 +417,7 @@ async function acceptPlatform(tokens, target) {
   dirty = false;
   persist();
   await navigate(
-    target || (state.platform.membershipId ? home() : platformStart(state)),
+    target || postAuthRoute(),
     {},
     { replace: true, force: true },
   );
@@ -471,72 +433,6 @@ async function selectWorkspace(membershipId, target) {
   });
   await acceptPlatform(result.tokens, target);
 }
-window.PGOnePhoneEvent = async (attempt, type, value) => {
-  if (
-    attempt !== onboarding.attempt ||
-    !["phone", "otp"].includes(state.route.name)
-  )
-    return;
-  if (type === "sent") onboarding.sentAt = Date.now();
-  screen?.phoneEvent?.(type, value);
-  if (type === "verified") {
-    const epoch = state.authEpoch;
-    onboarding.exchangeAttempt = attempt;
-    onboarding.attempt = "";
-    onboarding.sentAt = 0;
-    const current = () =>
-      onboarding.exchangeAttempt === attempt && !onboarding.attempt &&
-      state.authEpoch === epoch && ["phone", "otp"].includes(state.route.name);
-    let tokens;
-    try {
-      let result;
-      try {
-        result = await api("/api/platform/phone", {
-          public: true,
-          method: "POST",
-          body: { idToken: value, mode: onboarding.authMode },
-        });
-      } catch (error) {
-        if (!current()) return;
-        if (error.code !== "PHONE_ACCOUNT_NOT_FOUND") throw error;
-        const create = await confirm({
-          title: "Create a PGOne account?",
-          message:
-            "Your number is verified, but it has no PGOne phone account yet. Create one to set up or join a PG. Existing password accounts can be linked after signing in with email.",
-          confirmLabel: "Create account",
-          cancelLabel: "Back to sign in",
-        });
-        if (!current()) return;
-        if (!create) {
-          await navigate("phone", { mode: "SIGN_IN" }, { replace: true, force: true });
-          return;
-        }
-        onboarding.authMode = "SIGN_UP";
-        result = await api("/api/platform/phone", {
-          public: true,
-          method: "POST",
-          body: { idToken: value, mode: "SIGN_UP" },
-        });
-      }
-      if (!current()) return;
-      tokens = result.tokens;
-    } catch (error) {
-      if (!current()) return;
-      toast(error.message, "error");
-      await navigate("phone", {}, { replace: true, force: true });
-      return;
-    }
-    try {
-      await acceptPlatform(tokens);
-    } catch (error) {
-      if (state.tokens?.accessToken !== tokens?.accessToken) return;
-      clearSession();
-      toast(error.message, "error");
-      await navigate("phone", { mode: "SIGN_IN" }, { replace: true, force: true });
-    }
-  }
-};
-
 async function logout() {
   if (
     !(await confirm({
@@ -572,7 +468,7 @@ async function logout() {
   }
   if (state.authEpoch !== logoutEpoch) return;
   clearSession();
-  await navigate(phone ? "phone" : "login", phone ? { mode: "SIGN_IN" } : {}, { replace: true, force: true });
+  await navigate("login", {}, { replace: true, force: true });
   if (!revoked)
     toast(
       "Signed out on this device. Server session revocation could not be confirmed.",

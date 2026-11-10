@@ -62,7 +62,6 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
     private View splashView;
     private FrameLayout hostView;
     private SessionVault sessionVault;
-    private PhoneSignIn phoneSignIn;
     ProviderQr providerQr = new ProviderQr(ProviderQr::load);
     private final java.util.concurrent.atomic.AtomicBoolean upiOpening = new java.util.concurrent.atomic.AtomicBoolean();
     private boolean pageReady = false;
@@ -87,7 +86,6 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         registerFcmReceiver();
         handleNotificationIntent(getIntent(), false);
         sessionVault = new SessionVault(this);
-        phoneSignIn = new PhoneSignIn(this, (attempt, type, value) -> callJs("window.PGOnePhoneEvent && window.PGOnePhoneEvent(" + q(attempt) + "," + q(type) + "," + q(value) + ");"));
         hostView = new FrameLayout(this);
         hostView.setBackgroundColor(Color.WHITE);
         splashView = buildSplash();
@@ -362,9 +360,6 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     public final class NativeBridge {
         @JavascriptInterface public String getPackageId() { return getPackageName(); }
-        @JavascriptInterface public void startPhoneSignIn(String config, String number, String attempt, boolean resend) { runOnUiThread(() -> phoneSignIn.start(config, number, attempt, resend)); }
-        @JavascriptInterface public void verifyPhoneCode(String code, String attempt) { runOnUiThread(() -> phoneSignIn.verify(code, attempt)); }
-        @JavascriptInterface public void cancelPhoneSignIn() { runOnUiThread(() -> phoneSignIn.cancel()); }
         @JavascriptInterface public void openLegalLink(String url) { runOnUiThread(() -> {
             try { Uri target = Uri.parse(url); if ("https".equals(target.getScheme()) && target.getHost() != null && target.getUserInfo() == null) startActivity(new Intent(Intent.ACTION_VIEW, target)); } catch (Exception ignored) { Toast.makeText(MainActivity.this, "This link is unavailable", Toast.LENGTH_SHORT).show(); }
         }); }
@@ -372,12 +367,6 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
             return android.provider.Settings.Global.getFloat(getContentResolver(), android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f;
         }
         @JavascriptInterface public String getSession() { return sessionVault.load(); }
-        @JavascriptInterface public void openMerchantOnboarding(String url) { runOnUiThread(() -> {
-            if (!MerchantOnboardingActivity.allowedInitialUrl(url)) {
-                Toast.makeText(MainActivity.this,"The secure onboarding link could not be verified.",Toast.LENGTH_LONG).show(); return;
-            }
-            startActivity(new Intent(MainActivity.this,MerchantOnboardingActivity.class).putExtra("onboardingUrl",url));
-        }); }
         @JavascriptInterface public boolean saveSession(String value) { return sessionVault.save(value); }
         @JavascriptInterface public void ready() {
             runOnUiThread(() -> {
@@ -475,6 +464,20 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                 }
             });
         }
+
+        @JavascriptInterface public void openDirectOwnerUpi(String uri) { runOnUiThread(() -> {
+            try {
+                Uri target=Uri.parse(uri);
+                String address=target.getQueryParameter("pa"), amount=target.getQueryParameter("am");
+                if (!"upi".equals(target.getScheme()) || !"pay".equals(target.getHost()) ||
+                    address==null || !address.matches("[a-zA-Z0-9._-]{2,128}@[a-zA-Z0-9.-]{2,64}") ||
+                    amount==null || !amount.matches("[0-9]{1,9}\\.[0-9]{2}") || !"INR".equals(target.getQueryParameter("cu")))
+                    throw new IllegalArgumentException("Invalid owner payment details");
+                Intent intent=new Intent(Intent.ACTION_VIEW,target);
+                if (intent.resolveActivity(getPackageManager())==null) throw new ActivityNotFoundException();
+                startActivity(Intent.createChooser(intent,"Pay your PG owner"));
+            } catch(Exception error) { Toast.makeText(MainActivity.this,"No supported UPI app is available. Use the owner's UPI address in your payment app.",Toast.LENGTH_LONG).show(); }
+        }); }
 
         @JavascriptInterface public void openExternal(String url) { runOnUiThread(() -> MainActivity.this.openExternal(url)); }
 

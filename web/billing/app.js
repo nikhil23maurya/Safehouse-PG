@@ -19,14 +19,9 @@ let config,
   account,
   org,
   data,
-  auth,
-  confirmation,
-  recaptcha,
   adapter,
   apps = [],
   authorisation,
-  phone,
-  sentAt = 0,
   countdown,
   processing = false;
 let flowGeneration = 0;
@@ -69,64 +64,8 @@ function login() {
   page(
     "Your PG. Connected.",
     "Sign in to manage your PGOne subscription.",
-    `<div class="billing-art"><img src="onboarding-payments.webp" alt=""></div>${config?.phone ? `<form data-form="phone" novalidate><div class="form-error" role="alert"></div>${field("phone", "Mobile number", { required: true, placeholder: "10-digit Indian mobile number", attrs: 'inputmode="tel" pattern="[6-9][0-9]{9}" maxlength="10" autocomplete="tel-national"' })}<div id="recaptcha"></div>${button("Send verification code", { type: "submit", kind: "primary block" })}</form>` : notice("Phone sign-in is awaiting web configuration. Existing owners can sign in below.")}<details class="billing-email"><summary>Use an existing email account</summary><form data-form="email" novalidate><div class="form-error" role="alert"></div>${field("email", "Email address", { type: "email", required: true, attrs: 'autocomplete="username"' })}${field("password", "Password", { type: "password", required: true, attrs: 'autocomplete="current-password"' })}${button("Sign in", { type: "submit", kind: "primary block" })}</form></details>`,
+    `<form data-form="email" novalidate><div class="form-error" role="alert"></div>${field("email","Email address",{type:"email",required:true,attrs:'autocomplete="username" maxlength="254"'})}${field("password","Password",{type:"password",required:true,attrs:'autocomplete="current-password" maxlength="128"'})}${button("Sign in",{type:"submit",kind:"primary block"})}</form><p class="legal-copy">Use the same email and password as the PGOne app. Create an account or recover your password in PGOne.</p>`,
   );
-}
-async function firebase() {
-  if (auth) return;
-  const [{ initializeApp }, sdk] = await Promise.all([
-    import("https://www.gstatic.com/firebasejs/13.2.0/firebase-app.js"),
-    import("https://www.gstatic.com/firebasejs/13.2.0/firebase-auth.js"),
-  ]);
-  const app = initializeApp(
-    {
-      ...config.phone,
-      appId: config.phone.applicationId,
-      messagingSenderId: config.phone.senderId,
-    },
-    "pgone-billing",
-  );
-  auth = { sdk, value: sdk.getAuth(app) };
-  await sdk.setPersistence(auth.value, sdk.inMemoryPersistence);
-}
-async function sendCode(number) {
-  const generation = flowGeneration;
-  if (Date.now() - sentAt < 60000)
-    throw new Error("Please wait one minute before requesting another code.");
-  await firebase();
-  if (generation !== flowGeneration) return;
-  recaptcha?.clear();
-  recaptcha = new auth.sdk.RecaptchaVerifier(auth.value, "recaptcha", {
-    size: "normal",
-  });
-  const nextConfirmation = await auth.sdk.signInWithPhoneNumber(
-    auth.value,
-    `+91${number}`,
-    recaptcha,
-  );
-  if (generation !== flowGeneration) return;
-  confirmation = nextConfirmation;
-  phone = number;
-  sentAt = Date.now();
-  showCode();
-}
-function showCode() {
-  page(
-    "Verify your number.",
-    `Enter the code sent to +91${phone}.`,
-    `<form data-form="otp" novalidate><div class="form-error" role="alert"></div>${field("code", "Verification code", { required: true, attrs: 'inputmode="numeric" pattern="[0-9]{6}" maxlength="6" autocomplete="one-time-code"' })}${button("Verify & continue", { type: "submit", kind: "primary block" })}</form><div id="recaptcha"></div>${button("Resend code", { action: "resend", kind: "secondary block", attrs: "disabled" })}<p data-countdown class="legal-copy"></p>${button("Change number", { action: "changeNumber", kind: "text-button" })}`,
-  );
-  countdown = setInterval(() => {
-    const remaining = Math.max(
-      0,
-      Math.ceil((sentAt + 60000 - Date.now()) / 1000),
-    );
-    const b = root.querySelector('[data-action="resend"]');
-    if (b) b.disabled = remaining > 0;
-    const label = root.querySelector("[data-countdown]");
-    if (label)
-      label.textContent = remaining ? `Resend available in ${remaining}s` : "";
-  }, 500);
 }
 async function session(tokens) {
   const generation = ++flowGeneration;
@@ -184,7 +123,7 @@ function renderPlan() {
   page(
     "More calm. Every month.",
     "One simple plan for your PG workspaces.",
-    `<div class="royal-plan"><span class="plan-name">PGOne</span><div class="plan-price">₹249<small>/ month</small></div><p>One-time payment · one calendar month · no auto-debit</p><ul><li>${icon("check")}Rooms & residents</li><li>${icon("check")}Rent records & receipts</li><li>${icon("check")}Owner-approved team access</li></ul></div>${notice(subscribed ? (data.legacyAccess ? "Your existing workspace access is preserved." : "Your access is active for the confirmed paid period.") : "Make a fresh ₹249 payment to activate one calendar month of PGOne.")}${data.accessEnd ? `<p class="legal-copy">Access until ${date(data.accessEnd)}. An early renewal adds a month after this date.</p>` : ""}${!data.legacyAccess && config.customWebBilling?.enabled && data.mode === "MANUAL_MONTHLY" ? `<form data-form="prepare" novalidate><div class="form-error" role="alert"></div>${!account.phoneE164 ? field("contact", "Mobile number for this payment", { required: true, attrs: 'inputmode="tel" pattern="[6-9][0-9]{9}" maxlength="10"' }) : ""}${field("email", "Payment contact email", { type: "email", required: true, value: account.email || "", attrs: 'autocomplete="email"' })}<label class="billing-consent"><input name="consent" type="checkbox" required><span>I agree to pay ₹249 once for one calendar month, including applicable tax. Each renewal needs a fresh payment. No recurring mandate or automatic debit.</span></label>${button(subscribed ? "Renew for ₹249" : "Pay ₹249 for one month", { type: "submit", kind: "primary block" })}</form><div data-payment-apps></div>` : !subscribed ? notice("Monthly payments are awaiting merchant configuration. No payment will be initiated.") : ""}${button("Refresh payment status", { action: "refresh", kind: "secondary block" })}${data.legacySubscription?.provider && !data.legacySubscription.cancelAtPeriodEnd ? button("Cancel previous auto-renewal", { action: "cancel", kind: "text-button" }) : ""}<p class="legal-copy">Payments use Razorpay’s official Custom SDK and your UPI app. PGOne never asks for your UPI PIN or card details.</p>${data.subscription?.payments?.length ? `<h2 class="royal-section-title">Payment records</h2>${data.subscription.payments.map((p) => `<div class="billing-record"><strong>₹${(p.amountPaise / 100).toFixed(2)}</strong><span>${date(p.paidAt)} · ${esc(p.receiptNumber)}</span>${p.refundedPaise ? `<small>Refunded ₹${(p.refundedPaise / 100).toFixed(2)}</small>` : `<small>Access ${date(p.periodStart)} – ${date(p.periodEnd)}</small>`}</div>`).join("")}` : ""}`,
+    `<div class="royal-plan"><span class="plan-name">PGOne</span><div class="plan-price">₹249<small>/ month</small></div><p>One-time payment · one calendar month · no auto-debit</p><ul><li>${icon("check")}Rooms & residents</li><li>${icon("check")}Rent records & receipts</li><li>${icon("check")}Owner-approved team access</li></ul></div>${notice(subscribed ? (data.legacyAccess ? "Your existing workspace access is preserved." : "Your access is active for the confirmed paid period.") : "Make a fresh ₹249 payment to activate one calendar month of PGOne.")}${data.accessEnd ? `<p class="legal-copy">Access until ${date(data.accessEnd)}. An early renewal adds a month after this date.</p>` : ""}${!data.legacyAccess && config.customWebBilling?.enabled && data.mode === "MANUAL_MONTHLY" ? `<form data-form="prepare" novalidate><div class="form-error" role="alert"></div>${field("email", "Payment contact email", { type: "email", required: true, value: account.email || "", attrs: 'autocomplete="email"' })}<label class="billing-consent"><input name="consent" type="checkbox" required><span>I agree to pay ₹249 once for one calendar month, including applicable tax. Each renewal needs a fresh payment. No recurring mandate or automatic debit.</span></label>${button(subscribed ? "Renew for ₹249" : "Pay ₹249 for one month", { type: "submit", kind: "primary block" })}</form><div data-payment-apps></div>` : !subscribed ? notice("Monthly payments are awaiting merchant configuration. No payment will be initiated.") : ""}${button("Refresh payment status", { action: "refresh", kind: "secondary block" })}${data.legacySubscription?.provider && !data.legacySubscription.cancelAtPeriodEnd ? button("Cancel previous auto-renewal", { action: "cancel", kind: "text-button" }) : ""}<p class="legal-copy">Payments use Razorpay’s official Custom SDK and your UPI app. PGOne never asks for your UPI PIN or card details.</p>${data.subscription?.payments?.length ? `<h2 class="royal-section-title">Payment records</h2>${data.subscription.payments.map((p) => `<div class="billing-record"><strong>₹${(p.amountPaise / 100).toFixed(2)}</strong><span>${date(p.paidAt)} · ${esc(p.receiptNumber)}</span>${p.refundedPaise ? `<small>Refunded ₹${(p.refundedPaise / 100).toFixed(2)}</small>` : `<small>Access ${date(p.periodStart)} – ${date(p.periodEnd)}</small>`}</div>`).join("")}` : ""}`,
   );
 }
 async function prepare(values) {
@@ -252,7 +191,7 @@ async function prepare(values) {
   }
   paymentOrder = authorisation;
   authorisation.contact =
-    account.phoneE164?.replace(/^\+91/, "") || values.contact;
+    account.contactPhone || "";
   authorisation.email = values.email;
   const container = root.querySelector("[data-payment-apps]");
   container.innerHTML = `<h2 class="royal-section-title">Choose your UPI app</h2>${apps.map(([id, name]) => button(name, { action: "authorise", kind: "primary block", attrs: `data-app="${id}"` })).join("")}`;
@@ -269,31 +208,9 @@ document.addEventListener("submit", async (event) => {
   submit.disabled = true;
   try {
     const values = formValues(form);
-    if (form.dataset.form === "phone") await sendCode(values.phone);
-    if (form.dataset.form === "otp") {
-      const result = await confirmation.confirm(values.code);
-      if (generation !== flowGeneration) return;
-      const exchange = await api("/api/platform/phone", {
-        public: true,
-        method: "POST",
-        body: { idToken: await result.user.getIdToken(true), mode: "SIGN_IN" },
-      });
-      await auth.sdk.signOut(auth.value);
-      if (generation === flowGeneration) await session(exchange.tokens);
-    }
     if (form.dataset.form === "email") {
-      const legacy = await api("/api/auth/login", {
-        public: true,
-        method: "POST",
-        body: values,
-      });
-      if (generation !== flowGeneration) return;
-      const linked = await api("/api/platform/link-legacy", {
-        public: true,
-        method: "POST",
-        body: { legacyAccessToken: legacy.tokens.accessToken },
-      });
-      if (generation === flowGeneration) await session(linked.tokens);
+      const result=await api("/api/platform/auth/login",{public:true,method:"POST",body:values});
+      if(generation===flowGeneration)await session(result.tokens);
     }
     if (form.dataset.form === "prepare") await prepare(values);
   } catch (error) {
@@ -348,14 +265,6 @@ document.addEventListener("click", async (event) => {
         method: "POST",
       });
       await status();
-    }
-    if (action === "resend") await sendCode(phone);
-    if (action === "changeNumber") {
-      flowGeneration++;
-      confirmation = null;
-      recaptcha?.clear();
-      await auth?.sdk.signOut(auth.value);
-      login();
     }
     if (action === "authorise" && !processing) {
       processing = true;

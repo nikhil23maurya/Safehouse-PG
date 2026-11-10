@@ -66,7 +66,7 @@ async function fixture(enabled, supportedApps = ["phonepe"]) {
           },
         };
       else if (path.endsWith("/login"))
-        data = { tokens: { accessToken: "legacy-test" } };
+        data = { tokens: { kind:"PLATFORM",accessToken: "pg1.test",refreshToken:"pg1.test.refresh" } };
       else if (path.endsWith("/link-legacy"))
         data = {
           tokens: {
@@ -142,9 +142,6 @@ async function fixture(enabled, supportedApps = ["phonepe"]) {
     });
   });
   await page.goto(base);
-  await page
-    .getByText("Use an existing email account", { exact: true })
-    .click();
   await page
     .getByLabel("Email address", { exact: true })
     .fill("owner@example.test");

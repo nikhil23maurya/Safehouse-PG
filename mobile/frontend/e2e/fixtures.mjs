@@ -210,6 +210,26 @@ export function createFixtures() {
       propertyId: headers["x-property-id"] || headers["X-Property-Id"],
       body: { ...body, password: undefined, tempPassword: undefined },
     });
+    if (path === "/api/platform/auth/login") {
+      const result=handler({url:"https://fixture.test/api/auth/login",method,body,headers});
+      if(result.status===200)result.data={tokens:{...result.data.tokens,kind:"PLATFORM"}};
+      return result;
+    }
+    if (path === "/api/platform/session") {
+      const token=headers.authorization||headers.Authorization||"";
+      const resident=token.includes("STUDENT"),actor=resident?{...user,mustChangePassword:control.mustChangePassword}:owner;
+      const selected=token.includes("property2")?property2:property1;
+      const memberships=(resident?[property1]:properties).map(p=>({id:`m-${p.id}`,role:resident?"RESIDENT":"OWNER",property:p,permissions:[],organisation:{id:"org-fixture",name:"Fixture PG",legacyAccess:true,entitled:true}}));
+      return ok({account:{id:actor.id,email:actor.email,fullName:actor.fullName,credentialReady:true,emailVerified:true},memberships,
+        membershipId:`m-${selected.id}`,property:selected,user:actor,student:resident?students[0]:null});
+    }
+    if (path === "/api/platform/workspace") return ok({tokens:{kind:"PLATFORM",accessToken:`fixture_OWNER_access_${body.membershipId}`,refreshToken:"fixture_OWNER_refresh_token"}});
+    if (path === "/api/platform/logout") return ok({ok:true});
+    if (path === "/api/platform/auth/change-password") {
+      control.mustChangePassword=false;
+      return ok({tokens:{kind:"PLATFORM",accessToken:"fixture_STUDENT_access",refreshToken:"fixture_STUDENT_refresh_token"}});
+    }
+    if (path === "/api/platform/refresh") return control.invalidSession?error(401,"SESSION_INVALID","Session invalid"):ok({tokens:{kind:"PLATFORM",accessToken:"fixture_OWNER_refreshed",refreshToken:"fixture_OWNER_refresh_token"}});
     if (path === "/api/auth/login") {
       if (body.password !== "FixturePass123!")
         return error(401, "INVALID_CREDENTIALS", "Invalid email or password");

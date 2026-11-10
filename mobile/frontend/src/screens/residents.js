@@ -200,12 +200,7 @@ export async function residentFormScreen(ctx) {
         ],
         help: "Inactive and moved-out residents lose account access. Existing invoices remain unchanged.",
       })
-    : field("tempPassword", "Temporary password", {
-        type: "password",
-        required: true,
-        help: "At least 8 characters. The resident must change it after signing in.",
-        attrs: 'autocomplete="new-password" minlength="8" maxlength="128"',
-      });
+    : notice("The resident creates their own email/password account. Send a private invitation after saving their record.");
   return {
     title: id ? "Edit resident" : "Add resident",
     back: true,
@@ -332,7 +327,7 @@ export async function residentFormScreen(ctx) {
         notes: v.notes.trim() || null,
         ...(id
           ? { status: v.status }
-          : { joiningDate: v.joiningDate, tempPassword: v.tempPassword }),
+          : { joiningDate: v.joiningDate }),
       };
       if (id && body.status !== s.status && body.status !== "ACTIVE") {
         if (

@@ -2,6 +2,7 @@ import { prisma } from "../db.js";
 import { assert } from "../errors.js";
 import { atomic, audit, ownerOrganisation } from "./service.js";
 import { hash, randomCode } from "./tokens.js";
+import { entitlement } from "./billing.js";
 import { STAFF_PERMISSIONS } from "./config.js";
 
 export async function createInvitation(
@@ -10,12 +11,13 @@ export async function createInvitation(
     organisationId: string;
     propertyId: string;
     role: "RESIDENT" | "STAFF";
-    phoneE164: string;
+    email: string;
     studentId?: string;
     permissions: string[];
   },
 ) {
   const org = await ownerOrganisation(accountId, input.organisationId);
+  assert(await entitlement(org.id),402,"SUBSCRIPTION_REQUIRED","Activate PGOne before inviting members.");
   const property = await prisma.property.findFirst({
     where: { id: input.propertyId, ownerId: org.legacyOwnerId },
   });
@@ -36,12 +38,8 @@ export async function createInvitation(
       "RESIDENT_REQUIRED",
       "Add the resident through Resident Management before inviting them.",
     );
-    assert(
-      `+91${student.mobile.replace(/\D/g, "").slice(-10)}` === input.phoneE164,
-      400,
-      "PHONE_MISMATCH",
-      "Use the resident's recorded mobile number.",
-    );
+    const actor = await prisma.user.findUniqueOrThrow({where:{id:student.userId}});
+    assert(actor.email?.trim().toLowerCase() === input.email.trim().toLowerCase(),400,"EMAIL_MISMATCH","Use the resident email recorded on this property.");
   }
   assert(
     input.permissions.every((p) => STAFF_PERMISSIONS.includes(p as any)),
@@ -56,7 +54,7 @@ export async function createInvitation(
         organisationId: org.id,
         propertyId: property.id,
         role: input.role,
-        phoneE164: input.phoneE164,
+        email: input.email.trim().toLowerCase(),
         studentId: input.role === "RESIDENT" ? input.studentId : null,
         permissions: input.role === "STAFF" ? input.permissions : [],
         tokenHash: hash(code),
@@ -88,14 +86,14 @@ export async function previewInvitation(accountId: string, code: string) {
     include: { property: true },
   });
   assert(
-    account.phoneE164 &&
+    account.emailVerified && account.credentialEmail &&
       invitation &&
-      invitation.phoneE164 === account.phoneE164 &&
+      invitation.email === account.credentialEmail &&
       invitation.status === "PENDING" &&
       invitation.expiresAt.getTime() > Date.now(),
     404,
     "INVITATION_UNAVAILABLE",
-    "This invitation is unavailable for your verified phone number. Ask your owner for a fresh invitation.",
+    "This invitation is unavailable for your confirmed email address. Ask your owner for a fresh invitation.",
   );
   return {
     id: invitation.id,
@@ -115,13 +113,13 @@ export async function acceptInvitation(accountId: string, code: string) {
       include: { organisation: true },
     });
     assert(
-      account.phoneE164 &&
+      account.emailVerified && account.credentialEmail &&
         invitation &&
-        invitation.phoneE164 === account.phoneE164 &&
+        invitation.email === account.credentialEmail &&
         invitation.expiresAt.getTime() > Date.now(),
       404,
       "INVITATION_UNAVAILABLE",
-      "This invitation is unavailable for your verified phone number.",
+      "This invitation is unavailable for your confirmed email address.",
     );
     if (invitation.status === "ACCEPTED") {
       assert(
@@ -155,14 +153,9 @@ export async function acceptInvitation(accountId: string, code: string) {
           status: "ACTIVE",
         },
       });
-      assert(
-        student &&
-          `+91${student.mobile.replace(/\D/g, "").slice(-10)}` ===
-            account.phoneE164,
-        409,
-        "RESIDENCY_CHANGED",
-        "Your residency has changed. Contact your owner.",
-      );
+      const actor = student ? await tx.user.findUnique({where:{id:student.userId}}) : null;
+      assert(student && actor?.email?.trim().toLowerCase() === account.credentialEmail,
+        409,"RESIDENCY_CHANGED","Your residency changed. Ask the owner for a new invitation.");
       const claim = await tx.pgMembership.findFirst({
         where: {
           actorUserId: student.userId,

@@ -22,7 +22,8 @@ export async function platformWorkspaceBridge(
       "PLATFORM_NOT_ENABLED",
       "Account services are not activated yet.",
     );
-    const { membership } = await accountSession(header.slice(7));
+    const { account, membership } = await accountSession(header.slice(7));
+    assert(!account.passwordChangeRequired,403,"PASSWORD_CHANGE_REQUIRED","Change your temporary password before opening a workspace.");
     assert(
       membership && membership.actor && membership.actor.status === "ACTIVE",
       403,

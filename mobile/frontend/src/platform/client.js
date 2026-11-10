@@ -1,11 +1,6 @@
 export const onboarding = {
   config: null,
-  phone: "",
-  attempt: "",
-  sentAt: 0,
-  error: "",
   intent: "OWNER",
-  authMode: "SIGN_UP",
   propertyKey: null,
 };
 export async function platformConfig(ctx) {

@@ -181,7 +181,6 @@ test("create resident retains values on capacity and duplicate rejection, then s
   await page.getByLabel("Mobile number").fill("9876543219");
   await page.getByLabel("Room", { exact: true }).selectOption("room1");
   await page.getByLabel("Monthly rent (₹)").fill("9100.25");
-  await page.getByLabel("Temporary password").fill("FixturePass123!");
   fixture.control.capacityRejected = true;
   await page.locator('button[type="submit"]').click();
   await expect(page.locator(".form-error")).toContainText("no vacant beds");
