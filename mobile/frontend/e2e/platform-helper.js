@@ -20,6 +20,13 @@ export async function platform(page, { billing = false } = {}) {
         return true;
       },
       ...(enableBilling ? { openPlanRazorpayUpi: (raw) => {
+        if(!window.__nativeCallbackWrapped){
+          const callback=window.PGOnePlanPaymentResult;
+          window.PGOnePlanPaymentResult=(order,status,message)=>{
+            window.__planState={...window.__planState,orderId:order,status,message};
+            sessionStorage.setItem("synthetic-plan",JSON.stringify(window.__planState));callback(order,status,message);
+          };window.__nativeCallbackWrapped=true;
+        }
         window.__lastPlanOptions = JSON.parse(raw);
         window.__planState={organisationId:window.__lastPlanOptions.organisationId,orderId:window.__lastPlanOptions.order_id,status:"DISCOVERING"};
       } } : {}),

@@ -5,10 +5,9 @@ import {field,formValues} from "../components/forms.js";
 export const unassignedResident=s=>s.tokens?.kind==="PLATFORM"&&s.user?.role==="STUDENT"&&!s.student;
 export function unassignedHomeScreen(ctx){
   return {title:"My PG",nav:"studentHome",contentClass:"resident-dashboard",content:
-    `<section class="dashboard-hero"><span>RESIDENT</span><h1>Welcome to ${esc(ctx.snapshot.property?.name||"your PG")}</h1></section>`+
+    heading("","My PG")+
     card(`<span class="row-icon">${icon("building")}</span><h2>${esc(ctx.snapshot.property?.name)}</h2>${badge("Joined","green")}`,"property-card")+
-    `<section class="assignment-empty"><img src="illustration-room.webp" alt=""><h2>Your room is on its way</h2><p>Your owner will assign your room and rent details.</p></section>`+
-    card(`<p class="subtitle">Rent due</p><strong class="empty-amount">—</strong><p>Available after your owner assigns your rent record.</p>`)+
+    `<section class="assignment-empty"><img src="illustration-room.webp" alt=""><h2>Your room is on its way</h2><p>Your owner will assign your room and rent details.</p><div class="unassigned-rent"><span>Rent due</span><strong class="empty-amount">—</strong></div></section>`+
     button("Pay rent",{kind:"primary block",attrs:'disabled aria-describedby="assignment-note"'})+`<p id="assignment-note" class="payment-safety">No rent invoice has been assigned.</p>`+
     button("Payment history",{route:"history",kind:"secondary block"})+button("Refresh my details",{action:"refreshAssignment",kind:"text-button block"}),
     async action(name){if(name!=="refreshAssignment")return;await ctx.refreshPlatform();return ctx.reload();}};

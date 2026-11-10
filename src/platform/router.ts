@@ -1,3 +1,4 @@
+import {planStatusRouter} from "./plan-status-router.js";
 import express, { type Request } from "express";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
@@ -167,6 +168,7 @@ platformRouter.post("/phone", (_req,_res) => {
 platformRouter.use("/auth",emailAuthRouter);
 platformRouter.use("/rent",directRentRouter);
 platformRouter.use(joinCodeRouter);
+platformRouter.use(planStatusRouter);
 platformRouter.post("/refresh",limited,async(req,res)=>{
   const {refreshToken} = z.object({refreshToken:z.string().max(8192)}).parse(req.body);
   res.json({tokens:await rotateSession(refreshToken)});

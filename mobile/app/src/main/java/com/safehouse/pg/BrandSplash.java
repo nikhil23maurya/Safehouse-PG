@@ -22,7 +22,7 @@ final class BrandSplash extends View {
         Typeface face;
         try { face=Typeface.createFromAsset(context.getAssets(), "ManropeVariable.ttf"); }
         catch(Exception missing){ face=Typeface.create("sans-serif",Typeface.BOLD); }
-        wordmark=face;
+        wordmark=android.os.Build.VERSION.SDK_INT>=28?Typeface.create(face,750,false):Typeface.create(face,Typeface.BOLD);
         reducedMotion = Settings.Global.getFloat(context.getContentResolver(), Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f;
         setContentDescription("Opening PGOne");
         setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);

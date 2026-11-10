@@ -7,7 +7,7 @@ import {button,esc,date,card} from "../components/ui.js";
 export const verificationMarkup=()=>`<main class="verification-page"><header>${brand({dark:true})}</header><div class="verification-center">${dots("Verifying payment")}<h1>Verifying your payment</h1><p>We're confirming your payment securely.<br>Please don't pay again.</p><div data-verification-result aria-live="polite"></div></div></main>`;
 export function planVerificationScreen(ctx){
  const org=organisation(ctx.snapshot),order=planCheckout.orderId;
- let disposed=false,checking=false,timer;
+ let disposed=false,checking=false;
  const current=()=>!disposed&&org?.id===planCheckout.organisationId&&order===planCheckout.orderId;
  async function check(){
    if(!org||!order){showPending("Open your plan to check the current payment request.");return;}
@@ -31,7 +31,7 @@ export function planVerificationScreen(ctx){
    const result=document.querySelector("[data-verification-result]");if(!result)return;
    result.innerHTML=`<div class="verification-pending"><h2>Payment not confirmed yet</h2><p>${esc(message)}</p>${button("Check again",{action:"checkPlan",kind:"primary block"})}${button("Back to my plan",{route:"subscription",kind:"secondary block"})}</div>`;
  }
- return {bare:true,title:"Verifying payment",content:verificationMarkup(),mount(){void check();},unmount(){disposed=true;clearTimeout(timer);},action(name){if(name==="checkPlan")return check();}};
+ return {bare:true,title:"Verifying payment",content:verificationMarkup(),mount(){void check();},unmount(){disposed=true;},onPlanResult:check,action(name){if(name==="checkPlan")return check();}};
 }
 export async function planSuccessScreen(ctx){
  const org=organisation(ctx.snapshot),order=planCheckout.orderId;
@@ -39,5 +39,5 @@ export async function planSuccessScreen(ctx){
  const data=await ctx.api(`/api/platform/organisations/${org.id}/plan/orders/${encodeURIComponent(order)}/state`);
  if(!data.captured||!data.receipt)return planVerificationScreen(ctx);
  const r=data.receipt;
- return {bare:true,title:"Payment successful",content:`<main class="plan-success-page"><header>${brand()}</header><div class="success-center">${successMark("Payment verified")}<h1>Payment successful</h1><p>Your PGOne plan is active.</p>${card(`<div class="receipt-heading"><h2>Receipt</h2><span>₹249</span></div><dl><div><dt>Reference</dt><dd>${esc(r.number)}</dd></div><div><dt>Paid on</dt><dd>${esc(date(r.paidAt))}</dd></div><div><dt>Access until</dt><dd>${esc(date(r.periodEnd))}</dd></div></dl>`)}${button("Continue",{action:"continuePlan",kind:"primary block",glyph:"arrow"})}${button("Download receipt",{action:"successReceipt",kind:"text-button block"})}</div></main>`,async action(name){if(name==="successReceipt")return ctx.downloadAccountReceipt(`/api/platform/organisations/${org.id}/plan/receipts/${r.id}.pdf`,r.number);if(name==="continuePlan"){ctx.native.call("acknowledgePlanPayment",order);planCheckout.clear();return ctx.navigate("pgCode",{},{replace:true,force:true});}}};
+ return {bare:true,title:"Payment successful",content:`<main class="plan-success-page"><header>${brand()}</header><div class="success-center">${successMark("Payment verified")}<h1>Payment successful</h1><p>${data.entitled===false?"Payment verified. Review your current plan.":"Your PGOne plan is active."}</p>${card(`<div class="receipt-heading"><h2>Receipt</h2><span>₹249</span></div><dl><div><dt>Reference</dt><dd>${esc(r.number)}</dd></div><div><dt>Paid on</dt><dd>${esc(date(r.paidAt))}</dd></div><div><dt>Access until</dt><dd>${esc(date(r.periodEnd))}</dd></div></dl>`)}${button("Continue",{action:"continuePlan",kind:"primary block",glyph:"arrow"})}${button("Download receipt",{action:"successReceipt",kind:"text-button block"})}</div></main>`,async action(name){if(name==="successReceipt")return ctx.downloadAccountReceipt(`/api/platform/organisations/${org.id}/plan/receipts/${r.id}.pdf`,r.number);if(name==="continuePlan"){ctx.native.call("acknowledgePlanPayment",order);planCheckout.clear();return ctx.navigate("pgCode",{},{replace:true,force:true});}}};
 }

@@ -73,3 +73,18 @@ test('button loading keeps geometry and uses three circular reduced-motion dots'
  expect(dots).toHaveLength(3);for(const d of dots){expect(d.width).toBe(d.height);expect(d.round).toBe('50%');expect(d.animation).toBe('none');}
  release();await expect(page.locator('[aria-busy=true]')).toHaveCount(0);await expect(button).toBeEnabled();
 });
+test('owner UPI password rejection preserves the form and saved details survive restart',async({page})=>{
+ const f=await owner(page);f.activatePaid();await go(page,'workspaces');await page.locator('[data-action=workspace]').click();await expect(page).toHaveURL(/#ownerHome$/);
+ let payee=null,reads=0;
+ await page.route('**/api/platform/rent/owner',async route=>{
+  if(route.request().method()==='GET'){reads++;return route.fulfill({json:{payee,claims:[]}});}
+  const body=route.request().postDataJSON();
+  if(body.password!=='Correct synthetic password')return route.fulfill({status:403,json:{error:{code:'PASSWORD_CONFIRMATION_FAILED',message:'Your password did not match.',details:{fieldErrors:{password:['Enter your current PGOne password.']}}}}});
+  payee={...body,enabled:true,revision:1};return route.fulfill({json:{ok:true,state:'DETAILS_SAVED',providerVerified:false,payee}});
+ });
+ await go(page,'ownerDirectRent');await page.getByLabel('Your UPI address').fill('fixture-owner@invalid');await page.getByLabel('Payee name').fill('Synthetic Owner');await page.getByLabel('Confirm your PGOne password').fill('wrong');await page.locator('[name=accepted]').check();
+ await page.getByRole('button',{name:'Save payment details'}).click();await expect(page.locator('.form-error')).toContainText('did not match');await expect(page.getByLabel('Your UPI address')).toHaveValue('fixture-owner@invalid');await expect(page).toHaveURL(/#ownerDirectRent$/);
+ await page.getByLabel('Confirm your PGOne password').fill('Correct synthetic password');await page.getByRole('button',{name:'Save payment details'}).click();await expect(page.getByText('Details saved',{exact:true})).toBeVisible();expect(reads).toBeGreaterThanOrEqual(3);
+ await page.reload();await expect(page).toHaveURL(/#ownerHome$/);await go(page,'ownerDirectRent');await expect(page.getByLabel('Your UPI address')).toHaveValue('fixture-owner@invalid');await expect(page.getByText('Bank confirmation required for each payment.')).toBeVisible();
+ await fs.mkdir('visual-evidence/premium',{recursive:true});await page.screenshot({path:'visual-evidence/premium/owner-upi-saved.png',fullPage:true});
+});

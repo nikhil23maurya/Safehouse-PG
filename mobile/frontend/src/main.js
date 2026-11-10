@@ -572,7 +572,7 @@ window.PGOnePlanPaymentResult=(order,status,message)=>{
   const org=state.platform?.memberships?.find(m=>m.id===state.platform.membershipId)?.organisation;
   if(state.tokens?.kind!=="PLATFORM" || !org || planCheckout.organisationId!==org.id)return;
   if(planCheckout.receive(order,status,message)){
-    if(!["DISCOVERING","CHOOSING_APP","SUBMITTED"].includes(status))void navigate("planVerification",{},{replace:true,force:true});
+    if(!["DISCOVERING","CHOOSING_APP","SUBMITTED"].includes(status)){if(state.route.name==="planVerification")void screen?.onPlanResult?.();else void navigate("planVerification",{},{replace:true,force:true});}
     else void screen?.onPlanResult?.();
   }
 };
@@ -585,6 +585,7 @@ window.PGOnePlanPaymentError = (message) => {
 window.SafeHouseResume = () => {
   applyMotionPreference();
   if (screen?.paymentFlow) void payment.resume();
+  else if(state.route?.name==="planVerification")void screen?.onPlanResult?.();
   else if(planCheckout.orderId&&planCheckout.organisationId&&!["DISCOVERING","CHOOSING_APP"].includes(planCheckout.status))void navigate("planVerification",{},{replace:true,force:true});
   else if (state.route?.name === "subscription") void revalidateOwnerActivation();
   else if (state.tokens && state.user && !dirty && !submittedForms) {
@@ -761,7 +762,7 @@ async function render() {
   loadingTimer = setTimeout(() => {
     if (seq !== sequence) return;
     document.getElementById("app").innerHTML = shell(
-      { title: "Loading", content: skeleton(state.route.name), nav },
+      ["planSuccess","planVerification"].includes(state.route.name)?{bare:true,content:verificationMarkup()}:{ title: "Loading", content: skeleton(state.route.name), nav },
       snapshot,
     );
   }, 130);
