@@ -45,6 +45,8 @@ export async function registerEmail(email:string,password:string) {
 
 export async function loginEmail(email:string,password:string) {
   email = emailInput.parse(email);
+  const attempts=await prisma.pgAudit.count({where:{action:"EMAIL_LOGIN_FAILED",entityId:hash(email),createdAt:{gt:new Date(Date.now()-15*60000)}}});
+  assert(attempts<20,429,"LOGIN_RATE_LIMIT","Too many sign-in attempts. Try again in 15 minutes.");
   let account = await prisma.pgAccount.findUnique({where:{credentialEmail:email}});
   if (account?.passwordHash) {
     assert(account.status === "ACTIVE" && await passwordMatches(password,account.passwordHash),401,"INVALID_CREDENTIALS","Invalid email or password.");
@@ -146,7 +148,12 @@ emailAuthRouter.post("/register",async(req,res)=>{
 });
 export async function emailLoginHandler(req:express.Request,res:express.Response) {
   const input = credentials.parse(req.body);
-  const account = await loginEmail(input.email,input.password);
+  let account;
+  try { account=await loginEmail(input.email,input.password); }
+  catch(error:any){
+    if(error.code === "INVALID_CREDENTIALS") await prisma.pgAudit.create({data:{action:"EMAIL_LOGIN_FAILED",entityId:hash(input.email)}});
+    throw error;
+  }
   const memberships = await prisma.pgMembership.findMany({where:{accountId:account.id,status:"ACTIVE"},take:2});
   res.json({tokens:await issueSession(account,memberships.length === 1 ? memberships[0]!.id : null)});
 }
@@ -175,8 +182,8 @@ emailAuthRouter.post("/complete",async(req,res)=>{
   res.json(await consumeEmailAction(input.token,input.purpose,input.password));
 });
 emailAuthRouter.post("/change-password",async(req,res)=>{
-  const {account} = await current(req);
+  const {account,membership} = await current(req);
   const input = z.object({currentPassword:z.string().min(1).max(128),newPassword:passwordInput}).strict().parse(req.body);
   const updated = await changeEmailPassword(account.id,input.currentPassword,input.newPassword);
-  res.json({ok:true,tokens:await issueSession(updated)});
+  res.json({ok:true,tokens:await issueSession(updated,membership?.id || null)});
 });

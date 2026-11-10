@@ -615,7 +615,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                 try {
                     Uri uri = Uri.parse(url == null ? "" : url);
                     if (!"https".equals(uri.getScheme()) || !"safehouse-api.onrender.com".equals(uri.getHost()) ||
-                        uri.getPath() == null || !uri.getPath().matches("/api/(owner|student)/payments/[a-zA-Z0-9_-]+/receipt\\.pdf") || uri.getQuery() != null || uri.getUserInfo() != null) {
+                        uri.getPath() == null || !(uri.getPath().matches("/api/(owner|student)/payments/[a-zA-Z0-9_-]+/receipt\\.pdf") || uri.getPath().matches("/api/platform/organisations/[a-zA-Z0-9_-]+/plan/receipts/[a-zA-Z0-9_-]+\\.pdf")) || uri.getQuery() != null || uri.getUserInfo() != null) {
                         Toast.makeText(MainActivity.this, "Invalid receipt link", Toast.LENGTH_SHORT).show(); return;
                     }
                     if (Build.VERSION.SDK_INT <= 28 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {

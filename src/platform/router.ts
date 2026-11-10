@@ -14,6 +14,7 @@ import { emailAuthRouter, mailReady } from "./email-auth.js";
 import { issueSession, rotateSession } from "./sessions.js";
 import { journey } from "./journey.js";
 import { directRentRouter } from "./direct-rent.js";
+import { planReceipt } from "./plan-receipts.js";
 import {
   accountSession,
   accountSnapshot,
@@ -327,6 +328,7 @@ platformRouter.post("/invitations/preview", limited, async (req, res) => {
 platformRouter.post("/invitations/accept", limited, async (req, res) => {
   const { account } = await session(req);
   const member = await acceptInvitation(account.id, code.parse(req.body.code));
+  if ("pendingOwnerApproval" in member) return res.json(member);
   res.json({
     tokens: await membershipTokens(account.id, member.id, account.tokenVersion),
   });
@@ -349,9 +351,19 @@ platformRouter.get("/organisations/:id/invitations", async (req, res) => {
           ? "EXPIRED"
           : i.status,
       email: i.email,
+      requestedAccountId: i.status === "REQUESTED" ? i.acceptedByAccountId : null,
       expiresAt: i.expiresAt,
     })),
   });
+});
+platformRouter.post("/invitations/:id/approve",limited,async(req,res)=>{
+  const {account}=await session(req);
+  const input=z.object({accountId:id,identityChecked:z.literal(true)}).strict().parse(req.body);
+  const invitation=await prisma.pgInvitation.findUnique({where:{id:id.parse(req.params.id)}});
+  assert(invitation,404,"NOT_FOUND","Invitation not found.");
+  await ownerOrganisation(account.id,invitation.organisationId);
+  assert(await entitlement(invitation.organisationId),402,"SUBSCRIPTION_REQUIRED","Activate PGOne before approving access.");
+  res.json(await acceptInvitation(input.accountId,"",{ownerAccountId:account.id,invitationId:invitation.id}));
 });
 platformRouter.post("/invitations/:id/revoke", async (req, res) => {
   const { account } = await session(req);
@@ -362,7 +374,7 @@ platformRouter.post("/invitations/:id/revoke", async (req, res) => {
   await ownerOrganisation(account.id, invitation.organisationId);
   await atomic(async (tx) => {
     await tx.pgInvitation.updateMany({
-      where: { id: invitation.id, status: "PENDING" },
+      where: { id: invitation.id, status: {in:["PENDING","REQUESTED"]} },
       data: { status: "REVOKED" },
     });
     await audit(
@@ -441,6 +453,18 @@ platformRouter.get("/organisations/:id/members", async (req, res) => {
 platformRouter.get("/organisations/:id/subscription", async (req, res) => {
   const { account } = await session(req);
   res.json(await manualPlanStatus(account.id, id.parse(req.params.id)));
+});
+platformRouter.get("/organisations/:id/plan/receipts/:receiptId.pdf",async(req,res)=>{
+  const {account}=await session(req);await planReceipt(account.id,id.parse(req.params.id),id.parse(req.params.receiptId),res);
+});
+platformRouter.get("/organisations/:id/records",async(req,res)=>{
+  const {account}=await session(req);const org=await ownerOrganisation(account.id,id.parse(req.params.id));
+  const cursor=typeof req.query.cursor === "string" ? id.parse(req.query.cursor) : undefined;
+  const payments=await prisma.payment.findMany({where:{property:{ownerId:org.legacyOwnerId}},orderBy:{id:"asc"},take:200,
+    ...(cursor?{cursor:{id:cursor},skip:1}:{}),include:{invoice:true}});
+  await atomic(tx=>audit(tx,account.id,org.id,"FINANCIAL_RECORD_EXPORT",org.id,{count:payments.length}));
+  res.setHeader("Cache-Control","no-store");
+  res.json({organisationId:org.id,currency:"INR",amountUnit:"PAISE",payments,nextCursor:payments.length===200?payments[199]!.id:null});
 });
 platformRouter.post(
   "/organisations/:id/subscription/recheck",

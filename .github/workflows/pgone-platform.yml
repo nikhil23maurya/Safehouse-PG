@@ -38,6 +38,21 @@ jobs:
       - name: Verify backward-compatible migrations on isolated PostgreSQL
         run: |
           node tests/platform.database-access.setup.mjs
+          node tests/platform.prepare-legacy.mjs
           npx prisma migrate deploy
       - name: Verify platform success, failure and isolation
-        run: node --import tsx --test --test-concurrency=1 tests/platform.test.ts tests/platform.integration.test.ts tests/platform.public.test.ts tests/platform.credentials.test.ts tests/platform.plan-period.test.ts tests/platform.plan-payments.integration.test.ts tests/platform.payment-preflight.test.ts tests/platform.database-access.test.ts tests/platform.email-auth.integration.test.ts tests/platform.direct-rent.integration.test.ts tests/platform.merchant.test.ts tests/platform.merchant.integration.test.ts
+        run: node --import tsx --test --test-concurrency=1 tests/platform.test.ts tests/platform.integration.test.ts tests/platform.public.test.ts tests/platform.credentials.test.ts tests/platform.plan-period.test.ts tests/platform.plan-payments.integration.test.ts tests/platform.payment-preflight.test.ts tests/platform.database-access.test.ts tests/platform.email-auth.integration.test.ts tests/platform.direct-rent.integration.test.ts tests/platform.merchant.test.ts tests/platform.merchant.integration.test.ts tests/platform.legacy-preservation.test.ts
+      - name: Verify synthetic staging backup and restore
+        shell: bash
+        run: |
+          set -euo pipefail
+          PG_CONTAINER=$(docker ps --filter ancestor=postgres:16 --format '{{.ID}}' | head -n 1)
+          test -n "$PG_CONTAINER"
+          docker exec "$PG_CONTAINER" pg_dump -U ci -d pgone_test -Fc > /tmp/pgone-synthetic.dump
+          docker exec "$PG_CONTAINER" createdb -U ci pgone_restore
+          docker exec -i "$PG_CONTAINER" pg_restore -U ci -d pgone_restore --exit-on-error < /tmp/pgone-synthetic.dump
+          RESTORED=$(docker exec "$PG_CONTAINER" psql -U ci -d pgone_restore -tAc 'SELECT "paidPaise" FROM "RentInvoice" WHERE id='"'"'migration-invoice'"'"';')
+          test "$RESTORED" = "100000"
+          echo "Synthetic legacy financial backup restored and verified in a separate CI database."
+      - name: Verify the actual HTTP backend journey
+        run: node --import tsx --test tests/platform.http.integration.test.ts

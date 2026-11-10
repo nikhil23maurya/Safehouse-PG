@@ -22,7 +22,6 @@ import {
   residentsScreen,
   residentScreen,
   residentFormScreen,
-  resetPasswordScreen,
 } from "./screens/residents.js";
 import { roomsScreen, roomScreen, roomFormScreen } from "./screens/rooms.js";
 import {
@@ -86,7 +85,6 @@ const routes = {
   residents: [residentsScreen, "OWNER"],
   resident: [residentScreen, "OWNER"],
   residentForm: [residentFormScreen, "OWNER"],
-  resetPassword: [resetPasswordScreen, "OWNER"],
   rooms: [roomsScreen, "OWNER"],
   room: [roomScreen, "OWNER"],
   roomForm: [roomFormScreen, "OWNER"],
@@ -624,6 +622,12 @@ function makeContext(snapshot, key) {
     refreshPlatform,
     acceptPlatform,
     selectWorkspace,
+    downloadAccountReceipt:async(path,number)=>{
+      await api("/api/platform/session");
+      const filename=`PGOne-${String(number).replace(/[^a-zA-Z0-9_-]/g,"")}.pdf`;
+      if(native.has("downloadReceipt"))native.call("downloadReceipt",API_BASE+path,state.tokens.accessToken,"",filename);
+      else{const blob=await api(path,{response:"blob"});const url=URL.createObjectURL(blob),link=document.createElement("a");link.href=url;link.download=filename;link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
+    },
     saveOnboardingDraft: (value) => {
       if (contextKey() !== key)
         throw new Error("Your account context changed.");
@@ -689,6 +693,7 @@ function makeContext(snapshot, key) {
       cache.clear();
       dirty = false;
       persist();
+      if (tokens.kind === "PLATFORM") await refreshPlatform();
       await navigate(postAuthRoute(), {}, { replace: true, force: true });
     },
   };

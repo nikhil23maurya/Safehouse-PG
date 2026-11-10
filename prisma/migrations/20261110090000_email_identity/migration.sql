@@ -33,6 +33,7 @@ CREATE TABLE "PgEmailAction" (
 );
 CREATE UNIQUE INDEX "PgEmailAction_tokenHash_key" ON "PgEmailAction"("tokenHash");
 CREATE INDEX "PgEmailAction_accountId_purpose_createdAt_idx" ON "PgEmailAction"("accountId", "purpose", "createdAt");
+CREATE INDEX "PgAudit_action_entityId_createdAt_idx" ON "PgAudit"("action", "entityId", "createdAt");
 
 ALTER TABLE "PgSession" ENABLE ROW LEVEL SECURITY;
 ALTER TABLE "PgEmailAction" ENABLE ROW LEVEL SECURITY;

@@ -40,7 +40,10 @@ export async function confirmDirectClaim(accountId:string,propertyId:string,clai
     assert(member&&member.organisation.ownerAccountId===accountId,403,"FORBIDDEN","Select your own property.");
     const claim=await tx.pgDirectRentClaim.findFirst({where:{id:claimId,propertyId}});
     assert(claim,404,"CLAIM_NOT_FOUND","Payment reference not found in this property.");
-    if(claim.status==="OWNER_CONFIRMED"){assert(claim.confirmedPaymentId===paymentId,409,"CLAIM_ALREADY_CONFIRMED","This reference already has a receipt.");return claim;}
+    if(claim.status==="OWNER_CONFIRMED"){
+      const recorded=await tx.payment.findFirst({where:{id:claim.confirmedPaymentId || "",propertyId,OR:[{id:paymentId},{receiptNumber:paymentId}]}});
+      assert(recorded,409,"CLAIM_ALREADY_CONFIRMED","This reference already has a different receipt.");return claim;
+    }
     assert(claim.status==="PENDING_OWNER_CONFIRMATION"&&claim.bankReference,409,"BANK_REFERENCE_REQUIRED","Wait for the resident's bank reference and verify your bank before confirming.");
     const payment=await tx.payment.findFirst({where:{OR:[{id:paymentId},{receiptNumber:paymentId}],propertyId,studentId:claim.studentId,invoiceId:claim.invoiceId,
       source:"MANUAL",method:"BANK_TRANSFER",amountPaise:claim.amountPaise,paidAt:{gte:new Date(claim.createdAt.getTime()-86400000)}}});

@@ -61,20 +61,20 @@ test("a legacy password proves migration; email collisions never link historical
   assert.equal(await prisma.pgMembership.count({where:{accountId:migrated.id,propertyId:property.id,role:"OWNER"}}),1);
   assert.equal((await loginEmail(address,password)).id,migrated.id);
   const collision=email();await prisma.user.create({data:{email:collision,fullName:"Historical owner",role:"OWNER",passwordHash:await hashPassword(password)}});
-  await prisma.pgAccount.create({data:{email:collision,phoneE164:`+91${String(Date.now()).slice(-10)}`}});
+  await prisma.pgAccount.create({data:{email:collision,phoneE164:`+919${String(Math.floor(Math.random()*1e9)).padStart(9,"0")}`}});
   await assert.rejects(()=>loginEmail(collision,password),{code:"ACCOUNT_RECOVERY_REVIEW"});
 });
-test("invites require the exact confirmed email, preserve roles and accept once",async()=>{
+test("invites bind the intended email and owner-approved identity, preserve roles and accept once",async()=>{
   const owner=await registerEmail(email(),password);await saveProfile(owner.id,{fullName:"Invite owner",intent:"OWNER"});
   const setup=await createProperty(owner.id,{name:"Invite House",city:"Pune",key:crypto.randomUUID()});
   // Explicit isolated fixture grants an existing legacy entitlement, never a client paid flag.
   await prisma.pgOrganisation.update({where:{id:setup.organisationId},data:{legacyAccess:true}});
   const staff=await registerEmail(email(),password);const stranger=await registerEmail(email(),password);
   const invite=await createInvitation(owner.id,{organisationId:setup.organisationId,propertyId:setup.propertyId,role:"STAFF",email:staff.email!,permissions:["OCCUPANCY_READ"]});
-  await assert.rejects(()=>acceptInvitation(staff.id,invite.code),{code:"INVITATION_UNAVAILABLE"});
-  let token="";await requestEmailAction(staff.id,"VERIFY",async(_e,_p,t)=>{token=t;});await consumeEmailAction(token,"VERIFY");
+  assert.equal((await acceptInvitation(staff.id,invite.code) as any).pendingOwnerApproval,true);
+  await assert.rejects(()=>acceptInvitation(staff.id,"",{ownerAccountId:stranger.id,invitationId:invite.id}),{code:"APPROVAL_NOT_ALLOWED"});
   await assert.rejects(()=>acceptInvitation(stranger.id,invite.code),{code:"INVITATION_UNAVAILABLE"});
-  const member=await acceptInvitation(staff.id,invite.code);assert.equal(member.role,"STAFF");assert.equal(member.actorUserId,null);
-  assert.equal((await acceptInvitation(staff.id,invite.code)).id,member.id);
+  const member=await acceptInvitation(staff.id,"",{ownerAccountId:owner.id,invitationId:invite.id}) as any;assert.equal(member.role,"STAFF");assert.equal(member.actorUserId,null);
+  assert.equal((await acceptInvitation(staff.id,invite.code) as any).id,member.id);
   assert.equal(await prisma.pgMembership.count({where:{accountId:staff.id,propertyId:setup.propertyId}}),1);
 });

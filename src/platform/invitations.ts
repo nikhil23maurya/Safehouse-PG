@@ -86,10 +86,10 @@ export async function previewInvitation(accountId: string, code: string) {
     include: { property: true },
   });
   assert(
-    account.emailVerified && account.credentialEmail &&
+    account.credentialEmail &&
       invitation &&
       invitation.email === account.credentialEmail &&
-      invitation.status === "PENDING" &&
+      ["PENDING","REQUESTED"].includes(invitation.status) &&
       invitation.expiresAt.getTime() > Date.now(),
     404,
     "INVITATION_UNAVAILABLE",
@@ -103,17 +103,17 @@ export async function previewInvitation(accountId: string, code: string) {
     expiresAt: invitation.expiresAt,
   };
 }
-export async function acceptInvitation(accountId: string, code: string) {
+export async function acceptInvitation(accountId: string, code: string, approval?: {ownerAccountId:string;invitationId:string}) {
   return atomic(async (tx) => {
     const account = await tx.pgAccount.findUniqueOrThrow({
       where: { id: accountId },
     });
     const invitation = await tx.pgInvitation.findUnique({
-      where: { tokenHash: hash(code) },
+      where: approval ? {id:approval.invitationId} : { tokenHash: hash(code) },
       include: { organisation: true },
     });
     assert(
-      account.emailVerified && account.credentialEmail &&
+      account.credentialEmail &&
         invitation &&
         invitation.email === account.credentialEmail &&
         invitation.expiresAt.getTime() > Date.now(),
@@ -121,6 +121,16 @@ export async function acceptInvitation(accountId: string, code: string) {
       "INVITATION_UNAVAILABLE",
       "This invitation is unavailable for your confirmed email address.",
     );
+    if (approval) {
+      assert(invitation.organisation.ownerAccountId===approval.ownerAccountId && ["REQUESTED","ACCEPTED"].includes(invitation.status) && invitation.acceptedByAccountId===accountId,
+        403,"APPROVAL_NOT_ALLOWED","This invitation request cannot be approved by this owner.");
+    } else if (!account.emailVerified && invitation.status !== "ACCEPTED") {
+      assert(["PENDING","REQUESTED"].includes(invitation.status) && (!invitation.acceptedByAccountId || invitation.acceptedByAccountId===accountId),
+        409,"INVITATION_USED","Ask your owner for a new invitation.");
+      await tx.pgInvitation.update({where:{id:invitation.id},data:{status:"REQUESTED",acceptedByAccountId:accountId}});
+      await audit(tx,accountId,invitation.organisationId,"INVITATION_OWNER_APPROVAL_REQUESTED",invitation.id);
+      return {pendingOwnerApproval:true,invitationId:invitation.id};
+    }
     if (invitation.status === "ACCEPTED") {
       assert(
         invitation.acceptedByAccountId === accountId,
@@ -139,7 +149,7 @@ export async function acceptInvitation(accountId: string, code: string) {
       });
     }
     assert(
-      invitation.status === "PENDING",
+      invitation.status === "PENDING" || Boolean(approval && invitation.status === "REQUESTED"),
       409,
       "INVITATION_USED",
       "Ask your owner for a new invitation.",
@@ -181,7 +191,7 @@ export async function acceptInvitation(accountId: string, code: string) {
       "This invitation cannot grant owner access.",
     );
     const updated = await tx.pgInvitation.updateMany({
-      where: { id: invitation.id, status: "PENDING" },
+      where: { id: invitation.id, status: approval ? "REQUESTED" : "PENDING" },
       data: {
         status: "ACCEPTED",
         acceptedByAccountId: accountId,

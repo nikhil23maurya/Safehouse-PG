@@ -470,7 +470,7 @@ test("sign in can be retried after a network interruption", async ({
 }) => {
   await setup(page);
   let attempts = 0;
-  await page.route("**/api/auth/login", (route) => {
+  await page.route("**/api/platform/auth/login", (route) => {
     attempts++;
     return attempts === 1 ? route.abort("connectionreset") : route.fallback();
   });

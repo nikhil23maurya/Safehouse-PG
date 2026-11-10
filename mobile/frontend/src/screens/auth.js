@@ -15,6 +15,7 @@ export function loginScreen(ctx) {
     accountForm("login",emailField()+passwordField("password","Password",true),"Sign in")+
     button("Forgot password?",{route:"forgotPassword",kind:"text-button block"})+
     button("New to PGOne? Create account",{route:"signup",kind:"secondary block"})),
+    title:"Sign in",
     async submit(name,form){if(name!=="login")return;const v=formValues(form);await ctx.signIn(v.email.trim(),v.password);}};
 }
 export function signupScreen(ctx) {

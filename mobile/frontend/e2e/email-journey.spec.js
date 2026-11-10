@@ -56,13 +56,13 @@ test("recovery uses a neutral response and visibility control shows the password
   await page.getByRole("button",{name:"Send recovery link"}).click();
   await expect(page.locator('[data-recovery-status]')).toContainText("If this email has an eligible account");
 });
-test("resident onboarding uses confirmed email invitations without an owner fee",async({page})=>{
+test("resident onboarding uses owner-approved email invitations without an owner fee",async({page})=>{
   await platform(page);await createAccount(page);
   await page.getByRole("button",{name:"I live in a PG",exact:false}).click();
   await page.getByLabel("Full name").fill("Ananya Rao");
   await page.getByRole("button",{name:"Continue",exact:true}).click();
   await expect(page).toHaveURL(/#joinWorkspace$/);
-  await expect(page.getByRole("button",{name:"Email confirmation link"})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Refresh workspaces"})).toBeVisible();
   await expect(page.getByRole("button",{name:/Pay.*249/})).toHaveCount(0);
 });
 test("email screens fit supported mobile widths",async({page})=>{

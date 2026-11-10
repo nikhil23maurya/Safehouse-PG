@@ -91,7 +91,7 @@ export async function platformWorkspaceBridge(
     // merely writes. Prevent direct API calls / cached routes from bypassing
     // onboarding. Keep authentication, platform subscription and legal routes
     // outside this guard so unpaid owners can recover their account.
-    if (owner && path.startsWith("/api/owner/")) {
+    if (owner && path.startsWith("/api/owner/") && !/^\/api\/owner\/payments\/[a-zA-Z0-9_-]+\/receipt\.pdf$/.test(path)) {
       assert(
         await entitlement(membership.organisation.id),
         402,

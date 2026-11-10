@@ -159,7 +159,7 @@ export async function residentScreen(ctx) {
       section(
         "Account access",
         card(
-          `<p class="subtitle">${s.mustChangePassword ? "This resident needs to change their temporary password." : "The resident has set up their password."}</p>${button("Reset password", { route: "resetPassword", params: { id: s.id }, kind: "secondary block", glyph: "key" })}`,
+          `<p class="subtitle">Residents manage their own email and password. Share a private invitation to connect their account.</p>${button("Invite resident", { route: "invitations", params: { id: s.id }, kind: "secondary block", glyph: "key" })}`,
         ),
       ),
   };
@@ -370,38 +370,3 @@ export async function residentFormScreen(ctx) {
   };
 }
 
-export async function resetPasswordScreen(ctx) {
-  const data = await ctx.read(
-    `/api/owner/students/${encodeURIComponent(ctx.params.id)}?${ctx.periodQuery}`,
-  );
-  return {
-    title: "Reset password",
-    back: true,
-    nav: false,
-    guardForm: true,
-    content:
-      heading(
-        "ACCOUNT ACCESS",
-        "A secure fresh start.",
-        `Reset ${data.student.name}’s password.`,
-      ) +
-      notice(
-        "Existing sessions will be revoked. The resident must change this password after signing in.",
-      ) +
-      `<form data-form="reset" novalidate><div class="card"><div class="form-error" role="alert"></div>${field("tempPassword", "New temporary password", { type: "password", required: true, attrs: 'minlength="8" maxlength="128" autocomplete="new-password"' })}${button("Reset password", { type: "submit", kind: "primary block" })}</div></form>`,
-    async submit(name, form) {
-      if (name !== "reset") return;
-      await ctx.api(
-        `/api/owner/students/${encodeURIComponent(ctx.params.id)}/reset-password`,
-        {
-          method: "POST",
-          body: { tempPassword: formValues(form).tempPassword },
-        },
-      );
-      ctx.markSaved();
-      ctx.invalidate();
-      ctx.toast("Temporary password reset. Share it securely.");
-      return ctx.navigate("resident", { id: ctx.params.id }, { replace: true });
-    },
-  };
-}

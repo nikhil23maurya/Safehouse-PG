@@ -6,6 +6,8 @@ Base: `ac61834` from main. This branch implements the 10 November 2026 product b
 
 `PgAccount` is the canonical identity. New accounts receive email/password credentials; names, contact numbers and role intent belong to onboarding. Memberships grant roles. Legacy `User` records remain financial actors. A legacy password or an existing authenticated legacy session is required to map that actor; matching email text never merges identities. Ambiguous historical email claims require operator review. Phone-only accounts without a valid session need assisted ownership recovery, not a mailbox-based claim of historical memberships.
 
+User steering: email verification through Resend is deferred. Registration and login require no email confirmation. An unconfirmed-email invite first becomes `REQUESTED`; the owner must independently verify the person and approve the bound account before membership is created. Optional email confirmation and password recovery remain implemented but report unavailable until email delivery is configured. Never simulate sending mail.
+
 Add nullable unique normalized credential email, password hash, revocable rotating sessions and hashed single-use email action tokens. Existing email/contact columns and financial identifiers stay intact. No production reset or destructive data cleanup.
 
 Change platform auth, invitations, mobile navigation, email auth screens, native phone bridge and billing lifecycle. Preserve rent calculations, payment posting, receipt history and original signing identity. Retire Cashfree entry points and customer screens; preserve historical provider records.

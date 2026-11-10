@@ -327,6 +327,7 @@ model PgAudit {
   createdAt DateTime @default(now())
   @@index([organisationId, createdAt])
   @@index([actorAccountId, createdAt])
+  @@index([action, entityId, createdAt])
 }
 
 model Room {
