@@ -322,7 +322,9 @@ public class MobileJourneyTest {
         js("document.querySelector('[data-action=dialog-confirm]').click()");
         await("document.querySelector('[data-form=login]')");
         js("window.__platformFixtureEnabled=true");
-        go("signup", "{}"); screenshot("40-create-account");
+        go("welcome", "{}");
+        js("document.querySelector('[data-action=entry][data-role=OWNER]').click()");
+        await("document.querySelector('[data-form=signup]')"); screenshot("40-create-account");
         js("document.querySelector('[name=email]').value='rahul@example.test';document.querySelector('[name=password]').value='Private password 123!';document.querySelector('[name=confirmPassword]').value='Private password 123!';document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));");
 
         await("document.querySelector('[data-form=setupProfile]')"); screenshot("43-owner-profile");
