@@ -39,13 +39,32 @@ test("one PG, unpaid route denial and server-confirmed entitlement through nativ
   expect(fixture.propertiesCreated).toBe(1);
   await forceRoute(page,"ownerHome");await expect(page).toHaveURL(/#subscription$/);
   await forceRoute(page,"merchant");await expect(page).toHaveURL(/#subscription$/);
+  await page.getByLabel("Mobile number for payment").fill("9999999999");
   await page.getByRole("button",{name:"Pay ₹249 securely with UPI"}).click();
   await expect.poll(()=>page.evaluate(()=>window.__lastPlanOptions)).toMatchObject({amount:24900,currency:"INR",email:"rahul@example.test",order_id:"order_SYNTHETIC001"});
-  expect(await page.evaluate(()=>window.__lastPlanOptions.contact)).toBe("");
+  expect(await page.evaluate(()=>window.__lastPlanOptions.contact)).toBe("+919999999999");
+  const returnedSnapshot=page.waitForResponse(response=>new URL(response.url()).pathname==="/api/platform/session"&&response.ok());
   await page.evaluate(()=>window.PGOnePlanPaymentResult("order_SYNTHETIC001","RETURNED_CHECK_PROVIDER"));
+  // Finish the unpaid callback reconciliation before the fixture simulates a later capture.
+  const unpaidSnapshot=await (await returnedSnapshot).json();
+  expect(unpaidSnapshot.memberships[0].organisation.entitled).toBe(false);
   await expect(page).toHaveURL(/#subscription$/);expect(fixture.entitled).toBe(false);
   fixture.activatePaid();await page.getByRole("button",{name:"Check payment status"}).click();
   await expect(page).toHaveURL(/#setupReady$/);
+});
+test("missing or invalid payment contact creates no order; a valid contact reaches native checkout",async({page})=>{
+  await platform(page,{billing:true});await createOwnerProperty(page);
+  let orders=0;page.on('request',req=>{if(req.url().includes('/plan/android/orders'))orders++;});
+  const pay=page.getByRole('button',{name:'Pay ₹249 securely with UPI'});
+  await pay.click();
+  await expect(page.locator('#field-paymentContact-error')).toContainText('required');
+  expect(orders).toBe(0);
+  await page.getByLabel('Mobile number for payment').fill('12345');await pay.click();
+  await expect(page.locator('.form-error')).toContainText('valid 10-digit');expect(orders).toBe(0);
+  await page.getByLabel('Mobile number for payment').fill('+91 99999 99999');
+  await page.getByLabel('Mobile number for payment').press('Enter');
+  await expect.poll(()=>page.evaluate(()=>window.__lastPlanOptions?.contact)).toBe('+919999999999');
+  expect(orders).toBe(1);await expect(pay).toBeDisabled();
 });
 test("recovery uses a neutral response and visibility control shows the password",async({page})=>{
   await platform(page);await page.getByLabel("Password",{exact:true}).fill("private");
@@ -83,6 +102,7 @@ test("email screens fit supported mobile widths",async({page})=>{
 
 test("native checkout failure survives navigation and does not unlock owner access",async({page})=>{
   const fixture=await platform(page,{billing:true});await createOwnerProperty(page);
+  await page.getByLabel("Mobile number for payment").fill("9999999999");
   await page.getByRole("button",{name:"Pay ₹249 securely with UPI"}).click();
   await expect(page.locator('[data-plan-checkout-status]')).toContainText("Finding");
   await forceRoute(page,"workspaces");
@@ -91,6 +111,7 @@ test("native checkout failure survives navigation and does not unlock owner acce
   await expect(page.locator('[data-plan-checkout-status]')).toContainText("No payment was submitted");
   await expect(page.getByRole("button",{name:"Pay ₹249 securely with UPI"})).toBeEnabled();
   expect(fixture.entitled).toBe(false);
+  await page.getByLabel("Mobile number for payment").fill("9999999999");
   await page.getByRole("button",{name:"Pay ₹249 securely with UPI"}).click();
   await expect(page.locator('[data-plan-checkout-status]')).toContainText("Finding");
   expect(fixture.entitled).toBe(false);

@@ -4,10 +4,10 @@ import { button, heading, notice } from "../components/ui.js";
 import { field, formValues } from "../components/forms.js";
 
 const accountPage = (title,description,body) => ({bare:true,title,
-  content:`<main class="login-page royal-page"><div class="login-inner"><div class="login-identity">${brand()}</div><div class="login-heading"><span class="royal-kicker">YOUR PG. BEAUTIFULLY MANAGED.</span><h1>${title}</h1><span class="gold-rule"></span><p>${description}</p></div>${body}</div><span class="login-footer">Your home, managed simply.</span></main>`});
+  content:`<main class="login-page royal-page"><div class="login-inner"><div class="login-identity">${brand()}</div><div class="login-heading"><h1>${title}</h1><p>${description}</p></div>${body}</div></main>`});
 const emailField = () => field("email","Email address",{type:"email",required:true,placeholder:"you@example.com",attrs:'autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="254"'});
 const passwordField = (name,label,current=false) => field(name,label,{type:"password",required:true,
-  help:current?"":"Use 12–128 characters. A longer, unique password is best.",
+  placeholder:!current&&name==="password"?"At least 12 characters":"",
   attrs:`autocomplete="${current?"current-password":"new-password"}" ${current?"":'minlength="12"'} maxlength="128"`});
 const accountForm = (name,fields,label) => `<form data-form="${name}" novalidate><div class="form-error" role="alert"></div>${fields}${button(label,{type:"submit",kind:"primary block",glyph:"arrow"})}</form>`;
 const legalLinks = () => `<p class="legal-copy">By creating an account, you agree to our <button class="text-button" data-route="legal" data-params='{"kind":"terms"}'>Terms</button> and <button class="text-button" data-route="legal" data-params='{"kind":"privacy"}'>Privacy Policy</button>.</p>`;
@@ -20,7 +20,7 @@ export function loginScreen(ctx) {
     async submit(name,form){if(name!=="login")return;const v=formValues(form);await ctx.signIn(v.email.trim(),v.password);}};
 }
 export function signupScreen(ctx) {
-  return {...accountPage("Create your account.","One account for your PG, your people and your everyday work.",
+  return {...accountPage("Create your account.","Start with your email and a password.",
     accountForm("signup",emailField()+passwordField("password","Password")+passwordField("confirmPassword","Confirm password"),"Create account")+
     button("Already have an account? Sign in",{route:"login",kind:"secondary block"})+legalLinks()),
     async submit(name,form){if(name!=="signup")return;const v=formValues(form);if(v.password!==v.confirmPassword)throw new Error("Passwords do not match.");

@@ -55,11 +55,11 @@ export async function notificationsScreen(ctx) {
     nav: "profile",
     content:
       heading(
-        "STAY IN THE KNOW",
-        owner ? "A thoughtful nudge." : "Updates from home.",
+        "",
+        "Notifications",
         owner
-          ? "Reach the right residents at the right time."
-          : "Rent updates and announcements, right on your phone.",
+          ? ""
+          : "",
       ) +
       deviceCard(ctx, config) +
       (owner
@@ -165,7 +165,7 @@ export async function notificationFormScreen(ctx) {
     content:
       heading(
         ctx.snapshot.property?.name,
-        "Send a little clarity.",
+        "New notification",
         `Rent audiences use ${month(ctx.snapshot.period.year, ctx.snapshot.period.month)}.`,
       ) +
       `<form data-form="notification" novalidate><div class="form-error" role="alert"></div>` +

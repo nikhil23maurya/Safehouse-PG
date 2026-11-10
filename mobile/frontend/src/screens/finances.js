@@ -74,14 +74,14 @@ export async function duesScreen(ctx) {
     content:
       heading(
         ctx.snapshot.property?.name,
-        recording ? "Record a payment." : "Keep rent on track.",
+        recording ? "Record payment" : "Rent dues",
         recording
           ? "Choose the invoice you received payment for."
-          : "Clear balances. Thoughtful reminders.",
+          : "",
       ) +
       periodControl(ctx.snapshot.period) +
       card(
-        `<p class="eyebrow">Total outstanding</p><div class="financial-amount">${money(data.totalDuePaise)}</div><p class="subtitle">${data.overdueCount} overdue · ${esc(month(data.period.year, data.period.month))}</p>`,
+        `<p class="eyebrow">Total outstanding</p><div class="financial-amount">${money(data.totalDuePaise)}</div><p class="subtitle">${data.overdueCount} overdue · ${esc(month(data.period.year, data.period.month))}</p>`, "dues-summary",
       ) +
       `<div class="section">${search(q, "Search name, room or mobile")}${filters(
         [
@@ -94,7 +94,7 @@ export async function duesScreen(ctx) {
         ? dues
             .map((i) =>
               card(
-                `<div class="campaign-head"><div><h3>${esc(i.student.name)}</h3><p class="subtitle">${esc(i.student.room ? `Room ${i.student.room}` : "Unassigned")} · Due ${esc(date(i.dueDate, ctx.snapshot.property?.timezone))}</p></div>${invoiceBadge(i)}</div><div class="financial-amount">${money(i.remainingPaise)}</div><div class="action-stack">${button(recording ? "Record payment" : "View invoice", { route: recording ? "manualPayment" : "invoice", params: { id: i.id, residentId: i.student.id }, kind: recording ? "primary" : "secondary", glyph: recording ? "wallet" : "invoice" })}${i.whatsappUrl ? `<button class="text-button" data-action="remind" data-id="${esc(i.id)}">${icon("send")} Send WhatsApp reminder ${icon("external")}</button>` : ""}</div>`,
+                `<div class="campaign-head"><div><h3>${esc(i.student.name)}</h3><p class="subtitle">${esc(i.student.room ? `Room ${i.student.room}` : "Unassigned")} · Due ${esc(date(i.dueDate, ctx.snapshot.property?.timezone))}</p></div>${invoiceBadge(i)}</div><div class="financial-amount">${money(i.remainingPaise)}</div><div class="action-stack">${button(recording ? "Record payment" : "View invoice", { route: recording ? "manualPayment" : "invoice", params: { id: i.id, residentId: i.student.id }, kind: recording ? "primary" : "secondary", glyph: recording ? "wallet" : "invoice" })}${i.whatsappUrl ? `<button class="text-button" data-action="remind" data-id="${esc(i.id)}">${icon("send")} Send WhatsApp reminder ${icon("external")}</button>` : ""}</div>`, "dues-card",
               ),
             )
             .join("")
@@ -172,9 +172,9 @@ export async function invoicesScreen(ctx) {
     nav: "invoices",
     content:
       heading(
-        "YOUR RENT, EXPLAINED",
-        "Every month. In order.",
-        "Review a bill, settle rent or find a receipt.",
+        "",
+        "Your invoices",
+        "",
       ) +
       filters(
         [
@@ -238,8 +238,8 @@ export async function paymentsScreen(ctx) {
     content:
       heading(
         owner ? ctx.snapshot.property?.name : "RENT, TAKEN CARE OF",
-        "Your payment trail.",
-        "Confirmed payments. Receipts when you need them.",
+        "Payment history",
+        "",
       ) +
       (owner ? periodControl(ctx.snapshot.period) : "") +
       `<div class="list">${payments.length ? payments.map((p) => paymentRow(p, owner, ctx.snapshot.property?.timezone)).join("") : empty("No payments yet", owner ? "No recorded payments for this billing month." : "Your recorded payments and receipts will appear here.", { glyph: "wallet" })}</div>` +
@@ -266,7 +266,7 @@ export async function manualPaymentScreen(ctx) {
     content:
       heading(
         "PAYMENT RECEIVED",
-        "Keep the record right.",
+        "Record payment",
         `${resident.name} · ${month(invoice.year, invoice.month)}`,
       ) +
       card(
@@ -326,7 +326,7 @@ export async function invoiceChargesScreen(ctx) {
     content:
       heading(
         "INVOICE ADJUSTMENTS",
-        "Clear charges. Clear rent.",
+        "Invoice adjustments",
         `${resident.name} · ${month(invoice.year, invoice.month)}`,
       ) +
       notice(

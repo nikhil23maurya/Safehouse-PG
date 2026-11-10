@@ -38,7 +38,7 @@ export async function residentsScreen(ctx) {
     content:
       heading(
         ctx.snapshot.property?.name,
-        "Your people.",
+        "Residents",
         `${data.students.length} resident${data.students.length === 1 ? "" : "s"} shown`,
         button("Add", { route: "residentForm", glyph: "plus" }),
       ) +
@@ -209,8 +209,8 @@ export async function residentFormScreen(ctx) {
     content:
       heading(
         ctx.snapshot.property?.name,
-        id ? "Keep the details right." : "A new place to call home.",
-        id ? s.name : "A few details. One smooth move-in.",
+        id ? "Edit resident" : "Add resident",
+        id ? s.name : "",
       ) +
       `<nav class="form-steps" aria-label="Form sections">${[
         ["01", "Personal"],

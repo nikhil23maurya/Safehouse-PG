@@ -67,7 +67,7 @@
   letter-spacing: -1.1px;
 }
 .onboarding-page {
-  padding: 22px 25px 38px;
+  padding: 20px 22px 24px;
   max-width: 520px;
   margin: auto;
 }
@@ -78,7 +78,7 @@
   height: 48px;
   position: relative;
   z-index: 2;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
 }
 .royal-back {
   border: 0;
@@ -100,7 +100,7 @@
   z-index: 1;
 }
 .royal-intro {
-  margin: 0 0 32px;
+  margin: 0 0 20px;
 }
 .royal-kicker {
   display: block;
@@ -113,11 +113,11 @@
 }
 .royal-intro h1 {
   color: #0b1736;
-  font-size: 35px;
+  font-size: 30px;
   line-height: 1.17;
   letter-spacing: -1.5px;
   font-weight: 800;
-  margin: 0 0 18px;
+  margin: 0 0 8px;
   max-width: 350px;
 }
 .gold-rule {
@@ -134,16 +134,16 @@
 }
 .royal-intro p {
   font-size: 14px;
-  line-height: 1.75;
+  line-height: 1.5;
   color: #66718a;
   max-width: 340px;
   margin: 0;
 }
 .royal-page .button {
   border-radius: 16px;
-  min-height: 54px;
+  min-height: 48px;
   letter-spacing: -.2px;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 650;
 }
 .royal-page .primary {
@@ -170,10 +170,10 @@
   height: 19px;
 }
 .royal-page .button.block {
-  margin-top: 14px;
+  margin-top: 10px;
 }
 .royal-page .field {
-  margin: 0 0 20px;
+  margin: 0 0 14px;
   display: block;
 }
 .royal-page .field label,
@@ -182,16 +182,16 @@
   color: #15213d;
   font-size: 13px;
   font-weight: 650;
-  margin: 0 0 9px;
+  margin: 0 0 6px;
 }
 .royal-page .field input,
 .royal-page .field select {
-  height: 55px;
+  height: 50px;
   background: #fff;
   border: 1px solid #d9e1ef;
   border-radius: 13px;
   padding: 0 15px;
-  font-size: 14px;
+  font-size: 16px;
   box-shadow: 0 2px 3px #0b173602;
 }
 .royal-page input:focus,
@@ -217,7 +217,7 @@
   color: #1048c8;
 }
 .royal-page form {
-  margin: 0 0 20px;
+  margin: 0 0 12px;
 }
 .royal-page .notice {
   border-radius: 13px;
@@ -236,7 +236,11 @@
   color: #a42e21;
 }
 .welcome-page {
-  height: max(780px, 100dvh);
+  height: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: clamp(48px, 14dvh, 120px);
   max-width: 540px;
   margin: auto;
   background: #f8faff;
@@ -282,10 +286,10 @@
 .welcome-copy {
   position: relative;
   z-index: 2;
-  padding: 34px 29px 0;
+  padding: 24px 25px 0;
 }
 .welcome-copy .brand {
-  margin-bottom: 36px;
+  margin-bottom: 28px;
 }
 .welcome-copy .royal-kicker {
   font-size: 9px;
@@ -294,7 +298,7 @@
   color: #52617b;
 }
 .welcome-copy h1 {
-  font-size: 46px;
+  font-size: clamp(36px, 10vw, 46px);
   font-weight: 800;
   line-height: 1.08;
   letter-spacing: -2px;
@@ -315,10 +319,8 @@
   margin: 20px 0 15px;
 }
 .welcome-bottom {
-  position: absolute;
-  bottom: 18px;
-  left: 25px;
-  right: 25px;
+  position: relative;
+  padding: 0 22px max(20px, env(safe-area-inset-bottom));
   z-index: 3;
   text-align: center;
 }
@@ -547,13 +549,13 @@
   opacity: .6;
 }
 .setup-step {
-  padding: 15px;
+  padding: 10px 14px;
   border-radius: 14px;
   background: #edf3ff;
   display: flex;
   align-items: center;
   gap: 17px;
-  margin: 28px 0;
+  margin: 0 0 20px;
   font-size: 12px;
   color: #092d86;
   font-weight: 650;
@@ -622,8 +624,8 @@
 .royal-plan {
   border: 1px solid #cfdbf3;
   border-radius: 22px;
-  padding: 25px;
-  margin: 5px 0 25px;
+  padding: 20px;
+  margin: 0 0 20px;
   background:
     linear-gradient(
       145deg,
@@ -645,9 +647,9 @@
     Manrope,
     Inter,
     sans-serif;
-  font-size: 52px;
+  font-size: 44px;
   color: #092d86;
-  line-height: 1.5;
+  line-height: 1.3;
   font-weight: 800;
   letter-spacing: -2px;
 }
@@ -660,9 +662,9 @@
   margin-left: 8px;
 }
 .royal-plan p {
-  font-size: 11px;
+  font-size: 13px;
   color: #66718a;
-  margin: 0 0 20px;
+  margin: 8px 0 0;
 }
 .royal-plan ul {
   padding: 20px 0 0;
@@ -795,7 +797,7 @@
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
-  padding: 38px 28px 30px;
+  padding: 24px 22px;
   max-width: 520px;
   margin: auto;
   background: #fbfcff;
@@ -804,19 +806,20 @@
   width: 100%;
   max-width: 380px;
   margin: auto;
+  padding: 0;
   position: relative;
   z-index: 1;
 }
 .royal-page .login-identity {
-  margin-bottom: 46px;
+  margin-bottom: 24px;
   justify-content: flex-start;
 }
 .royal-page .login-heading {
   text-align: left;
-  margin-bottom: 30px;
+  margin-bottom: 20px;
 }
 .royal-page .login-heading h1 {
-  font-size: 36px;
+  font-size: 30px;
   letter-spacing: -1.5px;
   margin: 0 0 10px;
   color: #0b1736;
@@ -860,7 +863,7 @@
     padding-top: 30px;
   }
   .welcome-page {
-    height: max(900px, 100dvh);
+    height: auto;
   }
   .welcome-copy {
     padding-top: 42px;
@@ -985,3 +988,31 @@
 
 .merchant-consent { display: grid; grid-template-columns: 20px 1fr; gap: 10px; align-items: start; color: #344b76; font-size: 13px; line-height: 1.6; margin: 20px 0; }
 .merchant-consent input { width: 18px; height: 18px; margin: 2px 0 0; accent-color: #1041c9; }
+
+.plan-label-row, .plan-secondary-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.plan-secondary-actions { display: grid; grid-template-columns: 1fr 1fr; }
+.plan-secondary-actions .button { padding: 8px 0; font-size: 13px; }
+.royal-page .text-button { min-height: 44px; }
+[data-plan-checkout-status]:empty, [data-direct-upi-status]:empty { display: none; }
+[data-plan-checkout-status], [data-direct-upi-status] { font-size: 14px; line-height: 1.5; margin: 12px 0; }
+.disclosure { border-top: 1px solid var(--border); margin-top: 12px; color: var(--muted); font-size: 14px; }
+.disclosure > summary { min-height: 48px; padding: 13px 0; color: var(--navy); font-weight: 600; cursor: pointer; }
+.disclosure > summary:focus-visible { outline: 3px solid #6e93ee; outline-offset: 2px; border-radius: 6px; }
+.disclosure p { margin: 0 0 12px; line-height: 1.5; }
+.disclosure form { padding-top: 4px; }
+.payment-summary h2 { font-size: 36px; line-height: 1.2; letter-spacing: -1px; margin: 0 0 12px; color: var(--navy); }
+.payment-summary .payee { font-weight: 650; margin: 0; }
+.payment-summary .payee-address { color: var(--muted); font-size: 14px; margin: 4px 0 0; }
+.payment-summary .badge { margin-top: 12px; }
+.payment-safety { color: var(--muted); font-size: 13px; line-height: 1.5; margin: 12px 0; }
+.compact-empty { color: var(--muted); font-size: 14px; padding: 16px; margin: 0; }
+@media (max-height: 700px) {
+  .login-page.royal-page { padding-top: 12px; padding-bottom: 12px; }
+  .royal-page .login-identity { margin-bottom: 18px; }
+  .royal-page .login-heading { margin-bottom: 16px; }
+  .royal-page .login-heading h1 { font-size: 28px; }
+  .royal-page .legal-copy { margin: 12px 0 0; }
+}
+
+.login-page.royal-page form { margin-bottom: 0; }
+.royal-page .legal-copy .text-button { min-height: auto; }

@@ -1,4 +1,4 @@
-import {planCheckout} from "../payments/plan.js";
+import {planCheckout,paymentContact} from "../payments/plan.js";
 import { brand, icon } from "../components/icons.js";
 import {
   esc,
@@ -37,37 +37,37 @@ function page(title, content, back = "workspaces", art = "") {
   };
 }
 const intro = (kicker, title, text) =>
-  `<div class="royal-intro"><span class="royal-kicker">${esc(kicker)}</span><h1>${esc(title)}</h1><span class="gold-rule"></span><p>${esc(text)}</p></div>`;
+  `<div class="royal-intro">${kicker?`<span class="royal-kicker">${esc(kicker)}</span>`:""}<h1>${esc(title)}</h1>${text?`<p>${esc(text)}</p>`:""}</div>`;
 
 export function welcomeScreen() {
   return {
     bare: true,
     title: "Welcome",
-    content: `<main class="welcome-page royal-page"><div class="welcome-art">${image("hero")}</div><div class="welcome-copy">${brand()}<span class="royal-kicker">A BETTER WAY TO RUN YOUR PG</span><h1>Your PG.<br>Beautifully<br><em>managed.</em></h1><span class="gold-rule"></span><p>Rooms, residents, rent.<br>Everything feels in place.</p></div><div class="welcome-bottom"><span class="welcome-caption">A little more calm. Every day.</span>${primary("Create account", { route: "signup", glyph: "arrow" })}${button("Sign in", { route: "login", kind: "secondary block" })}<p class="welcome-foot">Thoughtfully made for life at your PG.</p></div></main>`,
+    content: `<main class="welcome-page royal-page"><div class="welcome-art">${image("hero")}</div><div class="welcome-copy">${brand()}<h1>Your PG.<br>Beautifully<br><em>managed.</em></h1><span class="gold-rule"></span><p>Rooms, residents and rent, in one place.</p></div><div class="welcome-bottom">${primary("Create account", { route: "signup", glyph: "arrow" })}${button("Sign in", { route: "login", kind: "secondary block" })}</div></main>`,
   };
 }
 export function chooseRoleScreen(ctx) {
   return {
     ...page(
       "Your role",
-      `${intro("YOUR PGONE", "A place for everyone.", "Choose how you’ll use PGOne. Your property access is confirmed separately.")}<div class="role-options">${[
+      `${intro("", "How will you use PGOne?", "Choose your role to continue.")}<div class="role-options">${[
         [
           "OWNER",
           "building",
           "I manage a PG",
-          "Set up your property and bring everything together.",
+          "Set up and manage your property",
         ],
         [
           "RESIDENT",
           "home",
           "I live in a PG",
-          "Your rent, receipts and updates, in one place.",
+          "Pay rent and view receipts",
         ],
         [
           "STAFF",
           "users",
           "I work at a PG",
-          "Join the workspace your owner has invited you to.",
+          "Join your owner’s workspace",
         ],
       ]
         .map(
@@ -93,7 +93,7 @@ export function setupProfileScreen(ctx) {
   return {
     ...page(
       "Your profile",
-      `<div class="setup-hero">${intro("MAKE IT YOURS", owner ? "Set up your owner profile." : "Let’s get to know you.", "A few details for a more personal workspace.")}${image("property")}</div>${step(1, "Your profile")}${form("setupProfile", `${field("fullName", "Full name", { required: true, value: account.fullName, attrs: 'minlength="2" maxlength="100" autocomplete="name"', placeholder: "Your full name" })}${field("accountEmail", "Sign-in email", {type:"email",value:account.email||"",attrs:'readonly aria-readonly="true"'})}${field("contactPhone", "Contact phone (optional)", {value:account.contactPhone||"",attrs:'inputmode="tel" maxlength="25" autocomplete="tel"',help:"Contact information only. No phone verification."})}`)}<div class="quiet-note">${icon("shield")}<span>Your email and password secure your account.</span></div>`,
+      `${intro("", owner ? "Your owner profile" : "Your profile", account.email || "")}${step(1, "Your profile")}${form("setupProfile", `${field("fullName", "Full name", { required: true, value: account.fullName, attrs: 'minlength="2" maxlength="100" autocomplete="name"', placeholder: "Your full name" })}${field("contactPhone", "Contact phone (optional)", {value:account.contactPhone||"",attrs:'inputmode="tel" maxlength="25" autocomplete="tel"'})}`)}`,
       "chooseRole",
     ),
     async submit(_name, el) {
@@ -121,7 +121,7 @@ export function setupPropertyScreen(ctx) {
   return {
     ...page(
       "Your first PG",
-      `<div class="setup-hero">${intro("A NEW BEGINNING", "Your PG starts here.", "Give your property a home in PGOne.")}${image("property")}</div>${step(2, "Your property")}${form("setupProperty", `${field("name", "PG name", { value: draft?.values?.name || "", required: true, placeholder: "e.g. Maple House", attrs: 'minlength="2" maxlength="120" autocomplete="organization"' })}${field("city", "City", { value: draft?.values?.city || "", required: true, placeholder: "e.g. Bengaluru", attrs: 'minlength="2" maxlength="100" autocomplete="address-level2"' })}${field("approximateRooms", "Approximate number of rooms", { value: draft?.values?.approximateRooms || "", type: "number", placeholder: "Optional", attrs: 'min="1" max="100000" inputmode="numeric"', help: "You can add the actual rooms in your workspace." })}`, "Create my PG")}<div class="quiet-note">${icon("check")}<span>You can update property details later.</span></div>`,
+      `${intro("", "Set up your PG", "")}${step(2, "Your property")}${form("setupProperty", `${field("name", "PG name", { value: draft?.values?.name || "", required: true, placeholder: "e.g. Maple House", attrs: 'minlength="2" maxlength="120" autocomplete="organization"' })}${field("city", "City", { value: draft?.values?.city || "", required: true, placeholder: "e.g. Bengaluru", attrs: 'minlength="2" maxlength="100" autocomplete="address-level2"' })}${field("approximateRooms", "Approximate number of rooms", { value: draft?.values?.approximateRooms || "", type: "number", placeholder: "Optional", attrs: 'min="1" max="100000" inputmode="numeric"' })}`, "Create my PG")}`,
       "setupProfile",
     ),
     input(_name, _el, form) {
@@ -190,7 +190,7 @@ export function joinWorkspaceScreen(ctx) {
   return {
     ...page(
       "Join your PG",
-      `${intro("YOU’RE INVITED", "Your place is waiting.", "Enter the invitation code shared by your PG owner. Use the email address they invited.")}${notice("Enter the private invitation from your owner. Your owner confirms your identity before access is granted.")}${button("Refresh workspaces",{action:"refreshEmail",kind:"secondary block"})}${form("invitation", field("code", "Invitation code", { required: true, attrs: 'minlength="43" maxlength="43" autocomplete="off" autocapitalize="none" spellcheck="false"' }), "Review invitation")}<p class="legal-copy">Your owner controls property access and staff permissions.</p>`,
+      `${intro("", "Join your PG", "Use the invitation code from your owner.")}${button("Refresh workspaces",{action:"refreshEmail",kind:"text-button block"})}${form("invitation", field("code", "Invitation code", { required: true, attrs: 'minlength="43" maxlength="43" autocomplete="off" autocapitalize="none" spellcheck="false"' }), "Review invitation")}<p class="payment-safety">Your owner confirms your identity before granting access.</p>`,
       "workspaces",
     ),
     async action(name){if(name==="refreshEmail"){await ctx.refreshPlatform();await ctx.navigate("workspaces");}},
@@ -227,12 +227,16 @@ export async function subscriptionScreen(ctx) {
     platformConfig(ctx),
   ]);
   const active = data.entitled === true;
-  const paymentState=ctx.snapshot.platform?.journey?.state;
   const canPayHere = cfg.androidBilling === "CUSTOM_UPI_INTENT" &&
     ctx.native.has("openPlanRazorpayUpi") && data.configured === true;
   planCheckout.restore(ctx.native,org.id);
   let preparing = false;
   let checking = false;
+  const account = ctx.snapshot.platform?.account || {};
+  const payForm = () => `<form data-form="planPay" novalidate><fieldset data-plan-controls><div class="form-error" role="alert"></div>${field("paymentContact","Mobile number for payment",{
+    type:"tel",required:true,value:paymentContact(account.contactPhone)||"",
+    placeholder:"10-digit mobile number",attrs:'inputmode="tel" autocomplete="tel" maxlength="20"',
+  })}${primary(active?"Renew for ₹249 with UPI":"Pay ₹249 securely with UPI",{type:"submit",glyph:"arrow"})}</fieldset></form>`;
   const refreshPaidState = async () => {
     if (checking) return;
     checking = true;
@@ -253,12 +257,13 @@ export async function subscriptionScreen(ctx) {
   const paintStatus = () => {
     const status=document.querySelector('[data-plan-checkout-status]');
     if(status)status.textContent=planCheckout.organisationId===org.id?planCheckout.message:"";
-    const pay=document.querySelector('[data-action="planPay"]');if(pay)pay.disabled=planCheckout.busy;
+    const pay=document.querySelector('[data-form="planPay"] [type="submit"]');if(pay)pay.disabled=planCheckout.busy;
+    const controls=document.querySelector('[data-plan-controls]');if(controls)controls.disabled=planCheckout.busy;
   };
   return {
     ...page(
       active ? "PGOne activated" : "Activate PGOne",
-      `${intro(active ? "ACCESS CONFIRMED" : "ACTIVATE YOUR PROPERTY", active ? "You're ready to manage your PG." : "Your PG is ready. One last step.", active ? "Your monthly PGOne access has been verified." : "Your property is saved. Make a secure ₹249 UPI payment to activate your management dashboard.")}<div class="royal-plan"><span class="plan-name">PGOne · One plan</span><div class="plan-price">₹249<small>/ month</small></div><p>One payment covers one calendar month · no automatic debit</p><p>${data.tax?.rateBps===0?"₹249 total. GST is not charged.":"₹249 total, including applicable tax."}</p><ul>${["Manage rooms and residents", "Track rent, receipts and dues", "Manage staff access", "Enable online rent collection after separate merchant approval"].map(t => `<li>${icon("check")}${t}</li>`).join("")}</ul></div><div class="subscription-state">${badge(active ? "ACTIVE" : "ACTIVATION REQUIRED", active ? "green" : "neutral")}${data.accessEnd ? `<p>Access ends ${date(data.accessEnd)}</p>` : ""}</div>${paymentState && paymentState!=="SUBSCRIPTION_ACTIVE" ? notice(paymentState.replaceAll("_"," ").toLowerCase()) : ""}${active ? `${canPayHere ? primary("Renew for ₹249 with UPI",{action:"planPay",glyph:"arrow"}) : ""}${primary("Enter my dashboard", { route: "ownerHome", glyph: "arrow" })}${button("Set up rent collection", { route: "merchant", kind: "secondary block" })}` : `${canPayHere ? `${primary("Pay ₹249 securely with UPI", { action: "planPay", glyph: "arrow" })}${notice("Select your installed UPI app in Razorpay's secure flow. Approve payment inside the UPI app. Dashboard unlocks only after the payment is verified.")}` : notice(cfg.androidBilling === "CONSUMPTION_ONLY" ? "This distribution does not sell subscriptions in-app. You may use an existing subscription purchased through an authorised channel." : "Razorpay is not activated for in-app payments on this sideloaded build. PGOne needs live merchant keys, tax settings and payment webhooks before a real charge can be accepted.")}${data.pendingOrder ? notice("A previous payment is under verification. Check its status before making another payment.") : ""}${primary("Check payment status", { action: "subscriptionRefresh", glyph: "refresh" })}${button("Switch workspace", { route: "workspaces", kind: "secondary block" })}`}${data.subscription?.payments?.length ? `<h2 class="royal-section-title">Verified payment history</h2>${data.subscription.payments.map(p => card(`<strong>₹${(p.amountPaise / 100).toFixed(2)}</strong><p>${date(p.paidAt)} · ${esc(p.receiptNumber)}</p>${button("Download receipt",{action:"planReceipt",kind:"text-button",attrs:`data-id="${esc(p.id)}" data-number="${esc(p.receiptNumber)}"`})}`)).join("")}` : ""}<p data-plan-checkout-status role="status" aria-live="polite"></p><p class="legal-copy">₹249 is a one-time manual payment for one calendar month. UPI authorisation happens in your chosen UPI app. No UPI PIN is collected by PGOne. Razorpay confirms capture on our backend; returning to this screen is not proof of payment. Rent settlement is separate.</p>`,
+      `${intro("", active ? "Your PGOne plan" : "Activate PGOne", "")}<div class="royal-plan"><div class="plan-label-row"><span class="plan-name">PGOne</span>${active ? badge("Active", "green") : ""}</div><div class="plan-price">₹249<small>/ month</small></div><p>One calendar month · no auto-debit</p>${data.accessEnd ? `<p>Access ends ${date(data.accessEnd)}</p>` : ""}</div>${active ? `${primary("Enter my dashboard", { route: "ownerHome", glyph: "arrow" })}${canPayHere ? `<details class="disclosure"><summary>Renew your plan</summary>${payForm()}</details>` : ""}${button("Set up rent collection", { route: "merchant", kind: "text-button block" })}` : `${canPayHere ? payForm() : notice(cfg.androidBilling === "CONSUMPTION_ONLY" ? "Use an existing plan purchased through an authorised channel." : "In-app payments are unavailable. Please contact PGOne support.")}${data.pendingOrder ? notice("Payment awaiting verification. Check status before paying again.") : ""}`}<p data-plan-checkout-status role="status" aria-live="polite"></p><div class="plan-secondary-actions">${button("Check payment status", { action: "subscriptionRefresh", kind:"text-button" })}${button("Switch workspace", { route: "workspaces", kind: "text-button" })}</div><details class="disclosure"><summary>Plan & payment details</summary><p>Rooms, residents, rent records and staff access.</p><p>${data.tax?.rateBps===0?"₹249 total. GST is not charged.":"₹249 total, including applicable tax."} Renew manually each month.</p><p>Approve in your UPI app. Access starts after Razorpay confirms payment. If debited, check status before retrying. Rent collection is separate.</p></details>${data.subscription?.payments?.length ? `<details class="disclosure"><summary>Payment history (${data.subscription.payments.length})</summary>${data.subscription.payments.map(p => card(`<strong>₹${(p.amountPaise / 100).toFixed(2)}</strong><p>${date(p.paidAt)} · ${esc(p.receiptNumber)}</p>${button("Download receipt",{action:"planReceipt",kind:"text-button",attrs:`data-id="${esc(p.id)}" data-number="${esc(p.receiptNumber)}"`})}`)).join("")}</details>` : ""}`,
       "workspaces",
     ),
     onPlanResult: async () => {
@@ -275,10 +280,16 @@ export async function subscriptionScreen(ctx) {
         await platformConfig(ctx,{force:true});
         return refreshPaidState();
       }
+    },
+    async submit(name,el) {
       if (name !== "planPay") return;
       if (!canPayHere) throw new Error("Razorpay in-app UPI payment is not configured.");
       if (preparing) return;
       if (planCheckout.busy) throw new Error("Finish or cancel the open UPI checkout first.");
+      const contact=paymentContact(formValues(el).paymentContact);
+      if(!contact)throw Object.assign(new Error("Enter a valid 10-digit Indian mobile number for payment."),{
+        details:{fieldErrors:{paymentContact:["Enter a valid 10-digit Indian mobile number."]}},
+      });
       preparing = true;
       try {
       const order = await ctx.api(`/api/platform/organisations/${org.id}/plan/android/orders`, {
@@ -293,15 +304,19 @@ export async function subscriptionScreen(ctx) {
         throw new Error("The payment provider returned an invalid ₹249 order.");
       }
       planCheckout.begin(org.id,order.orderId);
-      const account = ctx.snapshot.platform?.account || {};
       ctx.native.call("openPlanRazorpayUpi", JSON.stringify({
         organisationId:org.id, key: order.keyId,
         order_id: order.orderId,
         amount: 24900, currency: "INR",
-                email: account.email || "",
-        contact: /^(\+91)?[6-9][0-9]{9}$/.test((account.contactPhone||"").replace(/[ ()-]/g,"")) ? account.contactPhone.replace(/[ ()-]/g,"") : "",
+        email: account.email || "",contact,
       }));
       paintStatus();
+      } catch(error) {
+        if(error.uncertain){
+          el.dataset.uncertain="true";
+          throw new Error("Payment request interrupted. Use Check payment status before retrying.");
+        }
+        throw error;
       } finally { preparing = false; }
     },
     mount() {
@@ -318,7 +333,7 @@ export async function subscriptionScreen(ctx) {
 export async function merchantScreen(ctx) {
   const org=organisation(ctx.snapshot); if(!org) throw new Error("Select an owner workspace first.");
   const data=await ctx.api(`/api/platform/organisations/${org.id}/merchant`);
-  return {...page("Rent collection",`${intro("YOUR RENT. YOUR ACCOUNT.","Collect rent with confidence.",data.message)}${notice("Automated owner settlement is awaiting Razorpay approval. PGOne does not route another owner's rent into the subscription account.")}${button("Set up direct owner UPI",{route:"ownerDirectRent",kind:"primary block"})}${button("Record rent received",{route:"dues",kind:"secondary block"})}<p class="legal-copy">A direct UPI transfer is confirmed by your bank or by you. An app return or screenshot never marks rent paid.</p>`,"profile")};
+  return {...page("Rent collection",`${intro("","Rent collection","Receive rent directly in your UPI account.")}${button("Set up direct owner UPI",{route:"ownerDirectRent",kind:"primary block"})}${button("Record rent received",{route:"dues",kind:"secondary block"})}${notice("Automatic bank settlement is unavailable. Check each direct transfer in your bank before confirming rent.")}`,"profile")};
 }
 export async function invitationsScreen(ctx) {
   const org = organisation(ctx.snapshot);

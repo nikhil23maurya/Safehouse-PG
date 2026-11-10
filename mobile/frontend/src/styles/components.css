@@ -1,14 +1,14 @@
 .app-shell {
   min-height: 100vh;
   min-height: 100dvh;
-  padding-bottom: calc(var(--nav-height) + 24px + env(safe-area-inset-bottom));
+  padding-bottom: calc(var(--nav-height) + 12px + env(safe-area-inset-bottom));
 }
 .app-shell.without-nav {
   padding-bottom: 24px;
 }
 .app-header {
   height: auto;
-  min-height: 72px;
+  min-height: 60px;
   padding: max(env(safe-area-inset-top), 8px) 20px 8px;
   display: flex;
   gap: 8px;
@@ -75,7 +75,7 @@
 .content {
   max-width: 760px;
   margin: 0 auto;
-  padding: 24px 20px 12px;
+  padding: 18px 16px 12px;
   outline: 0;
 }
 .content {
@@ -100,7 +100,7 @@
   gap: 12px;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 24px;
+  margin-bottom: 18px;
 }
 .page-heading > div {
   min-width: 0;
@@ -123,7 +123,7 @@
   line-height: 1.5;
 }
 .section {
-  margin-top: 28px;
+  margin-top: 20px;
 }
 .section-heading {
   display: flex;

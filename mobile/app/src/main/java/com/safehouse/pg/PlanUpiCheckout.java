@@ -100,6 +100,10 @@ final class PlanUpiCheckout {
             if(!"SIDELOAD".equals(BuildConfig.BILLING_DISTRIBUTION) || !id.matches("order_[A-Za-z0-9]+") ||
                 !key.matches("rzp_(live|test)_[A-Za-z0-9]+") || input.optInt("amount")!=24900 || !"INR".equals(input.optString("currency")))
                 throw new IllegalArgumentException("Invalid checkout session");
+            if(paymentContact(input.optString("contact", ""))==null){
+                events.result(id,"INVALID_PAYMENT_CONTACT","Enter a valid mobile number for payment.");return;
+            }
+            JSONObject payload=paymentPayload(input);
             order=id;submitted=false;
             prefs.edit().putString("organisation",input.optString("organisationId","")).apply();
             view=new WebView(activity);view.setVisibility(View.GONE);view.setBackgroundColor(android.graphics.Color.WHITE);
@@ -108,11 +112,6 @@ final class PlanUpiCheckout {
             view.getSettings().setMixedContentMode(android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW);
             host.addView(view,new FrameLayout.LayoutParams(-1,-1));
             gateway=factory.create(activity,key,view);
-            JSONObject payload=new JSONObject();
-            for(String field:new String[]{"key","order_id","amount","currency","email"}) if(input.has(field)) payload.put(field,input.get(field));
-            payload.put("method","upi");payload.put("_[flow]","intent");payload.put("description","PGOne monthly workspace access");
-            String contact=input.optString("contact","").replaceAll("[ ()-]","");
-            if(!contact.isEmpty() && contact.matches("(\\+91)?[6-9][0-9]{9}"))payload.put("contact",contact);
             emit("DISCOVERING","Finding your installed UPI apps…");
             progress=new ProgressDialog(activity);progress.setMessage("Finding UPI apps…");progress.setCancelable(true);
             progress.setOnCancelListener(d->finish("CANCELLED_BEFORE_SUBMIT","App selection cancelled. No payment was submitted."));progress.show();
@@ -148,12 +147,33 @@ final class PlanUpiCheckout {
             else events.result(attemptOrder,"SDK_UNAVAILABLE","The checkout session is incomplete. Refresh payment status and retry.");
         }
     }
-    private static String safeDescription(String text){
+    static String paymentContact(String value){
+        String clean=value==null?"":value.replaceAll("[\\s()-]","");
+        java.util.regex.Matcher match=java.util.regex.Pattern.compile("^(?:\\+91|91)?([6-9][0-9]{9})$").matcher(clean);
+        return match.matches()?"+91"+match.group(1):null;
+    }
+    static JSONObject paymentPayload(JSONObject input) throws Exception {
+        String contact=paymentContact(input.optString("contact",""));
+        if(contact==null)throw new IllegalArgumentException("Payment contact required");
+        String email=input.optString("email","").trim();
+        if(!android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches())throw new IllegalArgumentException("Payment email required");
+        JSONObject payload=new JSONObject();
+        // The key belongs in the SDK constructor. Submit the documented payment fields only.
+        for(String field:new String[]{"order_id","amount","currency"})payload.put(field,input.get(field));
+        return payload.put("email",email).put("contact",contact).put("method","upi")
+            .put("_[flow]","intent").put("description","PGOne monthly workspace access");
+    }
+    static String safeDescription(String text){
         if(text==null)return "";
+        // SDK errors can wrap the useful field failure in JSON. Do not truncate its envelope first.
+        try{JSONObject root=new JSONObject(text);JSONObject error=root.optJSONObject("error");
+            String description=(error==null?root:error).optString("description","");
+            if(!description.isEmpty())text=description;
+        }catch(Exception ignored){}
         String clean=text.replaceAll("[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+","[redacted]")
             .replaceAll("rzp_(live|test)_[A-Za-z0-9]+|order_[A-Za-z0-9]+|pay_[A-Za-z0-9]+|[0-9]{6,}","[redacted]")
             .replaceAll("https?://\\S+","[link]");
-        return clean.substring(0,Math.min(180,clean.length()));
+        return clean.substring(0,Math.min(320,clean.length()));
     }
     private void finish(String status,String message){
         if(order==null)return;

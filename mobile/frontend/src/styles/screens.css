@@ -961,3 +961,26 @@
    Android WebView can defer the img request and its load/error callbacks. */
 .payment-qr-image.is-loading { visibility: hidden; }
 .payment-qr-image { width: 100%; max-width: 310px; height: auto; object-fit: contain; }
+
+.owner-dashboard .property-context { margin-bottom: 8px; }
+.owner-dashboard .period-control { padding: 0 4px; margin-bottom: 12px; }
+.owner-dashboard .financial-summary { padding: 16px; }
+.owner-dashboard .summary-top > span:last-child { display: none; }
+.owner-dashboard .financial-amount { margin-top: 8px; }
+.owner-dashboard .collection-track { margin: 12px 0 10px; }
+.owner-dashboard .summary-bottom span { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; }
+.owner-dashboard .metrics-strip { padding: 12px 0; }
+.owner-dashboard .metrics-strip strong { font-size: 18px; }
+.owner-dashboard .metrics-strip span { margin-top: 2px; }
+.owner-dashboard .section { margin-top: 16px; }
+.owner-dashboard .section-heading { margin-bottom: 8px; }
+.owner-dashboard .quick-action { min-height: 76px; gap: 6px; }
+.owner-dashboard .quick-action > span { width: 44px; height: 44px; border-radius: 13px; }
+
+.room-card { padding: 16px; }
+.room-card .bed-indicators { margin: 10px 0 8px; }
+.room-card .room-number strong { font-size: 16px; }
+.dues-summary, .dues-card { padding: 16px; }
+.dues-summary .financial-amount, .dues-card .financial-amount { font-size: 28px; margin-top: 8px; }
+.dues-card .action-stack { margin-top: 12px; gap: 6px; }
+.dues-card .action-stack .button { min-height: 44px; }
