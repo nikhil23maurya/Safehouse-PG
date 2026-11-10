@@ -60,7 +60,8 @@ test("real backend email signup through owner activation, restoration and logout
   assert.equal((await request(`/api/platform/invitations/${residentInvite.body.id}/approve`,{accountId:residentAccount.body.account.id,identityChecked:true},token)).status,200);
   const residentJoined=await request("/api/platform/invitations/accept",{code:residentInvite.body.code},residentAccount.body.tokens.accessToken);
   const residentDashboard=await request("/api/student/dashboard",undefined,residentJoined.body.tokens.accessToken);
-  assert.equal(residentDashboard.status,200);assert.equal(residentDashboard.body.property.id,first.body.property.id);
+  assert.equal(residentDashboard.status,200);assert.equal(residentDashboard.body.student.id,residentRecord.body.student.id);
+  assert.equal((await request("/api/platform/session",undefined,residentJoined.body.tokens.accessToken)).body.property.id,first.body.property.id);
   assert.equal((await request("/api/owner/dashboard",undefined,residentJoined.body.tokens.accessToken)).status,403);
   await prisma.$disconnect();
   const login=await request("/api/platform/auth/login",{email,password});assert.equal(login.status,200);

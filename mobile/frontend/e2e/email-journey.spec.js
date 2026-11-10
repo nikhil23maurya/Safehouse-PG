@@ -65,6 +65,14 @@ test("resident onboarding uses owner-approved email invitations without an owner
   await expect(page.getByRole("button",{name:"Refresh workspaces"})).toBeVisible();
   await expect(page.getByRole("button",{name:/Pay.*249/})).toHaveCount(0);
 });
+test("account settings and published policies remain accessible before workspace selection",async({page})=>{
+  await platform(page);await createAccount(page);
+  await page.getByRole("button",{name:"Your workspaces",exact:true}).click();
+  await page.getByRole("button",{name:"Change password",exact:true}).click();
+  await expect(page).toHaveURL(/#password$/);
+  await expect(page.getByLabel("Current password",{exact:true})).toBeVisible();
+  await forceRoute(page,"legal");await expect(page).toHaveURL(/#legal$/);
+});
 test("email screens fit supported mobile widths",async({page})=>{
   await platform(page);await fs.mkdir('visual-evidence/email-journey',{recursive:true});
   for(const width of [360,393,412,600]){await page.setViewportSize({width,height:852});await noOverflow(page);await page.screenshot({path:`visual-evidence/email-journey/login-${width}.png`,fullPage:true});}

@@ -273,6 +273,7 @@ async function canLeave() {
 }
 
 function guardedRoute(name) {
+  if(name === "legal") return "legal";
   if (!state.tokens || !state.user)
     return routes[name]?.[1] === null ? name : "welcome";
   if (routes[name]?.[1] === "PLATFORM") {
@@ -287,7 +288,7 @@ function guardedRoute(name) {
   }
   if (
     state.tokens.kind === "PLATFORM" &&
-    ["ACCOUNT", "STAFF"].includes(state.user.role)
+    ["ACCOUNT", "STAFF"].includes(state.user.role) && name !== "password"
   )
     return home();
   if (state.user.mustChangePassword) return "password";
@@ -388,7 +389,9 @@ async function signIn(email,password) {
 }
 
 async function refreshPlatform() {
+  const epoch=state.authEpoch;
   const result = await api("/api/platform/session");
+  if(epoch!==state.authEpoch || !state.tokens) throw Object.assign(new Error("Your account changed. Retry from the current workspace."),{code:"STALE_SESSION"});
   state.platform = result;
   state.user = result.user;
   state.property = result.property;
@@ -593,7 +596,15 @@ function makeContext(snapshot, key) {
         new Error("This request belongs to an earlier account or property."),
         { code: "STALE_CONTEXT" },
       );
-    const data = await api(path, options);
+    let data;
+    try {data = await api(path, options);}
+    catch(error){
+      if(error.status===402 && state.tokens?.kind==="PLATFORM" && state.user?.role==="OWNER"){
+        await refreshPlatform();
+        await navigate("subscription",{},{replace:true,force:true});
+      }
+      throw error;
+    }
     if (
       contextKey() !== key ||
       (!path.startsWith("/api/platform/") && !matchesContext(data, snapshot))
@@ -1005,6 +1016,12 @@ document.addEventListener("visibilitychange", () => {
   if (screen?.paymentFlow) void payment.resume();
   void revalidateOwnerActivation();
 });
+// Expiry comes from the server clock; re-read entitlements without provider calls.
+setInterval(async()=>{
+  if(document.hidden || state.tokens?.kind!=="PLATFORM" || state.user?.role!=="OWNER")return;
+  try{await refreshPlatform();if(!ownerHasPaidAccess(state) && !["subscription","workspaces","password","legal"].includes(state.route.name))
+    await navigate("subscription",{},{replace:true,force:true});}catch{/* Offline never invents paid access; protected APIs enforce expiry. */}
+},60000);
 let nativeKeyboardOpen = false,
   keyboardFrame;
 function revealFocusedField() {
