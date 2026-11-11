@@ -6,7 +6,7 @@ import pg from "pg";
 const url=new URL(process.env.DATABASE_URL||"invalid:");
 if(process.env.NODE_ENV!=="test"||url.hostname!=="127.0.0.1"||url.pathname!=="/pgone_test")throw new Error("Legacy staging requires the isolated CI database");
 const temporary=fs.mkdtempSync(path.join(os.tmpdir(),"pgone-new-migrations-"));
-const future=fs.readdirSync("prisma/migrations").filter(name=>name.startsWith("20261110"));
+const future=fs.readdirSync("prisma/migrations").filter(name=>/^\d{14}_/.test(name)&&name>="20261110000000");
 try {
   for(const name of future)fs.renameSync(`prisma/migrations/${name}`,path.join(temporary,name));
   execFileSync(process.platform==="win32"?"npx.cmd":"npx",["prisma","migrate","deploy"],{stdio:"inherit"});
