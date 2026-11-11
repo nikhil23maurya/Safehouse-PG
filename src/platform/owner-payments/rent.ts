@@ -57,11 +57,16 @@ export async function createRentOrder(accountId:string,membershipId:string,invoi
  });
  const order=reservation.order;
  if(!reservation.created)return {orderId:order.id,status:order.status};
+ let submitted=false;
  try {
-  const token=await accessToken(auth.id,provider),remote=await provider.createOrder(token,{amount:order.amountPaise,receipt:order.reference,notes:{pgRentOrderId:order.id,organisationId:m.organisationId,invoiceId,context:"OWNER_MERCHANT_RENT"}});
+  const token=await accessToken(auth.id,provider);submitted=true;
+  const remote=await provider.createOrder(token,{amount:order.amountPaise,receipt:order.reference,notes:{pgRentOrderId:order.id,organisationId:m.organisationId,invoiceId,context:"OWNER_MERCHANT_RENT"}});
   validateOrder(remote,order,auth);
   await prisma.pgOwnerRentOrder.update({where:{id:order.id},data:{providerOrderId:remote.id,status:"CREATED"}});
- }catch(error){await prisma.pgOwnerRentOrder.update({where:{id:order.id},data:{status:"CREATION_UNCERTAIN",lastErrorCode:"PROVIDER_CREATE_UNCERTAIN"}});throw error;}
+ }catch(error){
+  const rejected=!submitted||(error instanceof AppError&&["OWNER_PROVIDER_ACCESS_REQUIRED","OWNER_PROVIDER_REJECTED"].includes(error.code));
+  await atomic(async tx=>{await tx.pgOwnerRentOrder.update({where:{id:order.id},data:{status:rejected?"FAILED":"CREATION_UNCERTAIN",open:!rejected,lastErrorCode:rejected?"PROVIDER_CREATE_REJECTED":"PROVIDER_CREATE_UNCERTAIN"}});await audit(tx,accountId,m.organisationId,rejected?"OWNER_RENT_CREATE_REJECTED":"OWNER_RENT_CREATE_UNCERTAIN",order.id);});throw error;
+ }
  return {orderId:order.id,status:"CREATED"};
 }
 export async function reconcileRentOrder(orderId:string,provider:OwnerProvider=razorpayOwnerProvider) {

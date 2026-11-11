@@ -9,10 +9,13 @@ import {razorpayOwnerProvider,type OwnerProvider} from "./provider.js";
 export async function reconcileSettlement(authorizationId:string,settlementId:string,provider:OwnerProvider=razorpayOwnerProvider) {
  const auth=await prisma.pgOwnerAuthorization.findUniqueOrThrow({where:{id:authorizationId},include:{merchant:true}}),token=await accessToken(auth.id,provider);
  const s=await provider.settlement(token,settlementId);
- assert(s.id===settlementId&&s.entity==="settlement"&&(!s.account_id||s.account_id===auth.providerAccountId)&&["created","processed","failed"].includes(s.status)&&Number.isInteger(s.amount)&&s.amount>=0&&s.currency==="INR",409,"OWNER_SETTLEMENT_MISMATCH","Settlement details did not match this merchant account.");
- const status=s.status==="processed"?"COMPLETED":s.status==="failed"?"FAILED":"PENDING";
+ // The India Settlement entity does not always include a currency field.
+ // Our accepted orders/recon rows are INR; reject an explicit other currency.
+ assert(s.id===settlementId&&s.entity==="settlement"&&(!s.account_id||s.account_id===auth.providerAccountId)&&["created","processed","failed"].includes(s.status)&&Number.isInteger(s.amount)&&s.amount>=0&&(s.currency===undefined||s.currency==="INR"),409,"OWNER_SETTLEMENT_MISMATCH","Settlement details did not match this merchant account.");
+ // Razorpay 'processed' is a bank-transfer stage, not proof of bank credit.
+ const status=s.status==="processed"?"PROCESSED":s.status==="failed"?"FAILED":"PENDING";
  await atomic(async tx=>{
-  await tx.pgOwnerSettlement.upsert({where:{authorizationId_providerSettlementId:{authorizationId,providerSettlementId:settlementId}},create:{authorizationId,providerSettlementId:settlementId,status,amountPaise:s.amount,currency:s.currency,utr:status==="COMPLETED"&&typeof s.utr==="string"?s.utr.slice(0,80):null,verifiedAt:new Date()},update:{status,utr:status==="COMPLETED"&&typeof s.utr==="string"?s.utr.slice(0,80):null,verifiedAt:new Date()}});
+  await tx.pgOwnerSettlement.upsert({where:{authorizationId_providerSettlementId:{authorizationId,providerSettlementId:settlementId}},create:{authorizationId,providerSettlementId:settlementId,status,amountPaise:s.amount,currency:"INR",utr:status==="PROCESSED"&&typeof s.utr==="string"?s.utr.slice(0,80):null,verifiedAt:new Date()},update:{status,utr:status==="PROCESSED"&&typeof s.utr==="string"?s.utr.slice(0,80):null,verifiedAt:new Date()}});
   await audit(tx,null,auth.merchant.organisationId,"OWNER_SETTLEMENT_VERIFIED",settlementId,{status,amountPaise:s.amount});
  });
  return s;

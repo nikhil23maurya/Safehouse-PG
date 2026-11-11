@@ -328,8 +328,9 @@ public class MobileJourneyTest {
         js("window.__ownerRentFixtures.captured=true;document.querySelector('[data-action=checkRent]').click()");
         await("document.getElementById('app').dataset.screen==='rentSuccess'"); screenshot("58-rent-verified-receipt");
         js("document.querySelector('[data-action=continueRent]').click()"); await("document.getElementById('app').dataset.screen==='studentHome'");
+        js("window.__ownerRentBeforeReload=true");
         instrumentation.runOnMainSync(()->web.reload());
-        await("window.__nativeFixtures&&document.getElementById('app').dataset.screen==='studentHome'");
+        await("!window.__ownerRentBeforeReload&&window.__nativeFixtures&&document.getElementById('app').dataset.screen==='studentHome'");
         go("payment", "{invoiceId:'invoice1'}"); await("Boolean(document.querySelector('[data-payment-qr]')?.complete && document.querySelector('[data-payment-qr]')?.naturalWidth>0)"); screenshot("23-payment-qr");
         assertEquals("true", js("document.querySelector('[data-payment-qr]').src.startsWith('https://appassets.androidplatform.net/assets/payment-qr.png?')"));
         assertEquals("true", js("document.querySelector('[data-payment-qr]').naturalWidth===document.querySelector('[data-payment-qr]').naturalHeight"));

@@ -1,6 +1,8 @@
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import express from "express";
+import {AppError} from "../src/errors.js";
 Object.assign(process.env,{NODE_ENV:"test",PGONE_PLATFORM_ENABLED:"true",RAZORPAY_OWNER_MERCHANT_ONBOARDING_ENABLED:"true",RAZORPAY_OWNER_MODE:"test",RAZORPAY_OWNER_CLIENT_ID:"syntheticOwnerClient",RAZORPAY_OWNER_CLIENT_SECRET:"synthetic-owner-secret-not-live",RAZORPAY_OWNER_TOKEN_KEY:"ab".repeat(32),RAZORPAY_OWNER_WEBHOOK_SECRET:"synthetic-owner-webhook-not-live",RAZORPAY_OWNER_REDIRECT_URI:"https://example.test/api/owner-payments/callback",PGONE_SUBSCRIPTION_MERCHANT_ACCOUNT_ID:"acc_PGOneSoftwareFee"});
 const {prisma}=await import("../src/db.js");
 const {registerEmail}=await import("../src/platform/email-auth.js");
@@ -10,9 +12,10 @@ const {platformClaims}=await import("../src/platform/tokens.js");
 const {startConnection,finishConnection,merchantView,mapAccount,accessToken,refreshConnection,disconnect}=await import("../src/platform/owner-payments/merchant.js");
 const {seal,unseal}=await import("../src/platform/owner-payments/crypto.js");
 const {createRentOrder,reconcileRentOrder,residentStatus,checkoutSession}=await import("../src/platform/owner-payments/rent.js");
-const {receiveOwnerWebhook,drainOwnerEvents}=await import("../src/platform/owner-payments/webhooks.js");
+const {receiveOwnerWebhook,drainOwnerEvents,reconcileOwnerHistory}=await import("../src/platform/owner-payments/webhooks.js");
 const {collectionDashboard,reconcileSettlement,reconcileSettlementDay}=await import("../src/platform/owner-payments/settlements.js");
 const {entitlement}=await import("../src/platform/billing.js");
+const {ownerPaymentsRouter,ownerPaymentWebRouter}=await import("../src/platform/owner-payments/router.js");
 import type {OwnerProvider,MerchantToken} from "../src/platform/owner-payments/provider.js";
 after(async()=>{await prisma.$disconnect();});
 const suffix=()=>crypto.randomBytes(7).toString("hex");
@@ -140,7 +143,7 @@ test("capture is separate from settlement; only exact merchant recon binds bank 
  const s={id:"setl_"+suffix(),entity:"settlement",account_id:o.auth!.providerAccountId,status:"failed",amount:p.amount,currency:"INR",created_at:Math.floor(Date.now()/1000),utr:null};o.provider.settles.set(s.id,s);
  await reconcileSettlement(o.auth!.id,s.id,o.provider);assert.deepEqual((await residentStatus(r.account.id,r.membership.id,r.invoice.id)).settlement,[]);
  s.status="processed";s.utr="SYNTHETIC-UTR" as any;o.provider.rows=[{entity_id:p.id,type:"payment",settled:true,settlement_id:s.id,currency:"INR",amount:p.amount,credit:p.amount-100,fee:100,tax:0,settled_at:s.created_at}];
- await reconcileSettlementDay(o.auth!.id,{year:2026,month:11,day:11},o.provider);assert.equal((await residentStatus(r.account.id,r.membership.id,r.invoice.id)).settlement[0]?.status,"COMPLETED");
+ await reconcileSettlementDay(o.auth!.id,{year:2026,month:11,day:11},o.provider);assert.equal((await residentStatus(r.account.id,r.membership.id,r.invoice.id)).settlement[0]?.status,"PROCESSED");
  const dashboard=await collectionDashboard(o.account.id,o.setup.organisationId,2026,11);assert.equal(dashboard.totalCollectedPaise,p.amount);assert.equal(dashboard.outstandingPaise,0);
 });
 test("new open orders block legacy/direct/manual duplicate channels at the database boundary",async()=>{
@@ -152,4 +155,55 @@ test("disconnect stops collection before a failed revoke; tokens refresh without
  const o=await owner();await prisma.pgOwnerAuthorization.update({where:{id:o.auth!.id},data:{expiresAt:new Date(Date.now()-1000)}});const token=await accessToken(o.auth!.id,o.provider);assert.ok(token.startsWith("access-credential-"));assert.equal(o.provider.refreshes,1);
  o.provider.revokeFails=true;await assert.rejects(()=>disconnect(o.account.id,o.setup.organisationId,"Synthetic private password 123!",o.provider),{code:"OWNER_REVOKE_PENDING"});
  const view=await merchantView(o.account.id,o.setup.organisationId);assert.equal(view.status,"DISABLED");assert.equal(view.collectionEnabled,false);assert.ok(!JSON.stringify(view).includes("credential"));
+});
+test("test-mode provider captures cannot credit a production rent ledger",async()=>{
+ const o=await owner(),r=await resident(o);process.env.NODE_ENV="production";
+ try{await assert.rejects(()=>createRentOrder(r.account.id,r.membership.id,r.invoice.id,suffix()+suffix(),o.provider),{code:"TEST_RENT_LEDGER_DISABLED"});assert.equal((await merchantView(o.account.id,o.setup.organisationId)).collectionEnabled,false);assert.equal(o.provider.creates,0);}finally{process.env.NODE_ENV="test";}
+});
+test("unassigned and inactive residents cannot start rent collection",async()=>{
+ const o=await owner(),r=await resident(o);await prisma.pgMembership.update({where:{id:r.membership.id},data:{actorUserId:null}});
+ await assert.rejects(()=>createRentOrder(r.account.id,r.membership.id,r.invoice.id,suffix()+suffix(),o.provider),{code:"RESIDENT_REQUIRED"});
+ await prisma.pgMembership.update({where:{id:r.membership.id},data:{actorUserId:r.invoice.studentId? (await prisma.student.findUniqueOrThrow({where:{id:r.invoice.studentId}})).userId:null}});
+ await prisma.student.update({where:{id:r.invoice.studentId},data:{status:"INACTIVE"}});await assert.rejects(()=>createRentOrder(r.account.id,r.membership.id,r.invoice.id,suffix()+suffix(),o.provider),{code:"RESIDENT_INACTIVE"});
+});
+test("actual HTTP routes enforce auth, owner isolation, strict bodies and raw webhook signatures",async()=>{
+ const a=await owner(),b=await owner(),r=await resident(a),residentTokens=await issueSession(r.account,r.membership.id);
+ const app=express();app.use("/api/owner-payments",ownerPaymentWebRouter);app.use(express.json());app.use("/api/platform/owner-payments",ownerPaymentsRouter);app.use((err:any,_req:any,res:any,_next:any)=>res.status(err.statusCode||(err.name==="ZodError"?400:500)).json({code:err.code||err.name}));
+ const server=app.listen(0,"127.0.0.1");await new Promise<void>(resolve=>server.once("listening",resolve));const address=server.address() as any,base=`http://127.0.0.1:${address.port}`;
+ const call=(path:string,token?:string,body?:unknown)=>fetch(base+path,{method:body===undefined?"GET":"POST",headers:{...(token?{authorization:`Bearer ${token}`}:{}) ,"content-type":"application/json"},...(body===undefined?{}:{body:JSON.stringify(body)})});
+ try{
+  assert.equal((await call(`/api/platform/owner-payments/organisations/${a.setup.organisationId}`)).status,401);
+  assert.equal((await call(`/api/platform/owner-payments/organisations/${a.setup.organisationId}`,b.pair.accessToken)).status,403);
+  assert.equal((await call(`/api/platform/owner-payments/organisations/${a.setup.organisationId}/collections?year=2026&month=11`,residentTokens.accessToken)).status,403);
+  assert.equal((await call(`/api/platform/owner-payments/invoices/${r.invoice.id}/orders`,residentTokens.accessToken,{requestKey:suffix()+suffix(),merchantId:"acc_Attacker"})).status,400);
+  assert.equal((await call("/api/owner-payments/webhook",undefined,{event:"payment.captured"})).status,400);
+  const callback=await call("/api/owner-payments/callback?state=bad&code=PRIVATE-SYNTHETIC-CODE");assert.equal(callback.status,400);assert.ok(!(await callback.text()).includes("PRIVATE-SYNTHETIC-CODE"));
+ }finally{await new Promise<void>((resolve,reject)=>server.close(error=>error?reject(error):resolve()));}
+});
+test("merchant settlement responses without currency stay provider-processed, never bank-credit proof",async()=>{
+ const o=await owner(),s={id:"setl_"+suffix(),entity:"settlement",status:"processed",amount:800000,created_at:Math.floor(Date.now()/1000),utr:"SYNTHETIC-UTR"};o.provider.settles.set(s.id,s);
+ await reconcileSettlement(o.auth!.id,s.id,o.provider);const stored=await prisma.pgOwnerSettlement.findUniqueOrThrow({where:{authorizationId_providerSettlementId:{authorizationId:o.auth!.id,providerSettlementId:s.id}}});assert.equal(stored.status,"PROCESSED");assert.equal(stored.settledAt,null);assert.equal(stored.currency,"INR");
+});
+test("expired OAuth links and rejected consent never persist merchant credentials",async()=>{
+ const expired=await owner(new Provider(),false);await prisma.pgOwnerOAuthState.updateMany({where:{accountId:expired.account.id},data:{expiresAt:new Date(Date.now()-1000)}});await assert.rejects(()=>finishConnection(expired.state,"synthetic-code",false,expired.provider),{code:"OAUTH_STATE_EXPIRED"});
+ const denied=await owner(new Provider(),false);await finishConnection(denied.state,undefined,true,denied.provider);assert.equal(await prisma.pgOwnerAuthorization.count({where:{merchant:{organisationId:denied.setup.organisationId}}}),0);
+});
+test("verified settlement destination changes retain only a mask and audited fingerprint",async()=>{
+ const o=await owner(),original=o.provider.product.bind(o.provider);o.provider.product=async(...args:any[])=>{const value=await original(args[0],args[1],args[2]);value.active_configuration.settlements.account_number="987654321098";return value;};
+ await refreshConnection(o.auth!.id,o.provider);const auth=await prisma.pgOwnerAuthorization.findUniqueOrThrow({where:{id:o.auth!.id}});assert.equal(auth.bankLast4,"1098");assert.ok(auth.bankFingerprint);assert.ok(!JSON.stringify(auth).includes("987654321098"));
+ assert.equal(await prisma.pgAudit.count({where:{entityId:auth.id,action:"OWNER_SETTLEMENT_DESTINATION_CHANGED"}}),1);
+});
+test("missed refund webhooks are recovered by the durable historical reconciliation pass",async()=>{
+ const o=await owner(),r=await resident(o),ref=await createRentOrder(r.account.id,r.membership.id,r.invoice.id,suffix()+suffix(),o.provider),order=await prisma.pgOwnerRentOrder.findUniqueOrThrow({where:{id:ref.orderId}}),p=o.provider.capture(order);await reconcileRentOrder(order.id,o.provider);
+ p.amount_refunded=1234;o.provider.refundList.set(p.id,[{id:"rfnd_"+suffix(),payment_id:p.id,amount:1234,currency:"INR",status:"processed"}]);
+ // Select only this synthetic owner's history in the shared isolated test DB.
+ await prisma.pgOwnerAuthorization.updateMany({where:{id:{not:o.auth!.id}},data:{lastReconciledAt:new Date()}});await reconcileOwnerHistory(o.provider);
+ assert.equal((await prisma.rentInvoice.findUniqueOrThrow({where:{id:r.invoice.id}})).paidPaise,r.invoice.totalPaise-1234);assert.ok((await prisma.pgOwnerAuthorization.findUniqueOrThrow({where:{id:o.auth!.id}})).lastReconciledAt);
+});
+test("explicit provider order rejection releases only an uncreated reservation",async()=>{
+ const o=await owner(),r=await resident(o),original=o.provider.createOrder.bind(o.provider);
+ o.provider.createOrder=async()=>{throw new AppError(502,"OWNER_PROVIDER_REJECTED","Synthetic invalid order");};
+ await assert.rejects(()=>createRentOrder(r.account.id,r.membership.id,r.invoice.id,suffix()+suffix(),o.provider),{code:"OWNER_PROVIDER_REJECTED"});
+ const rejected=await prisma.pgOwnerRentOrder.findFirstOrThrow({where:{invoiceId:r.invoice.id}});assert.equal(rejected.status,"FAILED");assert.equal(rejected.open,false);assert.equal(rejected.providerOrderId,null);
+ o.provider.createOrder=original;const retry=await createRentOrder(r.account.id,r.membership.id,r.invoice.id,suffix()+suffix(),o.provider);assert.notEqual(retry.orderId,rejected.id);assert.equal(o.provider.creates,1);
 });

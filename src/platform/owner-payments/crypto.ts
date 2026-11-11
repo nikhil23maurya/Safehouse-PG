@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
-import {assert} from "../../errors.js";
+import {assert,AppError} from "../../errors.js";
 import {ownerPaymentConfig} from "./config.js";
 
-export const digest=(value:string)=>crypto.createHash("sha256").update(value).digest("hex");
+export const digest=(value:string|Buffer)=>crypto.createHash("sha256").update(value).digest("hex");
 function key(){const k=ownerPaymentConfig().RAZORPAY_OWNER_TOKEN_KEY;assert(k,503,"OWNER_TOKEN_KEY_MISSING","Payment account storage is unavailable.");return Buffer.from(k,"hex");}
 export function seal(value:string,context:string) {
  const iv=crypto.randomBytes(12),cipher=crypto.createCipheriv("aes-256-gcm",key(),iv);cipher.setAAD(Buffer.from(`pgone-owner-v1:${context}`));
@@ -12,7 +12,7 @@ export function seal(value:string,context:string) {
 export function unseal(value:string,context:string) {
  const [v,iv,tag,body,extra]=value.split(".");assert(v==="v1"&&iv&&tag&&body&&!extra,503,"OWNER_TOKEN_UNAVAILABLE","Reconnect your payment account.");
  try{const cipher=crypto.createDecipheriv("aes-256-gcm",key(),Buffer.from(iv,"base64url"));cipher.setAAD(Buffer.from(`pgone-owner-v1:${context}`));cipher.setAuthTag(Buffer.from(tag,"base64url"));return Buffer.concat([cipher.update(Buffer.from(body,"base64url")),cipher.final()]).toString("utf8");}
- catch{throw new Error("Owner payment credential authentication failed");}
+ catch{throw new AppError(503,"OWNER_RECONNECT_REQUIRED","Payment account credentials could not be authenticated. Reconnect the account.");}
 }
 export function signed(body:Buffer,signature:string|undefined,secret:string) {
  if(!/^[a-fA-F0-9]{64}$/.test(signature||""))return false;

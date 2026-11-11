@@ -21,7 +21,7 @@ async function call(path:string,token:string|undefined,body?:unknown,auth=false)
  let response:Response;
  try{response=await fetch((auth?"https://auth.razorpay.com":"https://api.razorpay.com")+path,{method:body===undefined?"GET":"POST",headers:{...(token?{authorization:`Bearer ${token}`}:{}) ,"content-type":"application/json"},...(body===undefined?{}:{body:JSON.stringify(body)}),signal:AbortSignal.timeout(10000),redirect:"error"});}
  catch{throw new AppError(503,"OWNER_PROVIDER_UNCERTAIN","Razorpay confirmation is unavailable. Check the existing payment before trying again.");}
- if(!response.ok)throw new AppError(response.status===401||response.status===403?503:502,response.status===401||response.status===403?"OWNER_PROVIDER_ACCESS_REQUIRED":"OWNER_PROVIDER_REQUEST_FAILED","Razorpay could not complete this request. Reconnect or check your merchant account. No payment has been confirmed.");
+ if(!response.ok)throw new AppError(response.status===401||response.status===403?503:502,response.status===401||response.status===403?"OWNER_PROVIDER_ACCESS_REQUIRED":response.status>=400&&response.status<500?"OWNER_PROVIDER_REJECTED":"OWNER_PROVIDER_REQUEST_FAILED","Razorpay could not complete this request. Reconnect or check your merchant account. No payment has been confirmed.");
  try{return await response.json() as any;}catch{throw new AppError(502,"OWNER_PROVIDER_INVALID_RESPONSE","Razorpay returned an unreadable response. Check the current status before retrying.");}
 }
 async function collection(path:string,token:string) {

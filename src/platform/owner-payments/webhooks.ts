@@ -9,7 +9,7 @@ import {reconcileRentOrder} from "./rent.js";
 import {reconcileSettlement,reconcileSettlementDay} from "./settlements.js";
 import {razorpayOwnerProvider,type OwnerProvider} from "./provider.js";
 
-const events=new Set(["account.activated","account.under_review","account.needs_clarification","account.suspended","account.rejected","account.app.authorization_revoked","product.payment_gateway.activated","payment.authorized","payment.captured","payment.failed","order.paid","refund.created","refund.processed","refund.failed","settlement.processed","settlement.failed"]);
+const events=new Set(["account.activated","account.under_review","account.needs_clarification","account.suspended","account.rejected","account.app.authorization_revoked","product.payment_gateway.activated","payment.authorized","payment.captured","payment.failed","order.paid","refund.created","refund.processed","refund.failed","settlement.processed"]);
 export async function receiveOwnerWebhook(body:Buffer,signature:string|undefined,eventId:string|undefined) {
  const cfg=ownerPaymentConfig();assert(cfg.RAZORPAY_OWNER_WEBHOOK_SECRET,503,"OWNER_WEBHOOK_NOT_CONFIGURED","Owner payment webhooks are not configured.");
  assert(signed(body,signature,cfg.RAZORPAY_OWNER_WEBHOOK_SECRET),400,"OWNER_WEBHOOK_SIGNATURE_INVALID","Invalid webhook signature.");
@@ -24,7 +24,7 @@ export async function receiveOwnerWebhook(body:Buffer,signature:string|undefined
  // numbers and KYC documents; none are retained in the inbox or audit log.
  const bankState=event.payload?.account?.entity?.merchant_detail?.bank_details_verification_status;
  const payload={createdAt:event.created_at,paymentId:p?.id||r?.payment_id||null,providerOrderId:p?.order_id||o?.id||null,settlementId:s?.id||null,productId:product?.id||null,productMerchant:product?.merchant_id||null,bankState:["verified","initiated","pending","failed"].includes(bankState)?bankState:null};
- const hash=digest(body.toString("utf8"));const key=eventId&&/^[A-Za-z0-9_-]{1,160}$/.test(eventId)?eventId:hash;
+ const hash=digest(body);const key=eventId&&/^[A-Za-z0-9_-]{1,160}$/.test(eventId)?eventId:hash;
  await atomic(async tx=>{const prior=await tx.pgOwnerWebhookInbox.findUnique({where:{mode_eventKey:{mode:cfg.RAZORPAY_OWNER_MODE,eventKey:key}}});
   if(prior){assert(prior.payloadHash===hash,409,"OWNER_WEBHOOK_EVENT_CONFLICT","Webhook identifier was reused with different content.");return;}
   await tx.pgOwnerWebhookInbox.create({data:{mode:cfg.RAZORPAY_OWNER_MODE,eventKey:key,payloadHash:hash,eventType:event.event,providerAccountId:event.account_id,payload}});
@@ -84,6 +84,8 @@ export async function reconcileOwnerHistory(provider:OwnerProvider=razorpayOwner
 }
 export function startOwnerPaymentWorker() {
  if(worker||process.env.NODE_ENV==="test")return;
+ const cfg=ownerPaymentConfig();
+ console.log("PGONE_OWNER_PAYMENTS_PREFLIGHT",JSON.stringify({enabled:cfg.enabled,configurationAvailable:cfg.configured,configurationValid:cfg.configurationValid,mode:cfg.RAZORPAY_OWNER_MODE,liveProviderVerified:false}));
  let running=false;
  worker=setInterval(async()=>{if(running)return;running=true;try{
   await drainOwnerEvents();
