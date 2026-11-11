@@ -108,13 +108,14 @@ final class PlanUpiCheckout {
             String id=input.optString("order_id"),key=input.optString("key");
             boolean validProfile=ownerRent
                 ? key.matches("rzp_(live|test)_oauth_[A-Za-z0-9]+") && input.optInt("amount")>=100 && input.optString("invoiceId").matches("[A-Za-z0-9_-]{1,100}") && input.optString("rentOrderId").matches("[A-Za-z0-9_-]{1,100}") && input.optString("membershipId").matches("[A-Za-z0-9_-]{1,100}")
-                : "SIDELOAD".equals(BuildConfig.BILLING_DISTRIBUTION) && key.matches("rzp_(live|test)_[A-Za-z0-9]+") && input.optInt("amount")==24900;
+                : "SIDELOAD".equals(BuildConfig.BILLING_DISTRIBUTION) && key.matches("rzp_(live|test)_[A-Za-z0-9]+") && (input.optInt("amount")==100 || input.optInt("amount")==24900);
             if(!validProfile || !id.matches("order_[A-Za-z0-9]+") || !"INR".equals(input.optString("currency")))
                 throw new IllegalArgumentException("Invalid checkout session");
             if(paymentContact(input.optString("contact", ""))==null){
                 events.result(id,"INVALID_PAYMENT_CONTACT","Enter a valid mobile number for payment.");return;
             }
             JSONObject payload=ownerRent?rentPaymentPayload(input):paymentPayload(input);
+            String amountLabel=java.math.BigDecimal.valueOf(input.getLong("amount"),2).stripTrailingZeros().toPlainString();
             order=id;submitted=false;
             prefs.edit().putString("organisation",input.optString("organisationId","")).apply();
             if(ownerRent){android.content.SharedPreferences.Editor edit=prefs.edit();for(String field:new String[]{"invoiceId","rentOrderId","membershipId"})edit.putString(field,input.optString(field,""));edit.apply();}
@@ -139,7 +140,7 @@ final class PlanUpiCheckout {
                     }
                     emit("CHOOSING_APP","Choose your UPI app.");
                     String[] labels=new String[apps.size()];for(int i=0;i<apps.size();i++)labels[i]=apps.get(i).label;
-                    chooser=new AlertDialog.Builder(activity).setTitle(ownerRent?"PGOne · Pay rent":"PGOne · Pay ₹249").setItems(labels,(dialog,which)->{
+                    chooser=new AlertDialog.Builder(activity).setTitle(ownerRent?"PGOne · Pay rent":"PGOne · Pay ₹"+amountLabel).setItems(labels,(dialog,which)->{
                         if(!id.equals(order))return;
                         try {
                             chooser=null;payload.put("upi_app_package_name",apps.get(which).packageName);submitted=true;

@@ -122,14 +122,14 @@ function requireAndroidSideloadCheckout(req: Request) {
 platformRouter.post("/organisations/:id/plan/android/orders", limited, async (req, res) => {
   requireAndroidSideloadCheckout(req);
   const { account } = await session(req);
-  const input = z.object({ accepted: z.literal(true), amountPaise: z.literal(24900),
+  const input = z.object({ accepted: z.literal(true), amountPaise: z.literal(PLAN.amountPaise),
     recurring: z.literal(false), requestKey: z.string().min(16).max(100) }).parse(req.body);
   res.json(await createPlanOrder(account.id, id.parse(req.params.id), input.requestKey));
 });
 platformRouter.post("/organisations/:id/plan/orders", limited, async (req, res) => {
   requireBillingOrigin(req);
   const { account } = await session(req);
-  const input = z.object({ accepted: z.literal(true), amountPaise: z.literal(24900),
+  const input = z.object({ accepted: z.literal(true), amountPaise: z.literal(PLAN.amountPaise),
     recurring: z.literal(false), requestKey: z.string().min(16).max(100) }).parse(req.body);
   res.json(await createPlanOrder(account.id, id.parse(req.params.id), input.requestKey));
 });
@@ -505,7 +505,7 @@ platformRouter.use("/organisations/:id/merchant", async (req,res,next) => {
       const { account } = await session(req);
       const org = await ownerOrganisation(account.id, id.parse(req.params.id));
       assert(await entitlement(org.id), 402, "SUBSCRIPTION_REQUIRED",
-        "Activate your ₹249 PGOne plan before submitting merchant or bank verification.");
+        "Activate your PGOne plan before submitting merchant or bank verification.");
     }
     next();
   } catch (error) { next(error); }

@@ -1,6 +1,6 @@
 # PGOne owner-specific Razorpay payments
 
-PGOne earns its separate INR249 calendar-month software fee. Resident rent belongs to the owner's independently approved merchant account. The owner-rent adapter never uses the software-fee merchant's key/secret, never sends a Route transfer/application fee and never falls back to the PGOne collection account. This implementation requires Technology Partner / Embedded Payments approval; the founder's current Reseller account does not establish access. Live activation remains pending.
+PGOne earns its separate calendar-month software fee (temporarily INR1, previously INR249). Resident rent belongs to the owner's independently approved merchant account. The owner-rent adapter never uses the software-fee merchant's key/secret, never sends a Route transfer/application fee and never falls back to the PGOne collection account. This implementation requires Technology Partner / Embedded Payments approval; the founder's current Reseller account does not establish access. Live activation remains pending.
 
 ## Provider-approved onboarding
 
@@ -44,7 +44,7 @@ RAZORPAY_OWNER_CLIENT_SECRET=<production OAuth application client secret>
 RAZORPAY_OWNER_TOKEN_KEY=<persistent independent 64-hex-character AES key>
 RAZORPAY_OWNER_WEBHOOK_SECRET=<independent application webhook secret, at least 24 characters>
 RAZORPAY_OWNER_REDIRECT_URI=https://safehouse-api.onrender.com/api/owner-payments/callback
-PGONE_SUBSCRIPTION_MERCHANT_ACCOUNT_ID=<actual acc_ ID of the existing INR249 merchant>
+PGONE_SUBSCRIPTION_MERCHANT_ACCOUNT_ID=<actual acc_ ID of the existing software-fee merchant>
 ```
 
 The requested OAuth scope is read_write, which is needed for owner orders and reads. No RazorpayX, payout, Route or fee-splitting scope is requested. Confirmation of API/product access is still required; a configured flag is not evidence of approval. Invalid optional configuration disables only this feature and leaves existing login/fee/manual flows available. Test/live connections are separate. Test-mode captures cannot post production rent; isolated tests use NODE_ENV=test and a synthetic database.
@@ -55,10 +55,10 @@ Read-only diagnostic: node --import tsx scripts/pgone-owner-payments-preflight.m
 
 ## Exact founder actions still required
 
-1. Continue the existing support ticket: request Technology Partner conversion, Embedded/co-branded onboarding, approval of the PG/accommodation-rent use case, and independently settling owner merchants. Explicitly state fixed INR249 SaaS revenue, no rent commission and no central rent pool.
+1. Continue the existing support ticket: request Technology Partner conversion, Embedded/co-branded onboarding, approval of the PG/accommodation-rent use case, and independently settling owner merchants. Explicitly state fixed monthly SaaS revenue (currently INR1), no rent commission and no central rent pool.
 2. Obtain application registration and production OAuth credentials. Whitelist the exact callback URL above. Confirm read_write payment access, account/product status reads and product activation notifications for the connected owners. Request Custom Onboarding API access only if later choosing provider-approved KYC pre-fill; hosted onboarding is used now.
 3. Ask Razorpay to confirm Android Custom SDK UPI Intent acceptance using owner OAuth public tokens for this approved arrangement, automatic capture, direct owner settlement, merchant charges, refund access and settlement-reconciliation APIs. Local SDK tests do not prove merchant acceptance.
-4. Configure the independent application webhook and its secret in the partner application, preserving the existing INR249 and legacy rent webhooks. Confirm the account/product activation, payment, refund, revocation and settlement events exposed on this application.
+4. Configure the independent application webhook and its secret in the partner application, preserving the existing software-fee and legacy rent webhooks. Confirm the account/product activation, payment, refund, revocation and settlement events exposed on this application.
 5. Supply the new settings through the backend secret manager; keep the feature flag false. Verify two independently approved owner accounts, correct bank destinations and authoritative status payloads. Complete provider test-mode acceptance in an isolated environment with authorised credentials.
 6. Only after those approvals, explicitly authorise a controlled live-money test. Verify resident A pays owner A, resident B pays owner B, exact captures and duplicate-event safety, actual bank recipients/UTRs, refunds and return/cold-restart behaviour. Then enable the feature. No live-money authorisation has been given or exercised during this engineering task.
 
@@ -68,7 +68,7 @@ The direct-owner UPI fallback remains available where it was already supported a
 
 New implementation is isolated under src/platform/owner-payments. Additive migration20261111103000_owner_merchant_rent creates nine private RLS tables with restricted grants, foreign keys, immutable invoice-order identity and per-invoice/channel guards. No production rows are wiped or rewritten. Synthetic financial history, public-role isolation and separate staging restore remain part of CI.
 
-Owner/resident UI and native state use existing PGOne branding, three-dot motion, SDK engine and genuine payer contact validation. The existing INR249 profile keeps its exact amount and merchant rules; owner rent has a separate OAuth profile and preferences. Browser/provider/native fixtures are separate test assets and must never be shipped in the application APK or represented as live payment proof.
+Owner/resident UI and native state use existing PGOne branding, three-dot motion, SDK engine and genuine payer contact validation. The software-fee profile uses the current INR1 price for new orders and preserves historical INR249 orders; its merchant rules remain unchanged; owner rent has a separate OAuth profile and preferences. Browser/provider/native fixtures are separate test assets and must never be shipped in the application APK or represented as live payment proof.
 
 Fresh package: com.safehouse.pg.testing, version5.4.0-testing, versionCode57. Production signing compatibility remains blocked by the unavailable original private key; no replacement production key is generated. A testing APK cannot upgrade com.safehouse.pg, and CI testing certificates may differ between releases. Final delivery evidence must include exact commit, APK signature/hash, actual installation/launch/screenshots and the explicit external gates.
 

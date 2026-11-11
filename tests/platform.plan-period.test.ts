@@ -46,4 +46,11 @@ test("provider capture must match the immutable order, workspace, price, currenc
   for (const change of [{status:"authorized",captured:false},{amount:24901},{order_id:"order_B"},{currency:"USD"},{amount_refunded:25000},{amount_refunded:-1},{created_at:0}])
     assert.equal(exactCapturedPayment({...payment,...change},local),false);
   assert.equal(exactCapturedPayment({...payment,status:"refunded",amount_refunded:24900},local),true);
+  const reduced={...local,amountPaise:100},reducedPayment={...payment,amount:100};
+  assert.equal(matchingOrder({...remote,amount:100},reduced),true);
+  assert.equal(exactCapturedPayment(reducedPayment,reduced),true);
+  assert.equal(exactCapturedPayment(payment,reduced),false,"old price cannot settle a new reduced-price order");
+  assert.equal(exactCapturedPayment(reducedPayment,local),false,"new price cannot settle a historical order");
+  assert.equal(exactCapturedPayment({...reducedPayment,amount_refunded:101},reduced),false);
+  assert.equal(exactCapturedPayment({...reducedPayment,status:"refunded",amount_refunded:100},reduced),true);
 });

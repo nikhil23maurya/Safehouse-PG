@@ -4,6 +4,7 @@ import {prisma} from "../db.js";
 import {assert} from "../errors.js";
 import {accountSession,ownerOrganisation} from "./service.js";
 import {entitlement} from "./billing.js";
+import {PLAN_PAID_AMOUNTS} from "./config.js";
 export const planStatusRouter=express.Router();
 const current=(req:express.Request)=>accountSession((req.header("authorization")||"").replace(/^Bearer /,""));
 const id=z.string().min(1).max(100);
@@ -18,7 +19,7 @@ planStatusRouter.get("/organisations/:id/plan/orders/:order/state",async(req,res
   const order=await prisma.pgPlanOrder.findFirst({where:{organisationId,providerOrderId},include:{receipt:true}});
   assert(order,404,"ORDER_NOT_FOUND","Payment request not found.");
   const receipt=order.receipt;
-  const captured=receipt?.status==="CAPTURED"&&receipt.amountPaise===24900&&receipt.refundedPaise===0;
+  const captured=receipt?.status==="CAPTURED"&&receipt.amountPaise===order.amountPaise&&PLAN_PAID_AMOUNTS.includes(receipt.amountPaise)&&receipt.refundedPaise===0;
   res.json({orderId:providerOrderId,status:order.status,captured,entitled:await entitlement(organisationId),
     receipt:captured?{id:receipt.id,number:receipt.receiptNumber,amountPaise:receipt.amountPaise,paidAt:receipt.paidAt,periodEnd:receipt.periodEnd}:null});
 });

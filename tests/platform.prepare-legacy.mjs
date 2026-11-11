@@ -18,5 +18,9 @@ try {
     INSERT INTO "Student" (id,"propertyId","userId",mobile,"joiningDate","monthlyRentPaise","updatedAt") VALUES ('migration-student','migration-property','migration-resident','9123456789',now(),850000,now());
     INSERT INTO "RentInvoice" (id,"propertyId","studentId",year,month,"dueDate","rentPaise","totalPaise","paidPaise","updatedAt") VALUES ('migration-invoice','migration-property','migration-student',2026,11,now(),850000,850000,100000,now());
     INSERT INTO "Payment" (id,"propertyId","studentId","invoiceId","amountPaise",source,method,"receiptNumber","paidAt") VALUES ('migration-payment','migration-property','migration-student','migration-invoice',100000,'MANUAL','BANK_TRANSFER','SYNTHETIC-MIGRATION-RECEIPT',now());`);
-  console.log("Synthetic legacy financial baseline prepared; no live credentials or data used.");
+  await client.query(`INSERT INTO "PgAccount" (id,"legacyUserId","updatedAt") VALUES ('migration-account','migration-owner',now());
+    INSERT INTO "PgOrganisation" (id,"ownerAccountId","legacyOwnerId",name,"updatedAt") VALUES ('migration-org','migration-account','migration-owner','Synthetic historical fee',now());
+    INSERT INTO "PgPlanOrder" (id,"organisationId","requestKey","receiptReference","providerOrderId","providerKeyId","amountPaise","taxPaise",status,open,"updatedAt") VALUES ('migration-plan','migration-org','synthetic-migration-plan-key','synthetic-migration-plan','order_SYNTHETICOLD249','synthetic-key',24900,0,'CAPTURED',false,now());
+    INSERT INTO "PgPlanReceipt" (id,"organisationId","orderId","providerPaymentId","receiptNumber","amountPaise","taxPaise","paidAt","periodStart","periodEnd","anchorDay","updatedAt") VALUES ('migration-plan-receipt','migration-org','migration-plan','pay_SYNTHETICOLD249','SYNTHETIC-OLD-249',24900,0,'2026-11-09T10:00:00Z','2026-11-09T10:00:00Z','2026-12-09T10:00:00Z',9,now());`);
+  console.log("Synthetic legacy rent and historical INR249 fee baseline prepared; no live credentials or data used.");
 }finally{await client.end();}

@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { setup, go, noOverflow } from "./helpers.js";
 import fs from "node:fs/promises";
 
-export async function platform(page, { billing = false } = {}) {
+export async function platform(page, { billing = false, pendingAmount = null, orderAmount = 100 } = {}) {
   await page.addInitScript((enableBilling) => {
     window.__platformVault = JSON.parse(sessionStorage.getItem("synthetic-vault")||"null");
     window.__planState=JSON.parse(sessionStorage.getItem("synthetic-plan")||"null");
@@ -73,6 +73,7 @@ export async function platform(page, { billing = false } = {}) {
     if (path.endsWith("/config"))
       data = {
         enabled: true,
+        plan:{amountPaise:100,currency:"INR"},
         androidBilling: billing ? "CUSTOM_UPI_INTENT" : "NOT_CONFIGURED",
         authentication:"EMAIL_PASSWORD",phone:null,recoveryAvailable:true,
         legal: {
@@ -120,6 +121,8 @@ export async function platform(page, { billing = false } = {}) {
         entitled: paid,
         legacyAccess: false,
         configured: billing,
+        plan:{amountPaise:100,currency:"INR"},
+        pendingOrder:pendingAmount?{providerOrderId:"order_SYNTHETIC001",amountPaise:pendingAmount,status:"PENDING"}:null,
         mode: "MANUAL_MONTHLY",
         recurring: false,
         tax: null,
@@ -127,10 +130,10 @@ export async function platform(page, { billing = false } = {}) {
       };
     else if (path.endsWith("/plan/android/orders")) {
        expect(billing).toBe(true);
-       expect(body).toMatchObject({ accepted:true, amountPaise:24900, recurring:false });
+       expect(body).toMatchObject({ accepted:true, amountPaise:100, recurring:false });
        expect(body.requestKey.length).toBeGreaterThanOrEqual(16);
        data = { id:"pg-plan-order-one", orderId:"order_SYNTHETIC001", keyId:"rzp_test_SYNTHETIC001",
-         amountPaise:24900, currency:"INR", recurring:false, payable:true };
+         amountPaise:orderAmount, currency:"INR", recurring:false, payable:true };
      } else if (path.endsWith("/subscription/recheck")) {
        data = { entitled: paid };
      } else if (path.endsWith("/merchant"))
@@ -141,7 +144,7 @@ export async function platform(page, { billing = false } = {}) {
           "Online payment setup is awaiting payment-provider activation.",
         onboardingAvailable: false,
       };
-    else if(path.endsWith("/state")&&path.includes("/plan/orders/"))data={orderId:"order_SYNTHETIC001",captured:paid&&exactCaptured,status:paid&&exactCaptured?"CAPTURED":"VERIFYING",receipt:paid&&exactCaptured?{id:"synthetic-receipt",number:"SYNTHETIC-249",amountPaise:24900,paidAt:"2026-11-10T10:00:00Z",periodEnd:"2026-12-10T10:00:00Z"}:null};
+    else if(path.endsWith("/state")&&path.includes("/plan/orders/"))data={orderId:"order_SYNTHETIC001",captured:paid&&exactCaptured,status:paid&&exactCaptured?"CAPTURED":"VERIFYING",receipt:paid&&exactCaptured?{id:"synthetic-receipt",number:"SYNTHETIC-249",amountPaise:100,paidAt:"2026-11-10T10:00:00Z",periodEnd:"2026-12-10T10:00:00Z"}:null};
     else if(path.endsWith("/join-code"))data={code:"ABCD-EFGH-JKLM",enabled:true,revision:1};
     else if (path.endsWith("/members")) data = { members: [] };
     else if (path.endsWith("/invitations")) data = { invitations: [] };

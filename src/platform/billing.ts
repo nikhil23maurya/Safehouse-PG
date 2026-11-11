@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { prisma } from "../db.js";
 import { AppError, assert } from "../errors.js";
-import { PLAN, platformConfig, subscriptionCredentials, taxBreakdown } from "./config.js";
+import { PLAN, LEGACY_RECURRING_AMOUNT_PAISE, PLAN_PAID_AMOUNTS, platformConfig, subscriptionCredentials, taxBreakdown } from "./config.js";
 import { atomic, audit, ownerOrganisation } from "./service.js";
 import { hash, randomCode } from "./tokens.js";
 
@@ -29,7 +29,7 @@ export function paidPeriod(
 ) {
   return (
     payment.status === "CAPTURED" &&
-    payment.amountPaise === PLAN.amountPaise &&
+    payment.amountPaise === LEGACY_RECURRING_AMOUNT_PAISE &&
     payment.refundedPaise === 0 &&
     payment.periodStart <= now &&
     payment.periodEnd > now
@@ -47,7 +47,7 @@ export async function entitlement(organisationId: string) {
               periodStart: { lte: new Date() },
               periodEnd: { gt: new Date() },
               status: "CAPTURED",
-              amountPaise: PLAN.amountPaise,
+              amountPaise: LEGACY_RECURRING_AMOUNT_PAISE,
               refundedPaise: 0,
             },
           },
@@ -58,7 +58,7 @@ export async function entitlement(organisationId: string) {
   return (
     org.legacyAccess ||
     Boolean(await prisma.pgPlanReceipt.findFirst({ where: {
-      organisationId, status: "CAPTURED", amountPaise: 24900, refundedPaise: 0,
+      organisationId, status: "CAPTURED", amountPaise: {in:[...PLAN_PAID_AMOUNTS]}, refundedPaise: 0,
       periodStart: { lte: new Date() }, periodEnd: { gt: new Date() },
     }, select: { id: true } })) ||
     Boolean(
@@ -78,13 +78,13 @@ export function verifiedInvoice(
     invoice.subscription_id === subscriptionId &&
     invoice.status === "paid" &&
     invoice.currency === "INR" &&
-    invoice.amount === PLAN.amountPaise &&
-    invoice.amount_paid === PLAN.amountPaise &&
+    invoice.amount === LEGACY_RECURRING_AMOUNT_PAISE &&
+    invoice.amount_paid === LEGACY_RECURRING_AMOUNT_PAISE &&
     invoice.amount_due === 0 &&
     invoice.payment_id === payment?.id &&
     payment?.status === "captured" &&
     payment.captured === true &&
-    payment.amount === PLAN.amountPaise &&
+    payment.amount === LEGACY_RECURRING_AMOUNT_PAISE &&
     payment.currency === "INR" &&
     Number.isSafeInteger(payment.amount_refunded ?? 0) &&
     (payment.amount_refunded ?? 0) >= 0 &&
@@ -156,7 +156,7 @@ export class RazorpaySubscriptions {
       plan.id === platformConfig.PGONE_SUBSCRIPTION_PLAN_ID &&
         plan.period === "monthly" &&
         plan.interval === 1 &&
-        plan.item?.amount === PLAN.amountPaise &&
+        plan.item?.amount === LEGACY_RECURRING_AMOUNT_PAISE &&
         plan.item.currency === "INR",
       503,
       "PLAN_MISMATCH",
@@ -398,7 +398,7 @@ export async function createSubscription(
     return {
       keyId: subscriptionCredentials()!.keyId,
       subscriptionId: sub.providerSubscriptionId,
-      amountPaise: PLAN.amountPaise,
+      amountPaise: LEGACY_RECURRING_AMOUNT_PAISE,
     };
   }
   assert(
@@ -440,7 +440,7 @@ export async function createSubscription(
     return {
       keyId: subscriptionCredentials()!.keyId,
       subscriptionId: remote.id,
-      amountPaise: PLAN.amountPaise,
+      amountPaise: LEGACY_RECURRING_AMOUNT_PAISE,
     };
   } catch (error) {
     await prisma.pgSubscription.updateMany({
@@ -510,7 +510,7 @@ export async function reconcileSubscription(
         "PAYMENT_ALREADY_ASSIGNED",
         "This payment is already assigned to another subscription.",
       );
-      const tax = taxBreakdown(platformConfig.PGONE_TAX_BPS);
+      const tax = taxBreakdown(platformConfig.PGONE_TAX_BPS, LEGACY_RECURRING_AMOUNT_PAISE);
       assert(
         tax &&
           Number.isSafeInteger(invoice.tax_amount) &&
@@ -520,7 +520,7 @@ export async function reconcileSubscription(
         "The provider invoice tax must match the configured inclusive price.",
       );
       const data = {
-        amountPaise: PLAN.amountPaise,
+        amountPaise: LEGACY_RECURRING_AMOUNT_PAISE,
         taxPaise: invoice.tax_amount,
         refundedPaise: Math.max(
           old?.refundedPaise || 0,

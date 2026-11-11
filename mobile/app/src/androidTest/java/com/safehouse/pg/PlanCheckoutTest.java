@@ -90,6 +90,25 @@ public class PlanCheckoutTest {
             assertEquals("INVALID_PAYMENT_CONTACT",status[0]);assertEquals(children,host.getChildCount());activity.finish();
         });
     }
+    @Test public void oneRupeePlanShowsAndSubmitsExactReducedPrice() throws Exception {
+        MainActivity activity=start();final JSONObject[] submitted={null};
+        instrumentation.runOnMainSync(()->{
+            try{
+                FrameLayout host=(FrameLayout)((android.view.ViewGroup)activity.findViewById(android.R.id.content)).getChildAt(0);
+                PlanUpiCheckout checkout=new PlanUpiCheckout(activity,host,(id,status,message)->{},(owner,key,view)->new PlanUpiCheckout.Gateway(){
+                    public void discover(PlanUpiCheckout.Apps result){result.ready(java.util.Arrays.asList(new PlanUpiCheckout.App("Synthetic UPI","fixture.upi.app")));}
+                    public void submit(JSONObject value,PaymentResultListener listener){submitted[0]=value;listener.onPaymentError(7,"Synthetic cancellation");}
+                    public void activityResult(int request,int result,Intent data){}public void back(){}
+                });
+                checkout.open(input().put("amount",100).toString());
+                java.lang.reflect.Field field=PlanUpiCheckout.class.getDeclaredField("chooser");field.setAccessible(true);AlertDialog chooser=(AlertDialog)field.get(checkout);
+                ArrayList<View> titles=new ArrayList<>();chooser.getWindow().getDecorView().findViewsWithText(titles,"PGOne · Pay ₹1",View.FIND_VIEWS_WITH_TEXT);assertFalse(titles.isEmpty());
+                chooser.getListView().performItemClick(chooser.getListView().getChildAt(0),0,0);
+                assertEquals(100,submitted[0].getInt("amount"));assertEquals("order_NATIVEFIXTURE",submitted[0].getString("order_id"));assertFalse(submitted[0].has("subscription_id"));
+                activity.finish();
+            }catch(Exception e){throw new RuntimeException(e);}
+        });
+    }
     @Test public void providerValidationCauseIsReadableAndPayerDataIsRedacted() throws Exception {
         String raw=new JSONObject().put("error",new JSONObject().put("code","BAD_REQUEST_ERROR")
             .put("description","Could not validate payment create request due to: contact: cannot be blank. payer@example.invalid 9999999999")).toString();
@@ -101,14 +120,16 @@ public class PlanCheckoutTest {
         assertNull(PlanUpiCheckout.paymentContact("123"));assertNull(PlanUpiCheckout.paymentContact(""));
     }
     @Test public void correctedPayloadPassesTheOfficialSdkFieldValidator() throws Exception {
-        MainActivity activity=start();CountDownLatch done=new CountDownLatch(1);final String[] error={null};
+        MainActivity activity=start();CountDownLatch done=new CountDownLatch(2);final String[] error={null};
         instrumentation.runOnMainSync(()->{
             try {
-                JSONObject payload=PlanUpiCheckout.paymentPayload(input()).put("upi_app_package_name","in.org.npci.upiapp");
-                new com.razorpay.Razorpay(activity,"rzp_test_NATIVEFIXTURE").validateFields(payload,new com.razorpay.ValidationListener(){
-                    public void onValidationSuccess(){done.countDown();}
-                    public void onValidationError(java.util.Map<String,String> fields){error[0]=String.valueOf(fields);done.countDown();}
-                });
+                for(int amount:new int[]{100,24900}){
+                    JSONObject payload=PlanUpiCheckout.paymentPayload(input().put("amount",amount)).put("upi_app_package_name","in.org.npci.upiapp");
+                    new com.razorpay.Razorpay(activity,"rzp_test_NATIVEFIXTURE").validateFields(payload,new com.razorpay.ValidationListener(){
+                        public void onValidationSuccess(){done.countDown();}
+                        public void onValidationError(java.util.Map<String,String> fields){error[0]=String.valueOf(fields);done.countDown();}
+                    });
+                }
             }catch(Exception e){throw new RuntimeException(e);}
         });
         assertTrue(done.await(10,TimeUnit.SECONDS));assertNull(error[0]);instrumentation.runOnMainSync(activity::finish);

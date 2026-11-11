@@ -37,11 +37,13 @@ test("phone-only actors cannot use password login; existing password hashes stil
   assert.equal(await verifyPassword("Correct-password-123", hash), true);
   assert.equal(await verifyPassword("Incorrect-password", hash), false);
 });
-test("inclusive price stays exactly 24900 paise without guessing unconfigured tax", () => {
+test("inclusive current price stays exactly 100 paise without guessing unconfigured tax", () => {
   assert.equal(taxBreakdown(undefined), null);
   for (const rate of [0, 500, 1200, 1800, 2800]) {
     const tax = taxBreakdown(rate)!;
-    assert.equal(tax.taxPaise + tax.taxablePaise, 24900);
+    assert.equal(tax.taxPaise + tax.taxablePaise, 100);
+    const historical=taxBreakdown(rate,24900)!;
+    assert.equal(historical.taxPaise+historical.taxablePaise,24900);
     assert.equal(tax.inclusive, true);
   }
 });

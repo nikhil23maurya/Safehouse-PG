@@ -24,6 +24,7 @@ test("custom one-time UPI payment uses the server order and exact price without 
   assert.deepEqual(await client.availableApps(), [["phonepe", "PhonePe"]]);
   const input = {
     orderId: "order_Confirmed01",
+    amountPaise:100,
     contact: "9123456789",
     email: "owner@example.test",
     app: "phonepe",
@@ -33,7 +34,7 @@ test("custom one-time UPI payment uses the server order and exact price without 
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], {
     data: {
-      amount: 24900,
+      amount: 100,
       currency: "INR",
       order_id: input.orderId,
       method: "upi",
@@ -45,6 +46,11 @@ test("custom one-time UPI payment uses the server order and exact price without 
   assert.equal(signed, 0);
   listeners["payment.success"]({ razorpay_payment_id: "pay_Test01" });
   assert.equal(signed, 1);
+  assert.throws(()=>client.pay({...input,amountPaise:1}));
+  assert.throws(()=>client.pay({...input,amountPaise:undefined}));
+  assert.equal(client.pay({...input,amountPaise:24900}),true,"explicit historical order amount is preserved");
+  assert.equal(calls[1].data.amount,24900);
+  listeners["payment.success"]({ razorpay_payment_id: "pay_Old01" });
   assert.throws(() =>
     client.pay({ ...input, orderId: "client-forged-reference" }),
   );
@@ -60,10 +66,10 @@ test("Android uses the provider-supported generic chooser without guessing insta
   }
   const client=new CustomUpiPayment({Razorpay:SDK,keyId:"synthetic-key",onSigned:()=>{},onUncertain:()=>{}});
   assert.deepEqual(await client.availableApps(),[["any","Choose a UPI app"]]);
-  assert.throws(()=>client.pay({orderId:"order_Test01",contact:"9123456789",email:"owner@example.test",app:"untrusted-app"}));
-  assert.equal(client.pay({orderId:"order_Test01",contact:"9123456789",email:"owner@example.test",app:"any"}),true);
+  assert.throws(()=>client.pay({orderId:"order_Test01",amountPaise:100,contact:"9123456789",email:"owner@example.test",app:"untrusted-app"}));
+  assert.equal(client.pay({orderId:"order_Test01",amountPaise:100,contact:"9123456789",email:"owner@example.test",app:"any"}),true);
   assert.equal(payment.options.app,"any");assert.equal(payment.data.order_id,"order_Test01");
-  assert.equal(payment.data.amount,24900);assert.equal(payment.data.subscription_id,undefined);
+  assert.equal(payment.data.amount,100);assert.equal(payment.data.subscription_id,undefined);
 });
 
 test("unsupported browsers and failed discovery never invent a payment-app option",async()=>{
@@ -71,7 +77,7 @@ test("unsupported browsers and failed discovery never invent a payment-app optio
     class SDK {on(){} getSupportedUpiIntentApps(){return Promise.resolve(result);} createPayment(){assert.fail("Must not pay without an offered app");}}
     const client=new CustomUpiPayment({Razorpay:SDK,keyId:"synthetic-key",onSigned:()=>{},onUncertain:()=>{}});
     assert.deepEqual(await client.availableApps(),[]);
-    assert.throws(()=>client.pay({orderId:"order_Test01",contact:"9123456789",app:"any"}));
+    assert.throws(()=>client.pay({orderId:"order_Test01",amountPaise:100,contact:"9123456789",app:"any"}));
   }
   class Unavailable {on(){} getSupportedUpiIntentApps(){return Promise.reject(new Error("Unavailable"));}}
   const client=new CustomUpiPayment({Razorpay:Unavailable,keyId:"synthetic-key",onSigned:()=>{},onUncertain:()=>{}});

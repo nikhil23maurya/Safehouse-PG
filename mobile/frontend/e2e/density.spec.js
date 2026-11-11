@@ -33,11 +33,11 @@ for(const [width,height] of [[360,640],[393,786],[412,840]]){
     await page.getByLabel('City',{exact:true}).fill('Bengaluru');
     await page.getByRole('button',{name:'Create my PG'}).click();
     await expect(page).toHaveURL(/#subscription$/);
-    await fits(page,page.getByRole('button',{name:'Pay ₹249 with UPI'}),`plan-${width}`);
+    await fits(page,page.getByRole('button',{name:'Pay ₹1 with UPI'}),`plan-${width}`);
     const details=page.locator('details').filter({has:page.locator('summary', {hasText:'Plan and receipts'})});
     await expect(details).not.toHaveAttribute('open','');
     await details.locator('summary').click();
-    await expect(details).toContainText('₹249 total');
+    await expect(details).toContainText('₹1 total');
     await expect(details).toContainText('Renew manually');
     await noOverflow(page);
   });

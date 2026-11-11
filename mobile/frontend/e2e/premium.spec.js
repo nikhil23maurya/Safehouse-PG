@@ -9,15 +9,31 @@ async function signup(page){
  await page.getByLabel('Confirm password',{exact:true}).fill('Private synthetic password 123!');
  await page.getByRole('button',{name:'Create account',exact:true}).click();
 }
-async function owner(page){
- const f=await platform(page,{billing:true});
+async function owner(page,options={}){
+ const f=await platform(page,{billing:true,...options});
  await page.getByRole('button',{name:'New to PGOne? Create account'}).click();await signup(page);
  await expect(page).toHaveURL(/#setupProfile$/);
  await page.getByLabel('Full name').fill('Premium Owner');await page.getByRole('button',{name:'Continue',exact:true}).click();
  await page.getByLabel('PG name').fill('Premium PG');await page.getByLabel('City',{exact:true}).fill('Pune');
  await page.getByRole('button',{name:'Create my PG'}).click();await expect(page).toHaveURL(/#subscription$/);return f;
 }
-async function pay(page){await page.getByLabel('Mobile number for payment').fill('9999999999');await page.getByRole('button',{name:'Pay ₹249 with UPI'}).click();await expect.poll(()=>page.evaluate(()=>window.__lastPlanOptions?.order_id)).toBe('order_SYNTHETIC001');}
+async function pay(page){await page.getByLabel('Mobile number for payment').fill('9999999999');await page.getByRole('button',{name:'Pay ₹1 with UPI'}).click();await expect.poll(()=>page.evaluate(()=>window.__lastPlanOptions?.order_id)).toBe('order_SYNTHETIC001');}
+
+test('reduced-price UI preserves earlier 249 requests and never launches a different price',async({page})=>{
+ await owner(page,{pendingAmount:24900});
+ await expect(page.getByText(/earlier ₹249 payment needs confirmation before a new ₹1 payment/)).toBeVisible();
+ await expect(page.getByRole('button',{name:'Pay ₹1 with UPI'})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Check payment status'})).toBeVisible();
+ expect(await page.evaluate(()=>window.__lastPlanOptions)).toBeUndefined();
+ await page.screenshot({path:'visual-evidence/premium/historical-price-pending.png',fullPage:true});
+});
+
+test('a recovered old-price order returned after review cannot open the UPI SDK',async({page})=>{
+ await owner(page,{orderAmount:24900});
+ await page.getByLabel('Mobile number for payment').fill('9999999999');await page.getByRole('button',{name:'Pay ₹1 with UPI'}).click();
+ await expect(page.getByRole('button',{name:'Check payment status'})).toBeVisible();
+ expect(await page.evaluate(()=>window.__lastPlanOptions)).toBeUndefined();
+});
 test('exactly two entry paths; resident joins immediately without legacy financial access',async({page})=>{
  await platform(page);await go(page,'welcome');
  await expect(page.locator('[data-action=entry]')).toHaveCount(2);
@@ -61,7 +77,7 @@ test('cold restart restores the pending order and verifies before showing activa
  await page.evaluate(()=>{sessionStorage.setItem('synthetic-plan',JSON.stringify({...window.__planState,status:'INTERRUPTED_CHECK_PROVIDER'}));});
  await page.reload();await expect(page).toHaveURL(/#planVerification$/);
  await expect(page.getByRole('heading',{name:'Payment not confirmed yet'})).toBeVisible();
- await expect(page.getByRole('button',{name:'Pay ₹249 with UPI'})).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Pay ₹1 with UPI'})).toHaveCount(0);
 });
 test('button loading keeps geometry and uses three circular reduced-motion dots',async({page})=>{
  await platform(page);let release;const hold=new Promise(r=>release=r);
