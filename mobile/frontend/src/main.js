@@ -998,7 +998,10 @@ for (const name of ["input", "change"])
       const error = document.getElementById(`field-${el.name}-error`);
       if (error) error.textContent = "";
     }
-    screen?.[name]?.(el.name, el, form);
+    try {
+      const pending=screen?.[name]?.(el.name, el, form);
+      if(pending?.catch)void pending.catch(error=>toast(error.message,"error"));
+    } catch(error){toast(error.message,"error");}
   });
 document.addEventListener(
   "load",

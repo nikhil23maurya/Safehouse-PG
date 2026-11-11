@@ -20,7 +20,7 @@ test("reject request closes access and does not expose rent activation",async({p
 });
 test("all three loading bubbles keep moving with a subtle reduced-motion alternative",async({page})=>{
  await setup(page);await login(page);await page.emulateMedia({reducedMotion:'reduce'});let release;const hold=new Promise(r=>release=r);
- await page.route('**/resident-requests',async route=>{await hold;await route.fulfill({json:{requests:[]}});});
+ await page.route('**/resident-requests?**',async route=>{await hold;await route.fulfill({json:{requests:[]}});});
  await page.locator('.quick-actions [data-route=residentRequests]').click();await expect(page.locator('.screen-loading .loading-dots i')).toHaveCount(3);
  const sample=()=>page.locator('.screen-loading .loading-dots i').evaluateAll(nodes=>nodes.map(n=>({opacity:getComputedStyle(n).opacity,animation:getComputedStyle(n).animationName,transform:getComputedStyle(n).transform})));
  const frames=[];for(let i=0;i<5;i++){frames.push(await sample());await page.waitForTimeout(130);}

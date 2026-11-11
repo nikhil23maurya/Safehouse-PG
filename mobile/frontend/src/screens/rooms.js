@@ -89,7 +89,7 @@ export async function roomScreen(ctx) {
       card(
         `<dl>${detail("Room number", room.number)}${detail("Capacity", `${room.capacity} beds`)}${detail("Occupied", room.occupied)}${detail("Available", room.vacant)}</dl>`,
       ) +
-      `<div class="action-stack">${button("Edit room", { route: "roomForm", params: { id: room.id }, kind: "secondary", glyph: "edit" })}${!room.full ? button("Assign a resident", { route: "residentForm", params: { roomId: room.id }, kind: "primary", glyph: "plus" }) : ""}</div>` +
+      `<div class="action-stack">${button("Edit room", { route: "roomForm", params: { id: room.id }, kind: "secondary", glyph: "edit" })}${!room.full ? button("Review resident requests", { route: "residentRequests", kind: "primary", glyph: "users" }) : ""}</div>` +
       section(
         "Residents in this room",
         `<div class="list">${residents.length ? residents.map(residentRow).join("") : empty("Ready for move-in", "There are no active residents assigned to this room.", { glyph: "bed" })}</div>`,

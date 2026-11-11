@@ -37,11 +37,12 @@ export async function myResidentRequests(accountId:string){
  const rows=await prisma.pgResidentRequest.findMany({where:{accountId},include:{property:{select:{name:true}}},orderBy:{createdAt:"desc"},take:100});
  return {requests:rows.map(summary)};
 }
-export async function propertyResidentRequests(accountId:string,propertyId:string,id?:string){
+export async function propertyResidentRequests(accountId:string,propertyId:string,id?:string,options:{status?:"OPEN"|"ALL";cursor?:string}={}){
  const setup=await owned(accountId,propertyId);
- const rows=await prisma.pgResidentRequest.findMany({where:{propertyId,organisationId:setup.organisationId,...(id?{id}:{})},include:{account:{select:{email:true}}},orderBy:{createdAt:"desc"},take:200});
+ if(options.cursor)assert(await prisma.pgResidentRequest.findFirst({where:{id:options.cursor,propertyId,organisationId:setup.organisationId}}),400,"INVALID_REQUEST_PAGE","Refresh this property's requests.");
+ const rows=await prisma.pgResidentRequest.findMany({where:{propertyId,organisationId:setup.organisationId,...(id?{id}:options.status!=="ALL"?{status:{in:["PENDING","ACCEPTED"]}}:{})},include:{account:{select:{email:true}}},orderBy:[{createdAt:"desc"},{id:"desc"}],take:id?1:51,...(options.cursor?{cursor:{id:options.cursor},skip:1}:{})});
  if(id)assert(rows.length,404,"REQUEST_NOT_FOUND","This request does not belong to this property.");
- return {requests:rows.map(summary)};
+ return {requests:rows.slice(0,50).map(summary),nextCursor:rows.length>50?rows[49].id:null};
 }
 async function verifyOwner(accountId:string,propertyId:string,password:string){
  const setup=await owned(accountId,propertyId);

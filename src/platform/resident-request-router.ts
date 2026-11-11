@@ -9,7 +9,7 @@ const id=z.string().min(1).max(150),password=z.string().min(1).max(128);
 residentRequestRouter.use((req,res,next)=>req.method==="GET"?next():mutations(req,res,next));
 const mutations=rateLimit({windowMs:15*60000,limit:60,standardHeaders:"draft-8",legacyHeaders:false});
 residentRequestRouter.get("/resident-requests",async(req,res)=>{const {account}=await current(req);res.json(await myResidentRequests(account.id));});
-residentRequestRouter.get("/properties/:property/resident-requests",async(req,res)=>{const {account}=await current(req);res.json(await propertyResidentRequests(account.id,id.parse(req.params.property)));});
+residentRequestRouter.get("/properties/:property/resident-requests",async(req,res)=>{const {account}=await current(req);const page=z.object({status:z.enum(["OPEN","ALL"]).default("OPEN"),cursor:id.optional()}).parse(req.query);res.json(await propertyResidentRequests(account.id,id.parse(req.params.property),undefined,page));});
 residentRequestRouter.get("/properties/:property/resident-requests/:id",async(req,res)=>{const {account}=await current(req);res.json(await propertyResidentRequests(account.id,id.parse(req.params.property),id.parse(req.params.id)));});
 residentRequestRouter.post("/properties/:property/resident-requests/:id/decision",async(req,res)=>{
  const {account}=await current(req),input=z.object({decision:z.enum(["ACCEPTED","REJECTED"]),password}).strict().parse(req.body);
