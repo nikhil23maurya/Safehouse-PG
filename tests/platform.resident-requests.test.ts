@@ -84,7 +84,7 @@ test("linking a historical record preserves invoices and rejects duplicated mobi
  const student=await prisma.student.create({data:{userId:user.id,propertyId:o.setup.propertyId,roomId:o.room.id,bedLabel:"A",mobile:profile.mobile.slice(-10),joiningDate:new Date(input.joiningDate+"T12:00:00Z"),monthlyRentPaise:input.monthlyRentPaise,securityDepositPaise:input.securityDepositPaise,rentDueDay:7}});
  const now=new Date(),old=await prisma.rentInvoice.create({data:{propertyId:o.setup.propertyId,studentId:student.id,year:now.getUTCFullYear()-1,month:1,dueDate:new Date("2025-01-07"),rentPaise:123456,totalPaise:123456,paidPaise:123456,status:"PAID"}});
  await prisma.room.update({where:{id:o.room.id},data:{capacity:2}});await decideResidentRequest(o.a.id,o.setup.propertyId,r.id,"ACCEPTED",password);
- await assert.rejects(()=>setupRequestedResident(o.a.id,o.setup.propertyId,r.id,input),{code:"EXISTING_RESIDENT_RECORD"});
+ await assert.rejects(()=>setupRequestedResident(o.a.id,o.setup.propertyId,r.id,{...input,bedLabel:"B"}),{code:"EXISTING_RESIDENT_RECORD"});
  await assert.rejects(()=>setupRequestedResident(o.a.id,o.setup.propertyId,r.id,{...input,existingStudentId:student.id,monthlyRentPaise:100}),{code:"EXISTING_RECORD_MISMATCH"});
  const linked=await setupRequestedResident(o.a.id,o.setup.propertyId,r.id,{...input,existingStudentId:student.id});assert.equal(linked.studentId,student.id);
  assert.deepEqual(await prisma.rentInvoice.findUnique({where:{id:old.id}}),old);assert.equal(await prisma.student.count({where:{propertyId:o.setup.propertyId}}),1);assert.equal(await prisma.rentRevision.count({where:{studentId:student.id}}),0,"linking must not invent an initial revision for existing history");

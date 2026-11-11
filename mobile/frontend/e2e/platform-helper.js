@@ -114,7 +114,9 @@ export async function platform(page, { billing = false, pendingAmount = null, or
           },
         });
       }
-      data = { ...snapshot(), property: memberships.at(-1).property };
+      const created=memberships.at(-1).property,existing=fixtures.properties.find(p=>p.id===created.id);
+      if(existing)Object.assign(existing,created);else fixtures.properties.push({...created});
+      data = { ...snapshot(), property: created };
     } else if (path.endsWith("/workspace")) {
       selected = body.membershipId;
       data = { tokens: tokens() };

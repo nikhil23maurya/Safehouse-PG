@@ -298,6 +298,7 @@ document.addEventListener("click", async (event) => {
   } finally {
     delete b.dataset.busy;
     restoreBusy();
+    if(action==="authorise"&&processing)b.disabled=true;
   }
 });
 try {
