@@ -120,14 +120,16 @@ public class PlanCheckoutTest {
         assertNull(PlanUpiCheckout.paymentContact("123"));assertNull(PlanUpiCheckout.paymentContact(""));
     }
     @Test public void correctedPayloadPassesTheOfficialSdkFieldValidator() throws Exception {
-        MainActivity activity=start();CountDownLatch done=new CountDownLatch(1);final String[] error={null};
+        MainActivity activity=start();CountDownLatch done=new CountDownLatch(2);final String[] error={null};
         instrumentation.runOnMainSync(()->{
             try {
-                JSONObject payload=PlanUpiCheckout.paymentPayload(input()).put("upi_app_package_name","in.org.npci.upiapp");
-                new com.razorpay.Razorpay(activity,"rzp_test_NATIVEFIXTURE").validateFields(payload,new com.razorpay.ValidationListener(){
-                    public void onValidationSuccess(){done.countDown();}
-                    public void onValidationError(java.util.Map<String,String> fields){error[0]=String.valueOf(fields);done.countDown();}
-                });
+                for(int amount:new int[]{100,24900}){
+                    JSONObject payload=PlanUpiCheckout.paymentPayload(input().put("amount",amount)).put("upi_app_package_name","in.org.npci.upiapp");
+                    new com.razorpay.Razorpay(activity,"rzp_test_NATIVEFIXTURE").validateFields(payload,new com.razorpay.ValidationListener(){
+                        public void onValidationSuccess(){done.countDown();}
+                        public void onValidationError(java.util.Map<String,String> fields){error[0]=String.valueOf(fields);done.countDown();}
+                    });
+                }
             }catch(Exception e){throw new RuntimeException(e);}
         });
         assertTrue(done.await(10,TimeUnit.SECONDS));assertNull(error[0]);instrumentation.runOnMainSync(activity::finish);
