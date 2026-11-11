@@ -21,6 +21,33 @@ import static org.junit.Assert.*;
 /** Native UI/adapter contracts, not a claim of merchant-authorized bank acceptance. */
 @RunWith(AndroidJUnit4.class)
 public class PlanCheckoutTest {
+    @Test public void ownerRentUsesOAuthContextAndSeparateNativeState() throws Exception {
+        MainActivity activity=start();final JSONObject[] submitted={null};final PlanUpiCheckout[] rent={null};
+        instrumentation.runOnMainSync(()->{
+            try{
+                FrameLayout host=(FrameLayout)((android.view.ViewGroup)activity.findViewById(android.R.id.content)).getChildAt(0);
+                PlanUpiCheckout plan=new PlanUpiCheckout(activity,host,(id,state,message)->{});String before=plan.snapshot();
+                rent[0]=new PlanUpiCheckout(activity,host,(id,state,message)->{},(owner,key,view)->new PlanUpiCheckout.Gateway(){
+                    public void discover(PlanUpiCheckout.Apps result){assertEquals("rzp_test_oauth_SYNTHRENT",key);result.ready(java.util.Arrays.asList(new PlanUpiCheckout.App("Synthetic UPI","fixture.upi.app")));}
+                    public void submit(JSONObject value,PaymentResultListener listener){submitted[0]=value;listener.onPaymentError(7,"Synthetic cancellation");}
+                    public void activityResult(int request,int result,Intent data){}public void back(){}
+                },true);
+                JSONObject request=input().put("key","rzp_test_oauth_SYNTHRENT").put("amount",850099).put("invoiceId","syntheticInvoice").put("rentOrderId","syntheticRentOrder").put("membershipId","syntheticMembership");
+                rent[0].open(request.toString());java.lang.reflect.Field field=PlanUpiCheckout.class.getDeclaredField("chooser");field.setAccessible(true);AlertDialog chooser=(AlertDialog)field.get(rent[0]);
+                ArrayList<View> titles=new ArrayList<>();chooser.getWindow().getDecorView().findViewsWithText(titles,"PGOne · Pay rent",View.FIND_VIEWS_WITH_TEXT);assertFalse(titles.isEmpty());
+                chooser.getListView().performItemClick(chooser.getListView().getChildAt(0),0,0);
+                assertEquals(before,plan.snapshot());assertEquals("syntheticInvoice",new JSONObject(rent[0].snapshot()).getString("invoiceId"));
+            }catch(Exception e){throw new RuntimeException(e);}
+        });
+        assertEquals(850099,submitted[0].getInt("amount"));assertEquals("PG rent payment",submitted[0].getString("description"));assertEquals("intent",submitted[0].getString("_[flow]"));assertFalse(submitted[0].has("key"));assertFalse(submitted[0].has("merchantId"));
+        instrumentation.runOnMainSync(()->{try{rent[0].acknowledge(new JSONObject(rent[0].snapshot()).getString("orderId"));}catch(Exception e){throw new RuntimeException(e);}activity.finish();});
+    }
+    @Test public void subscriptionProfileRejectsOwnerOAuthCheckout() throws Exception {
+        MainActivity activity=start();final String[] result={null};
+        instrumentation.runOnMainSync(()->{
+            try{FrameLayout host=(FrameLayout)((android.view.ViewGroup)activity.findViewById(android.R.id.content)).getChildAt(0);PlanUpiCheckout plan=new PlanUpiCheckout(activity,host,(id,state,message)->result[0]=state,(owner,key,view)->{throw new AssertionError("Rent token reached the software-fee gateway");});plan.open(input().put("key","rzp_test_oauth_SYNTHRENT").put("amount",850099).toString());activity.finish();}catch(Exception e){throw new RuntimeException(e);}
+        });assertEquals("SDK_UNAVAILABLE",result[0]);
+    }
     final Instrumentation instrumentation=InstrumentationRegistry.getInstrumentation();
     MainActivity start(){
         instrumentation.getTargetContext().getSharedPreferences("safehouse_secure_session",android.content.Context.MODE_PRIVATE).edit().clear().commit();

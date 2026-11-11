@@ -5,6 +5,7 @@ import android.app.Instrumentation;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.widget.FrameLayout;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.PixelCopy;
@@ -245,6 +246,10 @@ public class MobileJourneyTest {
         }
         instrumentation.runOnMainSync(() -> ((android.view.inputmethod.InputMethodManager)target.getSystemService(Context.INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(web.getWindowToken(),0));
         signIn(false); screenshot("03-owner-home");
+        js("window.__ownerRentFixtureEnabled=true");
+        go("merchant", "{}"); screenshot("53-owner-merchant-pending");
+        js("window.__ownerRentFixtures.ready=true"); go("merchant", "{}"); screenshot("54-owner-merchant-ready");
+        js("window.__ownerRentFixtureEnabled=false"); go("ownerHome", "{}");
         assertTrue("Encrypted session did not restore", new SessionVault(target).load().contains("fixture_OWNER_access"));
         assertFalse("Plaintext session must not be in preferences", target.getSharedPreferences("safehouse_secure_session", Context.MODE_PRIVATE).getString("ciphertext", "").contains("fixture_OWNER_access"));
         js("window.__beforeReload=true");
@@ -301,6 +306,31 @@ public class MobileJourneyTest {
         signIn(true); screenshot("20-resident-home");
         go("invoices", "{}"); screenshot("21-invoices");
         go("history", "{}"); screenshot("22-history");
+        // New owner-merchant flow uses a synthetic native gateway. It never
+        // submits to Razorpay; installed-window evidence still covers the real
+        // app/bridge/return/verification/receipt presentation.
+        instrumentation.runOnMainSync(()->{
+            try{
+                FrameLayout host=(FrameLayout)((ViewGroup)activity.findViewById(android.R.id.content)).getChildAt(0);
+                PlanUpiCheckout rent=new PlanUpiCheckout(activity,host,(order,status,message)->web.evaluateJavascript("window.PGOneRentPaymentResult("+org.json.JSONObject.quote(order)+","+org.json.JSONObject.quote(status)+","+org.json.JSONObject.quote(message)+")",null),(owner,key,view)->new PlanUpiCheckout.Gateway(){
+                    public void discover(PlanUpiCheckout.Apps result){result.ready(java.util.Collections.emptyList());}
+                    public void submit(org.json.JSONObject value,com.razorpay.PaymentResultListener result){throw new AssertionError("Installed fixtures must not submit real rent");}
+                    public void activityResult(int request,int result,Intent data){}public void back(){}
+                },true);
+                java.lang.reflect.Field field=MainActivity.class.getDeclaredField("rentCheckout");field.setAccessible(true);field.set(activity,rent);
+            }catch(Exception error){throw new RuntimeException(error);}
+        });
+        js("window.__ownerRentFixtureEnabled=true;window.__ownerRentHold=true");
+        go("payment", "{invoiceId:'invoice1'}"); screenshot("55-resident-owner-rent");
+        js("document.querySelector('[name=contact]').value='9999999999';document.querySelector('[data-form=payOwnerRent]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
+        await("document.getElementById('app').dataset.screen==='rentVerification'&&Boolean(window.__releaseOwnerRentCheck)"); screenshot("56-rent-verifying");
+        js("window.__ownerRentHold=false;window.__releaseOwnerRentCheck()"); await("document.querySelector('[data-action=checkRent]')"); screenshot("57-rent-pending");
+        js("window.__ownerRentFixtures.captured=true;document.querySelector('[data-action=checkRent]').click()");
+        await("document.getElementById('app').dataset.screen==='rentSuccess'"); screenshot("58-rent-verified-receipt");
+        js("document.querySelector('[data-action=continueRent]').click()"); await("document.getElementById('app').dataset.screen==='studentHome'");
+        js("window.__ownerRentBeforeReload=true");
+        instrumentation.runOnMainSync(()->web.reload());
+        await("!window.__ownerRentBeforeReload&&window.__nativeFixtures&&document.getElementById('app').dataset.screen==='studentHome'");
         go("payment", "{invoiceId:'invoice1'}"); await("Boolean(document.querySelector('[data-payment-qr]')?.complete && document.querySelector('[data-payment-qr]')?.naturalWidth>0)"); screenshot("23-payment-qr");
         assertEquals("true", js("document.querySelector('[data-payment-qr]').src.startsWith('https://appassets.androidplatform.net/assets/payment-qr.png?')"));
         assertEquals("true", js("document.querySelector('[data-payment-qr]').naturalWidth===document.querySelector('[data-payment-qr]').naturalHeight"));

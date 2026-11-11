@@ -327,6 +327,8 @@ model PgPlanReceipt {
 }
 
 model PgMerchantAccount {
+  ownerAuthorizations PgOwnerAuthorization[]
+  oauthStates PgOwnerOAuthState[]
   id String @id @default(cuid())
   organisationId String @unique
   provider String @default("CASHFREE_EMBEDDED")
@@ -344,6 +346,171 @@ model PgMerchantAccount {
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
   organisation PgOrganisation @relation(fields: [organisationId], references: [id], onDelete: Restrict)
+}
+
+// Owner rent credentials are never the PGOne software-fee merchant credentials.
+// Historical Cashfree fields on PgMerchantAccount remain untouched.
+model PgOwnerAuthorization {
+  id String @id @default(cuid())
+  merchantId String
+  providerAccountId String
+  mode String
+  current Boolean @default(true)
+  status String @default("KYC_PENDING")
+  accessCipher String?
+  refreshCipher String?
+  publicToken String?
+  expiresAt DateTime?
+  refreshLeaseUntil DateTime?
+  authorizedAt DateTime @default(now())
+  lastReconciledAt DateTime?
+  reconciliationLeaseUntil DateTime?
+  revision Int @default(1)
+  accountActivated Boolean @default(false)
+  productActivated Boolean @default(false)
+  productId String?
+  paymentEnabled Boolean @default(false)
+  bankStatus String @default("UNKNOWN")
+  bankLast4 String?
+  bankFingerprint String?
+  settlementReady Boolean @default(false)
+  accountEventAt DateTime?
+  productEventAt DateTime?
+  verifiedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  merchant PgMerchantAccount @relation(fields:[merchantId],references:[id],onDelete:Restrict)
+  orders PgOwnerRentOrder[]
+  settlements PgOwnerSettlement[]
+  @@unique([mode,providerAccountId])
+  @@index([merchantId,current])
+}
+
+model PgOwnerOAuthState {
+  id String @id @default(cuid())
+  merchantId String
+  accountId String
+  sessionId String
+  stateHash String @unique
+  mode String
+  status String @default("STARTED")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  merchant PgMerchantAccount @relation(fields:[merchantId],references:[id],onDelete:Restrict)
+}
+
+model PgOwnerRentOrder {
+  id String @id @default(cuid())
+  organisationId String
+  propertyId String
+  invoiceId String
+  studentId String
+  accountId String
+  authorizationId String
+  requestKey String
+  reference String @unique
+  providerOrderId String? @unique
+  amountPaise Int
+  currency String @default("INR")
+  invoiceSnapshot String
+  status String @default("CREATING")
+  open Boolean @default(true)
+  lastErrorCode String?
+  lastCheckedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  authorization PgOwnerAuthorization @relation(fields:[authorizationId],references:[id],onDelete:Restrict)
+  application PgOwnerRentApplication?
+  observations PgOwnerPaymentObservation[]
+  @@unique([accountId,requestKey])
+  @@index([organisationId,createdAt])
+  @@index([invoiceId,open])
+}
+
+model PgOwnerPaymentObservation {
+  id String @id @default(cuid())
+  orderId String
+  providerPaymentId String @unique
+  amountPaise Int
+  currency String
+  status String
+  observedAt DateTime @default(now())
+  order PgOwnerRentOrder @relation(fields:[orderId],references:[id],onDelete:Restrict)
+  @@index([orderId,status])
+}
+
+model PgOwnerRentApplication {
+  id String @id @default(cuid())
+  orderId String @unique
+  paymentId String @unique
+  providerPaymentId String @unique
+  amountPaise Int
+  refundedPaise Int @default(0)
+  currency String @default("INR")
+  status String @default("CAPTURED")
+  paidAt DateTime
+  createdAt DateTime @default(now())
+  order PgOwnerRentOrder @relation(fields:[orderId],references:[id],onDelete:Restrict)
+  refunds PgOwnerRentRefund[]
+  settlementItems PgOwnerSettlementItem[]
+}
+
+model PgOwnerRentRefund {
+  id String @id @default(cuid())
+  applicationId String
+  providerRefundId String @unique
+  amountPaise Int
+  status String
+  processedAt DateTime?
+  createdAt DateTime @default(now())
+  application PgOwnerRentApplication @relation(fields:[applicationId],references:[id],onDelete:Restrict)
+}
+
+model PgOwnerSettlement {
+  id String @id @default(cuid())
+  authorizationId String
+  providerSettlementId String
+  status String
+  amountPaise Int
+  currency String @default("INR")
+  utr String?
+  settledAt DateTime?
+  verifiedAt DateTime
+  authorization PgOwnerAuthorization @relation(fields:[authorizationId],references:[id],onDelete:Restrict)
+  items PgOwnerSettlementItem[]
+  @@unique([authorizationId,providerSettlementId])
+}
+
+model PgOwnerSettlementItem {
+  id String @id @default(cuid())
+  settlementId String
+  applicationId String
+  grossPaise Int
+  netPaise Int
+  feePaise Int
+  taxPaise Int
+  settlement PgOwnerSettlement @relation(fields:[settlementId],references:[id],onDelete:Restrict)
+  application PgOwnerRentApplication @relation(fields:[applicationId],references:[id],onDelete:Restrict)
+  @@unique([settlementId,applicationId])
+}
+
+model PgOwnerWebhookInbox {
+  id String @id @default(cuid())
+  mode String
+  eventKey String
+  payloadHash String
+  eventType String
+  providerAccountId String
+  payload Json
+  status String @default("PENDING")
+  attempts Int @default(0)
+  nextAttemptAt DateTime @default(now())
+  leaseUntil DateTime?
+  lastErrorCode String?
+  createdAt DateTime @default(now())
+  processedAt DateTime?
+  @@unique([mode,eventKey])
+  @@index([status,nextAttemptAt])
 }
 
 model PgAudit {

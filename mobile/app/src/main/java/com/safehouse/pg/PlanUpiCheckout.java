@@ -63,6 +63,7 @@ final class PlanUpiCheckout {
     private final FrameLayout host;
     private final Events events;
     private final Factory factory;
+    private final boolean ownerRent;
     private WebView view;
     private Gateway gateway;
     private AlertDialog chooser;
@@ -72,19 +73,24 @@ final class PlanUpiCheckout {
     private final android.content.SharedPreferences prefs;
 
     PlanUpiCheckout(Activity activity,FrameLayout host,Events events){this(activity,host,events,OFFICIAL);}
-    PlanUpiCheckout(Activity activity,FrameLayout host,Events events,Factory factory){
+    PlanUpiCheckout(Activity activity,FrameLayout host,Events events,Factory factory){this(activity,host,events,factory,false);}
+    PlanUpiCheckout(Activity activity,FrameLayout host,Events events,boolean ownerRent){this(activity,host,events,OFFICIAL,ownerRent);}
+    PlanUpiCheckout(Activity activity,FrameLayout host,Events events,Factory factory,boolean ownerRent){
         this.activity=activity;this.host=host;this.events=events;this.factory=factory;
-        prefs=activity.getSharedPreferences("pgone_plan_checkout",Context.MODE_PRIVATE);
+        this.ownerRent=ownerRent;
+        prefs=activity.getSharedPreferences(ownerRent?"pgone_owner_rent_checkout":"pgone_plan_checkout",Context.MODE_PRIVATE);
         if(!prefs.getString("status","").isEmpty() && java.util.Arrays.asList("DISCOVERING","CHOOSING_APP","SUBMITTED").contains(prefs.getString("status","")))
             save(prefs.getString("order",""),"INTERRUPTED_CHECK_PROVIDER","Checkout was interrupted. Check payment status before retrying.");
     }
     String snapshot(){
-        try{return new JSONObject().put("organisationId",prefs.getString("organisation"," ")).put("orderId",prefs.getString("order","")).put("status",prefs.getString("status","")).put("message",prefs.getString("message","")).toString();}
+        try{JSONObject value=new JSONObject().put("organisationId",prefs.getString("organisation"," ")).put("orderId",prefs.getString("order","")).put("status",prefs.getString("status","")).put("message",prefs.getString("message",""));
+            if(ownerRent)for(String field:new String[]{"invoiceId","rentOrderId","membershipId"})value.put(field,prefs.getString(field,""));return value.toString();}
         catch(Exception e){return "{}";}
     }
     void acknowledge(String id){
         if(id!=null&&id.equals(prefs.getString("order",""))&&order==null)prefs.edit().clear().apply();
     }
+    boolean busy(){return order!=null;}
     private void save(String id,String status,String message){
         prefs.edit().putString("order",id).putString("status",status).putString("message",message).apply();
     }
@@ -100,15 +106,18 @@ final class PlanUpiCheckout {
             JSONObject input=new JSONObject(raw);
             attemptOrder=input.optString("order_id","");
             String id=input.optString("order_id"),key=input.optString("key");
-            if(!"SIDELOAD".equals(BuildConfig.BILLING_DISTRIBUTION) || !id.matches("order_[A-Za-z0-9]+") ||
-                !key.matches("rzp_(live|test)_[A-Za-z0-9]+") || input.optInt("amount")!=24900 || !"INR".equals(input.optString("currency")))
+            boolean validProfile=ownerRent
+                ? key.matches("rzp_(live|test)_oauth_[A-Za-z0-9]+") && input.optInt("amount")>=100 && input.optString("invoiceId").matches("[A-Za-z0-9_-]{1,100}") && input.optString("rentOrderId").matches("[A-Za-z0-9_-]{1,100}") && input.optString("membershipId").matches("[A-Za-z0-9_-]{1,100}")
+                : "SIDELOAD".equals(BuildConfig.BILLING_DISTRIBUTION) && key.matches("rzp_(live|test)_[A-Za-z0-9]+") && input.optInt("amount")==24900;
+            if(!validProfile || !id.matches("order_[A-Za-z0-9]+") || !"INR".equals(input.optString("currency")))
                 throw new IllegalArgumentException("Invalid checkout session");
             if(paymentContact(input.optString("contact", ""))==null){
                 events.result(id,"INVALID_PAYMENT_CONTACT","Enter a valid mobile number for payment.");return;
             }
-            JSONObject payload=paymentPayload(input);
+            JSONObject payload=ownerRent?rentPaymentPayload(input):paymentPayload(input);
             order=id;submitted=false;
             prefs.edit().putString("organisation",input.optString("organisationId","")).apply();
+            if(ownerRent){android.content.SharedPreferences.Editor edit=prefs.edit();for(String field:new String[]{"invoiceId","rentOrderId","membershipId"})edit.putString(field,input.optString(field,""));edit.apply();}
             view=new WebView(activity);view.setVisibility(View.GONE);view.setBackgroundColor(android.graphics.Color.WHITE);
             view.getSettings().setJavaScriptEnabled(true);view.getSettings().setDomStorageEnabled(true);
             view.getSettings().setAllowFileAccess(false);view.getSettings().setAllowContentAccess(false);
@@ -130,7 +139,7 @@ final class PlanUpiCheckout {
                     }
                     emit("CHOOSING_APP","Choose your UPI app.");
                     String[] labels=new String[apps.size()];for(int i=0;i<apps.size();i++)labels[i]=apps.get(i).label;
-                    chooser=new AlertDialog.Builder(activity).setTitle("PGOne · Pay ₹249").setItems(labels,(dialog,which)->{
+                    chooser=new AlertDialog.Builder(activity).setTitle(ownerRent?"PGOne · Pay rent":"PGOne · Pay ₹249").setItems(labels,(dialog,which)->{
                         if(!id.equals(order))return;
                         try {
                             chooser=null;payload.put("upi_app_package_name",apps.get(which).packageName);submitted=true;
@@ -165,6 +174,9 @@ final class PlanUpiCheckout {
         for(String field:new String[]{"order_id","amount","currency"})payload.put(field,input.get(field));
         return payload.put("email",email).put("contact",contact).put("method","upi")
             .put("_[flow]","intent").put("description","PGOne monthly workspace access");
+    }
+    static JSONObject rentPaymentPayload(JSONObject input) throws Exception {
+        return paymentPayload(input).put("description","PG rent payment");
     }
     static String safeDescription(String text){
         if(text==null)return "";

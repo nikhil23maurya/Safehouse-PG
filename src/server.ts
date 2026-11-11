@@ -1,4 +1,6 @@
 import "dotenv/config";
+import {ownerPaymentWebRouter} from "./platform/owner-payments/router.js";
+import {startOwnerPaymentWorker} from "./platform/owner-payments/webhooks.js";
 import express, { type NextFunction, type Request, type Response } from "express";
 import cors from "cors";
 import helmet from "helmet";
@@ -190,7 +192,9 @@ app.post("/api/platform-webhooks/plan-payments", express.raw({ type: "applicatio
   await processPlanWebhook(req.body, req.header("x-razorpay-signature") || "", req.header("x-razorpay-event-id"));
   res.json({ ok: true });
 });
+app.use("/api/owner-payments",ownerPaymentWebRouter);
 app.use(platformWorkspaceBridge);
+startOwnerPaymentWorker();
 app.post("/api/platform-webhooks/merchant", express.raw({ type: "application/json", limit: "1mb" }), async (req,res) => {
   await processMerchantWebhook(req.body, req.header("x-webhook-timestamp") || req.header("x-cashfree-timestamp") || "", req.header("x-webhook-signature") || req.header("x-cashfree-signature") || "");
   res.json({ok:true});

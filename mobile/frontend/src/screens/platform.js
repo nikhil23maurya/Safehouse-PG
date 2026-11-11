@@ -1,3 +1,4 @@
+import {ownerMerchantScreen} from "./owner-merchant.js";
 import {planCheckout,paymentContact} from "../payments/plan.js";
 import { brand, icon } from "../components/icons.js";
 import {
@@ -212,11 +213,7 @@ export async function subscriptionScreen(ctx) {
  };
 }
 
-export async function merchantScreen(ctx) {
-  const org=organisation(ctx.snapshot); if(!org) throw new Error("Select an owner workspace first.");
-  const data=await ctx.api(`/api/platform/organisations/${org.id}/merchant`);
-  return {...page("Rent collection",`${intro("","Rent collection","Receive rent directly in your UPI account.")}${button("Set up direct owner UPI",{route:"ownerDirectRent",kind:"primary block"})}${button("Record rent received",{route:"dues",kind:"secondary block"})}${notice("Automatic bank settlement is unavailable. Check each direct transfer in your bank before confirming rent.")}`,"profile")};
-}
+export async function merchantScreen(ctx) { return ownerMerchantScreen(ctx); }
 export async function invitationsScreen(ctx) {
   const org = organisation(ctx.snapshot);
   if (!org) throw new Error("Select your owner workspace first.");
