@@ -1,6 +1,7 @@
+import {ownerAtomic as atomic} from "./transaction.js";
 import {prisma} from "../../db.js";
 import {assert} from "../../errors.js";
-import {atomic,audit,ownerOrganisation} from "../service.js";
+import {audit,ownerOrganisation} from "../service.js";
 import {accessToken} from "./merchant.js";
 import {razorpayOwnerProvider,type OwnerProvider} from "./provider.js";
 

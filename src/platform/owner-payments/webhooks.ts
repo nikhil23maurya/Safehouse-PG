@@ -1,6 +1,7 @@
+import {ownerAtomic as atomic} from "./transaction.js";
 import {prisma} from "../../db.js";
 import {assert,AppError} from "../../errors.js";
-import {atomic,audit} from "../service.js";
+import {audit} from "../service.js";
 import {ownerPaymentConfig} from "./config.js";
 import {digest,signed} from "./crypto.js";
 import {refreshConnection} from "./merchant.js";
