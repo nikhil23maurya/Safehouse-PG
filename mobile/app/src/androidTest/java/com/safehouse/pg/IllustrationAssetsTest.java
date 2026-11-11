@@ -14,12 +14,12 @@ import static org.junit.Assert.*;
 public class IllustrationAssetsTest {
     @Test public void bundledIllustrationsDecodeOfflineWithAlpha() throws Exception {
         Context app=InstrumentationRegistry.getInstrumentation().getTargetContext();
-        for(String name:new String[]{"residence","room","records"}){
+        for(String name:new String[]{"residence","room","records","royal-residence"}){
             try(InputStream stream=app.getAssets().open("illustration-"+name+".webp")){
                 Bitmap image=BitmapFactory.decodeStream(stream);
                 assertNotNull("Bundled illustration must decode: "+name,image);
-                assertTrue(image.getWidth()>0&&image.getWidth()<=900);
-                assertTrue(image.getHeight()>0&&image.getHeight()<=700);
+                assertTrue(image.getWidth()>0&&image.getWidth()<=(name.equals("royal-residence")?1600:900));
+                assertTrue(image.getHeight()>0&&image.getHeight()<=(name.equals("royal-residence")?1100:700));
                 assertTrue("Illustration alpha must be preserved",image.hasAlpha());
                 image.recycle();
             }

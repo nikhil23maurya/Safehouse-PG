@@ -15,6 +15,7 @@ final class BrandSplash extends View {
     private final long started = android.os.SystemClock.uptimeMillis();
     private final boolean reducedMotion;
     private final Typeface wordmark;
+    private android.graphics.Shader wash;
 
     BrandSplash(Context context) {
         super(context);
@@ -28,6 +29,11 @@ final class BrandSplash extends View {
         setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
     }
 
+    @Override protected void onSizeChanged(int w,int h,int oldw,int oldh) {
+        super.onSizeChanged(w,h,oldw,oldh);
+        wash=new android.graphics.LinearGradient(0,0,w,h,new int[]{Color.WHITE,Color.rgb(242,247,255)},null,android.graphics.Shader.TileMode.CLAMP);
+    }
+
     @Override protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
         final float density = getResources().getDisplayMetrics().density;
@@ -35,6 +41,14 @@ final class BrandSplash extends View {
         final float centerY = getHeight() / 2f - 32f * density;
         final float progress = reducedMotion ? 1f : Math.min(1f, (android.os.SystemClock.uptimeMillis() - started) / 220f);
         final int opacity = Math.round(255f * progress);
+
+        paint.setShader(wash);canvas.drawRect(0,0,getWidth(),getHeight(),paint);paint.setShader(null);
+        paint.setColor(Color.rgb(233,240,255));
+        canvas.drawCircle(getWidth()+90f*density,-70f*density,250f*density,paint);
+        paint.setColor(Color.rgb(23,77,255));
+        canvas.drawCircle(getWidth()+90f*density,-70f*density,211f*density,paint);
+        paint.setColor(Color.rgb(239,244,255));
+        canvas.drawCircle(centerX,centerY-29f*density,65f*density,paint);
 
         // Identical vector geometry to the website/app launcher; no alternate house icon.
         Drawable mark = getContext().getDrawable(R.drawable.ic_launcher);
@@ -60,6 +74,9 @@ final class BrandSplash extends View {
         canvas.drawText("PG", x, y, paint);
         paint.setColor(Color.rgb(32, 86, 239));
         canvas.drawText("One", x + pgWidth, y, paint);
+        paint.setTextSize(10f*density);paint.setTypeface(Typeface.create(wordmark,Typeface.NORMAL));
+        paint.setColor(Color.rgb(120,140,176));paint.setTextAlign(Paint.Align.CENTER);
+        canvas.drawText("Manage · Stay · Pay",centerX,y+29f*density,paint);
         paint.setAlpha(255);
         if (progress < 1f) postInvalidateOnAnimation();
     }

@@ -18,6 +18,7 @@ for (const [width, height] of [
     );
     await fs.mkdir(directory, { recursive: true });
     const capture = async (name) => {
+      await expect.poll(() => page.evaluate(() => [...document.images].every(image => image.complete && image.naturalWidth > 0)), {message:"Every visible artwork asset must load"}).toBe(true);
       await noOverflow(page);
       await page.screenshot({
         path: `${directory}/${name}.png`,

@@ -4,6 +4,7 @@ import {planVerificationScreen,planSuccessScreen,verificationMarkup} from "./scr
 import {pgCodeScreen,joinedResidentsScreen,unassignedResident,unassignedHomeScreen,unassignedRecordsScreen,unassignedProfileScreen} from "./screens/joining.js";
 import {planCheckout} from "./payments/plan.js";
 import {rentCheckout} from "./payments/rent.js";
+import {enhanceExperience} from "./components/experience.js";
 import {rentPaymentEntry} from "./screens/owner-rent.js";
 import {ownerCollectionsScreen} from "./screens/owner-collections.js";
 import {rentVerificationScreen,rentSuccessScreen,rentVerificationMarkup} from "./screens/rent-verification.js";
@@ -804,6 +805,7 @@ async function render() {
     window.scrollTo(0, 0);
     document.getElementById("main")?.focus({ preventScroll: true });
     screen.mount?.();
+    enhanceExperience(document.getElementById("app"));
     native.call("ready");
   } catch (error) {
     if (seq !== sequence || contextKey() !== key) return;
