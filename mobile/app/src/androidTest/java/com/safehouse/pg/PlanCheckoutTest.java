@@ -33,7 +33,9 @@ public class PlanCheckoutTest {
                     public void activityResult(int request,int result,Intent data){}public void back(){}
                 },true);
                 JSONObject request=input().put("key","rzp_test_oauth_SYNTHRENT").put("amount",850099).put("invoiceId","syntheticInvoice").put("rentOrderId","syntheticRentOrder").put("membershipId","syntheticMembership");
-                rent[0].open(request.toString());java.lang.reflect.Field field=PlanUpiCheckout.class.getDeclaredField("chooser");field.setAccessible(true);AlertDialog chooser=(AlertDialog)field.get(rent[0]);chooser.getListView().performItemClick(chooser.getListView().getChildAt(0),0,0);
+                rent[0].open(request.toString());java.lang.reflect.Field field=PlanUpiCheckout.class.getDeclaredField("chooser");field.setAccessible(true);AlertDialog chooser=(AlertDialog)field.get(rent[0]);
+                List<View> titles=new ArrayList<>();chooser.getWindow().getDecorView().findViewsWithText(titles,"PGOne · Pay rent",View.FIND_VIEWS_WITH_TEXT);assertFalse(titles.isEmpty());
+                chooser.getListView().performItemClick(chooser.getListView().getChildAt(0),0,0);
                 assertEquals(before,plan.snapshot());assertEquals("syntheticInvoice",new JSONObject(rent[0].snapshot()).getString("invoiceId"));
             }catch(Exception e){throw new RuntimeException(e);}
         });

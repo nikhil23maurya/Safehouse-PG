@@ -139,7 +139,7 @@ final class PlanUpiCheckout {
                     }
                     emit("CHOOSING_APP","Choose your UPI app.");
                     String[] labels=new String[apps.size()];for(int i=0;i<apps.size();i++)labels[i]=apps.get(i).label;
-                    chooser=new AlertDialog.Builder(activity).setTitle("PGOne · Pay ₹249").setItems(labels,(dialog,which)->{
+                    chooser=new AlertDialog.Builder(activity).setTitle(ownerRent?"PGOne · Pay rent":"PGOne · Pay ₹249").setItems(labels,(dialog,which)->{
                         if(!id.equals(order))return;
                         try {
                             chooser=null;payload.put("upi_app_package_name",apps.get(which).packageName);submitted=true;
