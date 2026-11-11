@@ -77,6 +77,12 @@ test("multiple owner properties share the plan while requests, rooms and rent re
  await decideResidentRequest(o.a.id,second.propertyId,r.id,"ACCEPTED",password);
  await assert.rejects(()=>setupRequestedResident(o.a.id,second.propertyId,r.id,rent(o.room.id)),{code:"ROOM_NOT_FOUND"});
  assert.equal(await prisma.pgMembership.count({where:{accountId:resident.id}}),0);
+ const seeded=Array.from({length:51},()=>crypto.randomUUID());
+ await prisma.pgAccount.createMany({data:seeded.map(id=>({id,fullName:"Pagination fixture"}))});
+ await prisma.pgResidentRequest.createMany({data:seeded.map(accountId=>({accountId,propertyId:o.setup.propertyId,organisationId:o.setup.organisationId,fullName:"Pagination fixture",mobile:"+919123456786"}))});
+ const page1=await propertyResidentRequests(o.a.id,o.setup.propertyId),page2=await propertyResidentRequests(o.a.id,o.setup.propertyId,undefined,{cursor:page1.nextCursor!});
+ assert.equal(page1.requests.length,50);assert.ok(page1.nextCursor);assert.equal(page2.requests.length,1);assert.equal(page2.nextCursor,null);assert.equal(new Set([...page1.requests,...page2.requests].map(r=>r.id)).size,51);
+ await assert.rejects(()=>propertyResidentRequests(o.a.id,o.setup.propertyId,undefined,{cursor:r.id}),{code:"INVALID_REQUEST_PAGE"});
 });
 test("linking a historical record preserves invoices and rejects duplicated mobile or another account",async()=>{
  const o=await owner(),resident=await account(),r=(await joinProperty(resident.id,o.code,profile)).request!,input=rent(o.room.id);
