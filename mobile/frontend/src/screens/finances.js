@@ -152,7 +152,7 @@ export async function invoiceScreen(ctx) {
           )
         : "") +
       notice(
-        "This invoice keeps its historical rent snapshot. Payments and remaining balances are confirmed by the server.",
+        "Review your rent breakdown, payments and remaining balance.",
       ),
   };
 }
@@ -330,7 +330,7 @@ export async function invoiceChargesScreen(ctx) {
         `${resident.name} · ${month(invoice.year, invoice.month)}`,
       ) +
       notice(
-        "Base rent and historical snapshots stay protected. The server validates and recalculates this invoice.",
+        "Review additional charges before saving. Existing rent and payment records are preserved.",
       ) +
       `<form data-form="charges" novalidate><div class="card"><div class="form-error" role="alert"></div>${[
         ["electricity", "Electricity (₹)", "electricityPaise"],

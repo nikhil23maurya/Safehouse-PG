@@ -235,6 +235,8 @@ h2 {font-weight:750;letter-spacing:-.035em;}
 .menu-item > svg:first-child {box-sizing:content-box;width:18px;height:18px;padding:8px;border:1px solid #dfe8fa;background:linear-gradient(140deg,#eaf1ff,#f5f8ff);border-radius:12px;color:#2453c7;}
 .menu-item > span {font-size:13px;font-weight:600;}
 .menu-item > svg:last-child {width:15px;color:#8798b9;}
+.menu-list .menu-item {min-height:62px;padding:12px 16px;}
+.card > .residency-head:only-child {padding-bottom:0;border-bottom:0;}
 .bed-indicators > span {background:#e9effa;border:1px solid #dae4f5;border-radius:5px;}
 .bed-indicators > span.occupied {background:linear-gradient(90deg,#4f82ff,#2155dc);border-color:#3e6eef;}
 .room-card-foot {color:#637391;font-size:11px;}
