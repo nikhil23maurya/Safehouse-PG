@@ -1,3 +1,4 @@
+import {requestPropertyAccess} from "./resident-requests.js";
 import {prisma} from "../db.js";
 import {config} from "../config.js";
 import {assert,AppError} from "../errors.js";
@@ -52,30 +53,12 @@ async function consumeJoinAttempt(accountId:string) {
   });
   assert(allowed,429,"PG_JOIN_RATE_LIMIT","Too many joining attempts. Try again in 15 minutes.");
 }
-export async function joinProperty(accountId:string,input:string) {
+export async function joinProperty(accountId:string,input:string,profile:{fullName?:string;mobile?:string}={}) {
   await consumeJoinAttempt(accountId);
   const code=normalizeJoinCode(input);if(!code)return unavailable();
-  const digest=joinCodeHash(code);
-  const found=await prisma.pgJoinCode.findUnique({where:{codeHash:digest}});
-  if(!found?.enabled||!await entitlement(found.organisationId))return unavailable();
-  return atomic(async tx=>{
-    const current=await tx.pgJoinCode.findUnique({where:{codeHash:digest},include:{property:{include:{owner:true}},organisation:{include:{owner:true}}}});
-    if(!current?.enabled||current.revision!==found.revision||current.property.ownerId!==current.organisation.legacyOwnerId||
-      current.property.owner.status!=="ACTIVE"||current.organisation.owner.status!=="ACTIVE")return unavailable();
-    const account=await tx.pgAccount.findUnique({where:{id:accountId}});
-    assert(account?.status==="ACTIVE"&&!account.passwordChangeRequired,403,"ACCOUNT_UNAVAILABLE","Update your account before joining a PG.");
-    const owner=await tx.pgMembership.findFirst({where:{accountId,propertyId:current.propertyId,role:"OWNER",status:"ACTIVE"}});
-    assert(!owner,409,"OWNER_WORKSPACE_EXISTS","You already manage this PG. Open your owner workspace.");
-    const prior=await tx.pgMembership.findUnique({where:{accountId_propertyId_role:{accountId,propertyId:current.propertyId,role:"RESIDENT"}}});
-    assert(!prior||prior.status==="ACTIVE",403,"MEMBERSHIP_DISABLED","Your membership was disabled. Contact your PG owner.");
-    if(prior){assert(prior.organisationId===current.organisationId,403,"MEMBERSHIP_INVALID","This workspace needs review.");return prior;}
-    // No actor lookup, email/name matching, room assignment or financial record creation.
-    const membership=await tx.pgMembership.create({data:{accountId,organisationId:current.organisationId,propertyId:current.propertyId,
-      role:"RESIDENT",status:"ACTIVE",actorUserId:null,permissions:[]}});
-    if(!account.setupIntent)await tx.pgAccount.update({where:{id:accountId},data:{setupIntent:"RESIDENT"}});
-    await audit(tx,accountId,current.organisationId,"PROPERTY_CODE_JOINED",membership.id,{propertyId:current.propertyId,codeRevision:current.revision,assigned:false});
-    return membership;
-  });
+  const digest=joinCodeHash(code),found=await prisma.pgJoinCode.findUnique({where:{codeHash:digest},include:{property:{include:{owner:true}},organisation:{include:{owner:true}}}});
+  if(!found?.enabled||!await entitlement(found.organisationId)||found.property.owner.status!=="ACTIVE"||found.organisation.owner.status!=="ACTIVE")return unavailable();
+  return requestPropertyAccess(accountId,found.propertyId,found.organisationId,profile,{hash:digest,revision:found.revision});
 }
 export async function joinedResidents(accountId:string,propertyId:string) {
   const setup=await ownedProperty(accountId,propertyId);

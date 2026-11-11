@@ -170,39 +170,12 @@ test("property and month selection never mix financial context", async ({
   expect(fixture.errors).toEqual([]);
 });
 
-test("create resident retains values on capacity and duplicate rejection, then saves once", async ({
-  page,
-}) => {
-  const fixture = await setup(page);
-  await login(page);
-  await page.locator('.quick-actions [data-route="residentForm"]').click();
-  await page.getByLabel("Full name").fill("Nisha Rao");
-  await page.getByLabel("Email address").fill("nisha@example.test");
-  await page.getByLabel("Mobile number").fill("9876543219");
-  await page.getByLabel("Room", { exact: true }).selectOption("room1");
-  await page.getByLabel("Monthly rent (₹)").fill("9100.25");
-  fixture.control.capacityRejected = true;
-  await page.locator('button[type="submit"]').click();
-  await expect(page.locator(".form-error")).toContainText("no vacant beds");
-  await expect(page.getByLabel("Full name")).toHaveValue("Nisha Rao");
-  await expect(page.locator("#field-roomId-error")).toContainText(
-    "Room is full",
-  );
-  fixture.control.capacityRejected = false;
-  fixture.control.duplicateResident = true;
-  await page.locator('button[type="submit"]').click();
-  await expect(page.locator(".form-error")).toContainText("already exists");
-  fixture.control.duplicateResident = false;
-  await page.locator('button[type="submit"]').click();
-  await expect(page).toHaveTitle(/^Resident details/);
-  await expect(
-    page.getByRole("heading", { name: "Nisha Rao", exact: true }),
-  ).toBeVisible();
-  const writes = fixture.control.requests.filter(
-    (r) => r.path === "/api/owner/students" && r.method === "POST",
-  );
-  expect(writes).toHaveLength(3);
-  expect(writes.at(-1).body.monthlyRent).toBe(9100.25);
+test("owner manual creation entries are retired in favour of resident requests",async({page})=>{
+ const f=await setup(page);await login(page);
+ await expect(page.locator('[data-route="residentForm"]')).toHaveCount(0);
+ await page.locator('.quick-actions [data-route="residentRequests"]').click();
+ await expect(page.getByRole('heading',{name:'Resident requests'})).toBeVisible();
+ expect(f.control.requests.filter(r=>r.path==='/api/owner/students'&&r.method==='POST')).toHaveLength(0);
 });
 
 test("unsaved resident details are protected during back navigation", async ({
@@ -210,7 +183,7 @@ test("unsaved resident details are protected during back navigation", async ({
 }) => {
   await setup(page);
   await login(page);
-  await go(page, "residentForm");
+  await go(page, "residentEdit", { id: "resident1" });
   await page.getByLabel("Full name").fill("Retain this draft");
   await page.getByRole("button", { name: "Go back" }).click();
   await expect(page.getByRole("dialog")).toBeVisible();
@@ -402,7 +375,7 @@ test("responsive text scaling and landscape do not overflow", async ({
   });
   await noOverflow(page);
   await page.setViewportSize({ width: 852, height: 393 });
-  await go(page, "residentForm");
+  await go(page, "residentEdit", { id: "resident1" });
   await noOverflow(page);
 });
 
@@ -411,7 +384,7 @@ test("resident edit respects the server-confirmed effective period", async ({
 }) => {
   const fixture = await setup(page);
   await login(page);
-  await go(page, "residentForm", { id: "resident1" });
+  await go(page, "residentEdit", { id: "resident1" });
   await page.getByLabel("Monthly rent (₹)").fill("8750.50");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page.getByRole("dialog")).toContainText("Rent updated");

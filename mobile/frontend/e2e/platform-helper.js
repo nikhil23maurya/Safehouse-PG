@@ -43,6 +43,7 @@ export async function platform(page, { billing = false, pendingAmount = null, or
     setupIntent: null,
   };
   const memberships = [];
+  const requests=[];
   let selected = null;
   let propertiesCreated = 0;
   let paid = false;
@@ -56,7 +57,7 @@ export async function platform(page, { billing = false, pendingAmount = null, or
     account,
     memberships: memberships.map(m => ({ ...m, organisation: { ...m.organisation, entitled: paid } })),
     membershipId: selected,
-    property: selected ? memberships[0].property : null,
+    property: selected ? memberships.find(m=>m.id===selected)?.property : null,
     student: null,
     user: {
       id: "owner1",
@@ -86,9 +87,10 @@ export async function platform(page, { billing = false, pendingAmount = null, or
     else if (path.endsWith("/logout")) data={ok:true};
     else if (path.endsWith("/session")) data = snapshot();
     else if(path.endsWith("/onboarding-intent")){account.setupIntent=body.intent;data={ok:true};}
+    else if(path.endsWith("/resident-requests")){data={requests};}
     else if(path.endsWith("/join")){
       if(body.code!=="ABCD-EFGH-JKLM")return route.fulfill({status:404,json:{error:{code:"PG_CODE_UNAVAILABLE",message:"Invalid PG code."}}});
-      memberships.push({id:"resident-membership",role:"RESIDENT",organisation:{id:"joined-org",name:"Resident PG",legacyAccess:false},property:{id:"joined-property",name:"Resident PG",timezone:"Asia/Kolkata",currency:"INR"}});selected="resident-membership";data={tokens:tokens(),joined:true};
+      if(!requests.length)requests.push({id:"request1",propertyId:"joined-property",propertyName:"Resident PG",fullName:body.fullName,mobile:body.mobile,status:"PENDING",createdAt:new Date().toISOString()});data={pendingApproval:true,requestId:"request1",status:requests[0].status};
     }
     else if (path.endsWith("/profile")) {
       Object.assign(account, {
@@ -98,21 +100,21 @@ export async function platform(page, { billing = false, pendingAmount = null, or
       });
       data = snapshot();
     } else if (path.endsWith("/properties")) {
-      if (!memberships.length) {
+      if (!memberships.some(m=>m.property.name===body.name)) {
         propertiesCreated++;
         memberships.push({
-          id: "membership1",
+          id: `membership${propertiesCreated}`,
           role: "OWNER",
           organisation: { id: "org1", name: body.name, legacyAccess: false },
           property: {
-            id: "property1",
+            id: `property${propertiesCreated}`,
             name: body.name,
             timezone: "Asia/Kolkata",
             currency: "INR",
           },
         });
       }
-      data = { ...snapshot(), property: memberships[0].property };
+      data = { ...snapshot(), property: memberships.at(-1).property };
     } else if (path.endsWith("/workspace")) {
       selected = body.membershipId;
       data = { tokens: tokens() };
@@ -176,6 +178,8 @@ export async function platform(page, { billing = false, pendingAmount = null, or
   );
   return {
     ...fixtures,
+    requests,
+    approveRequest(){requests[0].status="ACTIVE";requests[0].membershipId="resident-membership";memberships.push({id:"resident-membership",role:"RESIDENT",organisation:{id:"joined-org",name:"Resident PG",legacyAccess:false},property:{id:"joined-property",name:"Resident PG",timezone:"Asia/Kolkata",currency:"INR"}});},
     get propertiesCreated() {
       return propertiesCreated;
     },

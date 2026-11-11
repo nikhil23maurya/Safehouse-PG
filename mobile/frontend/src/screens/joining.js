@@ -22,7 +22,7 @@ export async function pgCodeScreen(ctx){
  return {title:"Your PG code",back:true,nav:false,content:heading("",property.name,"Share this code with your residents.")+
    `<img class="code-art" src="illustration-residence.webp" alt=""><div class="join-code-card">${badge(data.enabled?"Joining open":"Joining paused",data.enabled?"green":"warning")}<p class="join-code">${esc(data.code)}</p>${button("Copy code",{action:"copyCode",kind:"secondary"})}</div>`+
    (data.enabled?button("Share PG code",{action:"shareCode",kind:"primary block"}):notice("New residents cannot join until you generate a new code."))+
-   button("Enter dashboard",{route:"ownerHome",kind:"secondary block"})+button("Joined residents",{route:"joinedResidents",kind:"text-button block"})+
+   button("Enter dashboard",{route:"ownerHome",kind:"secondary block"})+button("Resident requests",{route:"residentRequests",kind:"text-button block"})+
    `<details class="disclosure"><summary>Manage joining</summary><p>Changing or pausing this code does not remove existing residents.</p>${button("Generate new code",{action:"rotateCode",kind:"secondary block"})}${data.enabled?button("Pause joining",{action:"disableCode",kind:"text-button block"}):""}</details>`,
    async action(name){
      if(name==="copyCode"){if(ctx.native.has("copyPgCode"))ctx.native.call("copyPgCode",data.code);else await navigator.clipboard.writeText(data.code);ctx.toast("PG code copied.");return;}
@@ -33,10 +33,4 @@ export async function pgCodeScreen(ctx){
      await ctx.api(path,{method:"POST",body:{action:rotate?"ROTATE":"DISABLE"}});ctx.markSaved();return ctx.reload();
    }};
 }
-export async function joinedResidentsScreen(ctx){
- const path=`/api/platform/properties/${encodeURIComponent(ctx.snapshot.property.id)}`,data=await ctx.api(`${path}/joined-residents`);
- return {title:"Joined residents",back:true,nav:false,content:heading("","Joined residents","Assign a rent record only after checking identity.")+
-   (data.members.length?data.members.map(m=>card(`<h2>${esc(m.name||m.email||"Resident")}</h2>${m.name?`<p>${esc(m.email)}</p>`:""}${badge(m.assigned?"Record assigned":"Room not assigned",m.assigned?"green":"neutral")}${m.assigned?"":`<details class="disclosure"><summary>Assign existing resident record</summary><form data-form="assignResident" data-id="${esc(m.id)}" novalidate><div class="form-error" role="alert"></div><label class="field"><span>Resident record</span><select name="studentId" required><option value="">Choose after verifying identity</option>${data.records.filter(r=>!r.linked).map(r=>`<option value="${esc(r.id)}">${esc(r.name)}${r.room?` · Room ${esc(r.room)}`:""}</option>`).join("")}</select></label>${field("password","Confirm your password",{type:"password",required:true,attrs:'autocomplete="current-password" maxlength="128"'})}<label class="merchant-consent"><input type="checkbox" name="identityChecked" required>I independently checked this resident's identity and this is their own rent record.</label>${button("Assign record",{type:"submit",kind:"primary block"})}</form></details>`}`)).join(""):notice("Residents who join with your PG code will appear here."))+
-   button("Add resident record",{route:"residentForm",kind:"secondary block"})+button("Share PG code",{route:"pgCode",kind:"text-button block"}),
-   async submit(name,form){if(name!=="assignResident")return;const v=formValues(form);await ctx.api(`${path}/resident-record`,{method:"POST",body:{membershipId:form.dataset.id,studentId:v.studentId,password:v.password,identityChecked:v.identityChecked==="on"}});ctx.markSaved();ctx.toast("Resident record assigned.");return ctx.reload();}};
-}
+export function joinedResidentsScreen(ctx){return ctx.navigate("residentRequests",{},{replace:true,force:true});}

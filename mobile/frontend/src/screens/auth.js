@@ -4,7 +4,7 @@ import { button, heading, notice } from "../components/ui.js";
 import { field, formValues } from "../components/forms.js";
 
 const accountPage = (title,description,body) => ({bare:true,title,
-  content:`<main class="login-page royal-page"><div class="login-inner"><div class="login-identity"><button class="royal-back" data-route="welcome" aria-label="Back">←</button>${brand()}</div><div class="auth-art" data-depth aria-hidden="true"><div class="art-orbit"></div><img src="illustration-royal-residence.webp" alt="" draggable="false"></div><div class="login-heading"><span class="auth-eyebrow">YOUR SPACE, SIMPLIFIED</span><h1>${title}</h1><p>${description}</p></div><div class="auth-form-panel">${body}</div></div></main>`});
+  content:`<main class="login-page royal-page"><div class="login-inner"><div class="login-identity"><button class="royal-back" data-action="back" aria-label="Go back">←</button>${brand()}</div><div class="auth-art" data-depth aria-hidden="true"><div class="art-orbit"></div><img src="illustration-royal-residence.webp" alt="" draggable="false"></div><div class="login-heading"><span class="auth-eyebrow">YOUR SPACE, SIMPLIFIED</span><h1>${title}</h1><p>${description}</p></div><div class="auth-form-panel">${body}</div></div></main>`});
 const emailField = () => field("email","Email address",{type:"email",required:true,placeholder:"you@example.com",attrs:'autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="254"'});
 const passwordField = (name,label,current=false) => field(name,label,{type:"password",required:true,
   placeholder:!current&&name==="password"?"At least 12 characters":"",

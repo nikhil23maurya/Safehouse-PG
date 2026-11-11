@@ -19,9 +19,10 @@ joinCodeRouter.post("/onboarding-intent",async(req,res)=>{
 });
 joinCodeRouter.post("/join",rateLimit({windowMs:15*60000,limit:40,standardHeaders:"draft-8",legacyHeaders:false}),async(req,res)=>{
   const {account}=await current(req);
-  const {code}=z.object({code:z.string().max(50)}).strict().parse(req.body);
-  const membership=await joinProperty(account.id,code);
-  res.json({tokens:await membershipTokens(account.id,membership.id,account.tokenVersion),membershipId:membership.id,joined:true});
+  const {code,fullName,mobile}=z.object({code:z.string().max(50),fullName:z.string().trim().min(2).max(100).optional(),mobile:z.string().regex(/^\+91[6-9]\d{9}$/).optional()}).strict().parse(req.body);
+  const result=await joinProperty(account.id,code,{fullName,mobile});
+  if(result.membership)res.json({tokens:await membershipTokens(account.id,result.membership.id,account.tokenVersion),membershipId:result.membership.id,joined:true});
+  else res.json({pendingApproval:true,requestId:result.request!.id,status:result.request!.status});
 });
 joinCodeRouter.get("/properties/:id/join-code",async(req,res)=>{
   const {account}=await current(req);res.json(await propertyJoinCode(account.id,id.parse(req.params.id)));

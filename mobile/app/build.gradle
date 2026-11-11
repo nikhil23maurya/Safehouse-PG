@@ -11,8 +11,8 @@ android {
         applicationId 'com.safehouse.pg'
         minSdk 23
         targetSdk 35
-        versionCode 58
-        versionName '5.5.0'
+        versionCode 59
+        versionName '5.6.0'
         manifestPlaceholders = [appLabel: 'PGOne']
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
         buildConfigField 'String', 'BILLING_DISTRIBUTION', '"CONSUMPTION_ONLY"'

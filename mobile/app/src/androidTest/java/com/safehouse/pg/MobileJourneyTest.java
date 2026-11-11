@@ -257,7 +257,7 @@ public class MobileJourneyTest {
         await("!window.__beforeReload&&window.__nativeFixtures&&document.getElementById('app').dataset.screen==='ownerHome'"); screenshot("04-session-restored");
         go("residents", "{}"); screenshot("05-residents");
         go("resident", "{id:'resident1'}"); screenshot("06-resident");
-        go("residentForm", "{}"); screenshot("07-add-resident");
+        go("residentEdit", "{id:'resident1'}"); screenshot("07-edit-resident");
         js("document.querySelector('[name=fullName]').value='Draft kept on rotation';document.querySelector('[name=fullName]').dispatchEvent(new Event('input',{bubbles:true}));");
         instrumentation.runOnMainSync(() -> activity.setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE));
         await("innerWidth>innerHeight");

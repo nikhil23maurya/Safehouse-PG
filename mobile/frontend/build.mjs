@@ -1,3 +1,4 @@
+import {dots} from "./src/components/loading.js";
 import {brand} from "./src/components/brand.js";
 import { build } from "esbuild";
 import { mkdir, readFile, writeFile, copyFile } from "node:fs/promises";
@@ -29,13 +30,13 @@ await build({
   );
 });
 const css = await Promise.all(
-  ["tokens", "components", "screens", "platform", "premium", "motion", "owner-payments", "royal-system"].map((name) =>
+  ["tokens", "components", "screens", "platform", "premium", "motion", "owner-payments", "royal-system", "product-ux"].map((name) =>
     readFile(path.join(here, `src/styles/${name}.css`), "utf8"),
   ),
 );
 await writeFile(path.join(out, "app.css"), css.join("\n"));
 await writeFile(
   path.join(out, "index.html"),
-  (await readFile(path.join(here, "index.html"), "utf8")).replace("{{PGONE_BOOT_BRAND}}",brand()),
+  (await readFile(path.join(here, "index.html"), "utf8")).replace("{{PGONE_BOOT_BRAND}}",brand()+dots("Opening PGOne")),
 );
 console.log("Built maintained PGOne frontend → Android assets");
