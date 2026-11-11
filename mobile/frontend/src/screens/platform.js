@@ -26,7 +26,7 @@ const arrow = icon("arrow");
 const primary = (label, props = {}) =>
   button(label, { kind: "primary block royal-button", ...props });
 const top = (back = "welcome") =>
-  `<header class="onboarding-top"><button class="royal-back" ${routeAttrs(back)} aria-label="Go back">${icon("back")}</button>${brand()}</header>`;
+  `<header class="onboarding-top">${back===false?"":`<button class="royal-back" data-action="back" aria-label="Go back">${icon("back")}</button>`}${brand()}</header>`;
 const step = (number, label) =>
   `<div class="setup-step"><span>Step ${number} of 2</span><span class="setup-track"><i style="width:${number * 50}%"></i></span><small>${esc(label)}</small></div>`;
 const form = (name, content, label = "Continue") =>
@@ -73,6 +73,7 @@ export function setupProfileScreen(ctx) {
   };
 }
 export function setupPropertyScreen(ctx) {
+  const adding=ctx.snapshot.platform.memberships.some(m=>m.role==="OWNER");
   const draft = ctx.snapshot.onboardingDraft;
   onboarding.propertyKey ||= draft?.key || requestId();
   let saveTimer;
@@ -80,9 +81,9 @@ export function setupPropertyScreen(ctx) {
     ctx.saveOnboardingDraft({ key: onboarding.propertyKey, values });
   return {
     ...page(
-      "Your first PG",
-      `${intro("", "Set up your PG", "")}${step(2, "Your property")}${form("setupProperty", `${field("name", "PG name", { value: draft?.values?.name || "", required: true, placeholder: "e.g. Maple House", attrs: 'minlength="2" maxlength="120" autocomplete="organization"' })}${field("city", "City", { value: draft?.values?.city || "", required: true, placeholder: "e.g. Bengaluru", attrs: 'minlength="2" maxlength="100" autocomplete="address-level2"' })}${field("approximateRooms", "Approximate number of rooms", { value: draft?.values?.approximateRooms || "", type: "number", placeholder: "Optional", attrs: 'min="1" max="100000" inputmode="numeric"' })}`, "Create my PG")}`,
-      "setupProfile",
+      adding?"Add property":"Your first PG",
+      `${intro("", adding?"Add another property":"Set up your PG", "")}${adding?"":step(2, "Your property")}${form("setupProperty", `${field("name", "PG name", { value: draft?.values?.name || "", required: true, placeholder: "e.g. Maple House", attrs: 'minlength="2" maxlength="120" autocomplete="organization"' })}${field("city", "City", { value: draft?.values?.city || "", required: true, placeholder: "e.g. Bengaluru", attrs: 'minlength="2" maxlength="100" autocomplete="address-level2"' })}${field("approximateRooms", "Approximate number of rooms", { value: draft?.values?.approximateRooms || "", type: "number", placeholder: "Optional", attrs: 'min="1" max="100000" inputmode="numeric"' })}`, "Create my PG")}`,
+      adding?"properties":"setupProfile",
     ),
     input(_name, _el, form) {
       clearTimeout(saveTimer);
@@ -119,7 +120,7 @@ export function setupPropertyScreen(ctx) {
       );
       ctx.markSaved();
       ctx.saveOnboardingDraft(null);
-      await ctx.selectWorkspace(member.id, "subscription");
+      await ctx.selectWorkspace(member.id, adding?"properties":"subscription");
       onboarding.propertyKey = null;
     },
   };
@@ -134,11 +135,12 @@ export function setupReadyScreen(ctx) {
 }
 export async function workspacesScreen(ctx) {
   const data = await ctx.api("/api/platform/session");
+  const owns=data.memberships.some(m=>m.role==="OWNER");
   return {
     ...page(
       "Your workspaces",
-      `${intro("WELCOME BACK", data.account.fullName ? `Hello, ${data.account.fullName.split(" ")[0]}.` : "Your PG, connected.", "Choose a workspace to continue.")}<div class="workspace-list">${data.memberships.map((m) => `<button class="workspace-option" data-action="workspace" data-id="${esc(m.id)}"><span class="role-icon">${icon(m.role === "OWNER" ? "building" : "home")}</span><span><strong>${esc(m.property.name)}</strong><small>${esc(m.role === "RESIDENT" ? "Resident" : m.role === "STAFF" ? "Staff" : "Property owner")}</small></span>${icon("arrow")}</button>`).join("") || notice("You haven’t joined a property yet. Create your PG or join with a PG code.")}</div>${primary("Set up or join a PG", { route: "chooseRole", glyph: "plus" })}${button("Join with a PG code", { route: "joinWorkspace", kind: "secondary block" })}${button("Staff invitation",{route:"staffInvitation",kind:"text-button block"})}${button("Change password",{route:"password",kind:"secondary block"})}${button("Sign out", { action: "logout", kind: "text-button" })}`,
-      "chooseRole",
+      `${intro("WELCOME BACK", data.account.fullName ? `Hello, ${data.account.fullName.split(" ")[0]}.` : "Your PG, connected.", "Choose a workspace to continue.")}<div class="workspace-list">${data.memberships.map((m) => `<button class="workspace-option" data-action="workspace" data-id="${esc(m.id)}"><span class="role-icon">${icon(m.role === "OWNER" ? "building" : "home")}</span><span><strong>${esc(m.property.name)}</strong><small>${esc(m.role === "RESIDENT" ? "Resident" : m.role === "STAFF" ? "Staff" : "Property owner")}</small></span>${icon("arrow")}</button>`).join("") || notice("You haven’t joined a property yet. Create your PG or join with a PG code.")}</div>${owns?primary("Add another property",{route:"setupProperty",glyph:"plus"}):primary("Join with a PG code",{route:"joinWorkspace",glyph:"plus"})}${owns?"":button("My PG requests",{route:"joinStatus",kind:"secondary block"})}${owns?"":button("Staff invitation",{route:"staffInvitation",kind:"text-button block"})}${button("Change password",{route:"password",kind:"secondary block"})}${button("Sign out", { action: "logout", kind: "text-button" })}`,
+      ctx.canGoBack?"profile":false,
     ),
     action(name, el) {
       if (name === "workspace") return ctx.selectWorkspace(el.dataset.id);
@@ -146,7 +148,8 @@ export async function workspacesScreen(ctx) {
   };
 }
 export function joinWorkspaceScreen(ctx) {
- return {...page("Join your PG",`<div class="join-art"><img src="illustration-royal-residence.webp" alt=""></div>${intro("","Join your PG","Enter the code shared by your owner.")}${form("joinCode",field("code","PG code",{required:true,placeholder:"ABCD-EFGH-JKLM",attrs:'minlength="12" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false"'}),"Join PG")}${button("Your workspaces",{route:"workspaces",kind:"text-button block"})}`,"workspaces"),async submit(name,el){if(name!=="joinCode")return;const result=await ctx.api("/api/platform/join",{method:"POST",body:{code:formValues(el).code.trim()}});ctx.markSaved();await ctx.acceptPlatform(result.tokens,"studentHome");}};
+ const account=ctx.snapshot.platform.account;
+ return {...page("Request to join",`${intro("","Request to join a PG","Enter the code shared by your owner.")}${form("joinCode",field("code","PG code",{required:true,placeholder:"ABCD-EFGH-JKLM",attrs:'minlength="12" maxlength="20" autocomplete="off" autocapitalize="characters" spellcheck="false"'})+field("fullName","Full name",{required:true,value:account.fullName||"",attrs:'minlength="2" maxlength="100" autocomplete="name"'})+field("mobile","Mobile number",{required:true,value:account.contactPhone||"",type:"tel",attrs:'inputmode="tel" autocomplete="tel" maxlength="20"'}),"Send join request")}${button("My PG requests",{route:"joinStatus",kind:"text-button block"})}`,"workspaces"),async submit(name,el){if(name!=="joinCode")return;const v=formValues(el),mobile=paymentContact(v.mobile);if(!mobile)throw new Error("Enter a valid Indian mobile number.");const result=await ctx.api("/api/platform/join",{method:"POST",body:{code:v.code.trim(),fullName:v.fullName.trim(),mobile}});ctx.markSaved();if(result.tokens)await ctx.acceptPlatform(result.tokens,"studentHome");else {await ctx.refreshPlatform();return ctx.navigate("joinStatus",{},{replace:true});}}};
 }
 export function staffInvitationScreen(ctx) {
   const confirmed=ctx.snapshot.platform.account.emailVerified;
@@ -195,7 +198,7 @@ export async function subscriptionScreen(ctx) {
  const payForm=`<form data-form="planPay" novalidate><fieldset data-plan-controls><div class="form-error" role="alert"></div>${field("paymentContact","Mobile number for payment",{type:"tel",required:true,value:paymentContact(account.contactPhone)||"",placeholder:"10-digit mobile number",attrs:'inputmode="tel" autocomplete="tel" maxlength="20"'})}${primary(active?`Renew ${price} with UPI`:`Pay ${price} with UPI`,{type:"submit",glyph:"arrow"})}</fieldset></form>`;
  const check=()=>ctx.navigate("planVerification",{},{replace:true,force:true});
  const paint=()=>{const status=document.querySelector("[data-plan-checkout-status]");if(status)status.textContent=planCheckout.message;const controls=document.querySelector("[data-plan-controls]");if(controls)controls.disabled=planCheckout.busy;};
- return {...page(active?"Your PGOne plan":"Activate your PG",`${intro("",active?"Your PGOne plan":"Activate your owner account","")}<div class="plan-illustration"><img src="illustration-royal-residence.webp" alt=""></div><div class="royal-plan">${active?badge("Active","green"):""}<span class="plan-name">Owner plan</span><div class="plan-price">${esc(price)}<small>/ month</small></div><p>One calendar month · no automatic debit</p>${data.accessEnd?`<p>Access until ${date(data.accessEnd)}</p>`:""}</div>${active?primary("Enter dashboard",{route:"ownerHome",glyph:"arrow"}):""}${canPay?(active?`<details class="disclosure"><summary>Renew for another month</summary>${payForm}</details>`:payForm):notice(pendingPriceReview?`Your earlier ${money(data.pendingOrder.amountPaise)} payment needs confirmation before a new ${price} payment. Check its status before paying again.`:"In-app payment is unavailable. Your existing access and records are preserved.")}<p data-plan-checkout-status role="status" aria-live="polite"></p>${planCheckout.orderId?button("Check payment status",{action:"subscriptionRefresh",kind:"secondary block"}):""}<details class="disclosure"><summary>Plan and receipts</summary><p>Rooms, residents and rent management. ${esc(price)} total; GST is not charged. Renew manually each month.</p><p>Rent is paid separately to your PG owner. Verify bank credit before confirming direct rent payments.</p>${data.subscription?.payments?.map(p=>card(`<strong>₹${(p.amountPaise/100).toFixed(2)}</strong><p>${date(p.paidAt)} · ${esc(p.receiptNumber)}</p>${button("Download receipt",{action:"planReceipt",kind:"text-button",attrs:`data-id="${esc(p.id)}" data-number="${esc(p.receiptNumber)}"`})}`)).join("")||""}</details>`,"workspaces"),
+ return {...page(active?"Your PGOne plan":"Activate your PG",`${intro("",active?"Your PGOne plan":"Activate your owner account","")}<div class="royal-plan refined-plan">${active?badge("Active","green"):""}<span class="plan-name">Owner plan</span><div class="plan-price">${esc(price)}<small>/ month</small></div><p>One calendar month · no automatic debit</p>${data.accessEnd?`<p>Access until ${date(data.accessEnd)}</p>`:""}</div>${active?primary("Enter dashboard",{route:"ownerHome",glyph:"arrow"}):""}${canPay?(active?`<details class="disclosure"><summary>Renew for another month</summary>${payForm}</details>`:payForm):notice(pendingPriceReview?`Your earlier ${money(data.pendingOrder.amountPaise)} payment needs confirmation before a new ${price} payment. Check its status before paying again.`:"In-app payment is unavailable. Your existing access and records are preserved.")}<p data-plan-checkout-status role="status" aria-live="polite"></p>${planCheckout.orderId?button("Check payment status",{action:"subscriptionRefresh",kind:"secondary block"}):""}<details class="disclosure"><summary>Plan and receipts</summary><p>Rooms, residents and rent management. ${esc(price)} total; GST is not charged. Renew manually each month.</p><p>Rent is paid separately to your PG owner. Verify bank credit before confirming direct rent payments.</p>${data.subscription?.payments?.map(p=>card(`<strong>₹${(p.amountPaise/100).toFixed(2)}</strong><p>${date(p.paidAt)} · ${esc(p.receiptNumber)}</p>${button("Download receipt",{action:"planReceipt",kind:"text-button",attrs:`data-id="${esc(p.id)}" data-number="${esc(p.receiptNumber)}"`})}`)).join("")||""}</details>`,"workspaces"),
  onPlanResult:paint,mount:paint,
  async action(name,el){if(name==="subscriptionRefresh")return check();if(name==="planReceipt")return ctx.downloadAccountReceipt(`/api/platform/organisations/${org.id}/plan/receipts/${el.dataset.id}.pdf`,el.dataset.number);},
  async submit(name,el){
@@ -227,27 +230,12 @@ export async function invitationsScreen(ctx) {
   const { members = [] } = await ctx.api(
     `/api/platform/organisations/${org.id}/members`,
   );
-  const { students = [] } = await ctx.api(
-    `/api/owner/students?${ctx.periodQuery}`,
-  );
   return {
     ...page(
       "Invite your people",
-      `${intro("BETTER TOGETHER", "The right people. The right access.", "Invite a resident or staff member to your PG.")}${form("createInvitation", `<label class="field"><span class="field-label">Invite as</span><select name="role"><option value="STAFF">Staff · occupancy access</option><option value="RESIDENT">Resident · their own records</option></select></label>${field("email", "Invitation email", { required: true, type:"email", attrs: 'autocomplete="email" maxlength="254"' })}<div data-invited-resident hidden>${field("studentId", "Resident", { options: [["", "Choose a resident"], ...students.filter((s) => s.status === "ACTIVE").map((s) => [s.id, `${s.name} / ${s.mobile}`])], help: "Add residents in Resident Management before inviting them." })}</div>`, "Create invitation")}<div data-invitation-result aria-live="polite"></div><h2 class="royal-section-title">Recent invitations</h2>${list.invitations.map((i) => `<div class="invitation-row"><span><strong>${esc(i.role)}</strong><small>${esc(i.email || "Retired phone invitation — issue a new email invitation")}</small></span>${badge(i.status)}${i.status === "REQUESTED" ? button("Review access request",{action:"approveInvitation",kind:"secondary",attrs:`data-id="${esc(i.id)}" data-account="${esc(i.requestedAccountId)}" data-email="${esc(i.email)}"`}) : ""}${["PENDING","REQUESTED"].includes(i.status) ? button("Revoke", { action: "revoke", kind: "text-button", attrs: `data-id="${esc(i.id)}"` }) : ""}</div>`).join("") || '<p class="legal-copy">Your invitations will appear here.</p>'}<h2 class="royal-section-title">People with access</h2>${members.map((m) => `<div class="invitation-row"><span><strong>${esc(m.fullName || m.role)}</strong><small>${esc(m.role)} / ${esc(m.propertyName)}</small></span>${button("Remove access", { action: "revokeMember", kind: "text-button", attrs: `data-id="${esc(m.id)}"` })}</div>`).join("") || '<p class="legal-copy">No resident or staff memberships yet.</p>'}`,
+      `${intro("BETTER TOGETHER", "The right people. The right access.", "Invite staff with occupancy access. Residents join through PG requests.")}${form("createInvitation",field("email", "Staff email", { required: true, type:"email", attrs: 'autocomplete="email" maxlength="254"' }),"Invite staff")}<div data-invitation-result aria-live="polite"></div><h2 class="royal-section-title">Recent invitations</h2>${list.invitations.map((i) => `<div class="invitation-row"><span><strong>${esc(i.role)}</strong><small>${esc(i.email || "Retired phone invitation — issue a new email invitation")}</small></span>${badge(i.status)}${i.status === "REQUESTED" ? button("Review access request",{action:"approveInvitation",kind:"secondary",attrs:`data-id="${esc(i.id)}" data-account="${esc(i.requestedAccountId)}" data-email="${esc(i.email)}"`}) : ""}${["PENDING","REQUESTED"].includes(i.status) ? button("Revoke", { action: "revoke", kind: "text-button", attrs: `data-id="${esc(i.id)}"` }) : ""}</div>`).join("") || '<p class="legal-copy">Your invitations will appear here.</p>'}<h2 class="royal-section-title">People with access</h2>${members.map((m) => `<div class="invitation-row"><span><strong>${esc(m.fullName || m.role)}</strong><small>${esc(m.role)} / ${esc(m.propertyName)}</small></span>${button("Remove access", { action: "revokeMember", kind: "text-button", attrs: `data-id="${esc(m.id)}"` })}</div>`).join("") || '<p class="legal-copy">No resident or staff memberships yet.</p>'}`,
       "profile",
     ),
-    change(name, el, form) {
-      if (name === "role") {
-        const group = form.querySelector("[data-invited-resident]");
-        group.hidden = el.value !== "RESIDENT";
-        form.elements.studentId.required = el.value === "RESIDENT";
-      }
-      if (name === "studentId") {
-        const student = students.find((s) => s.id === el.value);
-        if (student)
-          form.elements.email.value = student.email || "";
-      }
-    },
     async submit(_name, el) {
       const v = formValues(el);
       const result = await ctx.api("/api/platform/invitations", {
@@ -255,10 +243,9 @@ export async function invitationsScreen(ctx) {
         body: {
           organisationId: org.id,
           propertyId: ctx.snapshot.property.id,
-          role: v.role,
+          role: "STAFF",
           email: v.email.trim().toLowerCase(),
-          ...(v.studentId ? { studentId: v.studentId } : {}),
-          permissions: v.role === "STAFF" ? ["OCCUPANCY_READ"] : [],
+          permissions: ["OCCUPANCY_READ"],
         },
       });
       ctx.markSaved();

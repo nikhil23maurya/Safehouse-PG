@@ -78,6 +78,14 @@ final class BrandSplash extends View {
         paint.setColor(Color.rgb(120,140,176));paint.setTextAlign(Paint.Align.CENTER);
         canvas.drawText("Manage · Stay · Pay",centerX,y+29f*density,paint);
         paint.setAlpha(255);
-        if (progress < 1f) postInvalidateOnAnimation();
+        long duration=reducedMotion?1200:900,now=android.os.SystemClock.uptimeMillis();
+        for(int i=0;i<3;i++){
+            float phase=((now-i*120)%duration+duration)%duration/(float)duration;
+            float wave=phase<.65f?(float)Math.pow(Math.sin(Math.PI*phase/.65f),2):0;
+            paint.setColor(Color.rgb(32,86,239));paint.setAlpha((int)(90+165*wave));
+            canvas.drawCircle(centerX+(i-1)*13*density,y+65*density-(reducedMotion?0:4*density*wave),3*density,paint);
+        }
+        paint.setAlpha(255);
+        if(isAttachedToWindow()&&getWindowVisibility()==VISIBLE)postInvalidateOnAnimation();
     }
 }

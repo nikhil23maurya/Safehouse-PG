@@ -18,32 +18,21 @@ app.use((e:any,_req:any,res:any,_next:any)=>res.status(e.statusCode||500).json({
 const server=app.listen(0,"127.0.0.1");await new Promise<void>(r=>server.on("listening",r));const base=`http://127.0.0.1:${(server.address() as any).port}`;
 after(async()=>{server.close();await prisma.$disconnect();});
 async function owner(){const a=await account();await saveProfile(a.id,{fullName:"Join test owner",intent:"OWNER"});const setup=await createProperty(a.id,{name:"Join fixture PG",city:"Pune",key:crypto.randomUUID()});return {a,setup};}
-test("shared PG joining is immediate, concurrent-idempotent, unassigned and privacy preserving",async()=>{
+test("PG code requests are concurrent-idempotent, approval gated and privacy preserving",async()=>{
  const {a,setup}=await owner();await assert.rejects(()=>manageJoinCode(a.id,setup.propertyId,"ENSURE"),{code:"SUBSCRIPTION_REQUIRED"});
- // Explicit synthetic grandfathered entitlement; no provider payment is claimed.
  await prisma.pgOrganisation.update({where:{id:setup.organisationId},data:{legacyAccess:true}});
- const first=await manageJoinCode(a.id,setup.propertyId,"ENSURE");assert.ok(first.code);assert.equal((await manageJoinCode(a.id,setup.propertyId,"ENSURE")).code,first.code);
- const resident=await account(),other=await account();
- const [m,duplicate]=await Promise.all([joinProperty(resident.id,first.code!),joinProperty(resident.id,first.code!)]);
- assert.equal(m.id,duplicate.id);assert.equal(m.status,"ACTIVE");assert.equal(m.actorUserId,null);assert.deepEqual(m.permissions,[]);
- assert.equal((await joinProperty(other.id,first.code!)).propertyId,setup.propertyId);
- const tokens=await membershipTokens(resident.id,m.id);
- const session=await fetch(`${base}/api/platform/session`,{headers:{authorization:`Bearer ${tokens.accessToken}`}});assert.equal(session.status,200);
- const json:any=await session.json();assert.equal(json.student,null);assert.equal(json.journey.screen,"studentHome");assert.equal(json.user.role,"STUDENT");
- const probe=await fetch(`${base}/api/student/probe`,{headers:{authorization:`Bearer ${tokens.accessToken}`}});assert.equal(probe.status,403);
+ const first=await manageJoinCode(a.id,setup.propertyId,"ENSURE"),resident=await account(),other=await account(),profile={fullName:"Request Resident",mobile:"+919123456789"};
+ const [m,duplicate]=await Promise.all([joinProperty(resident.id,first.code!,profile),joinProperty(resident.id,first.code!,profile)]);
+ assert.equal(m.request!.id,duplicate.request!.id);assert.equal(m.request!.status,"PENDING");assert.equal(await prisma.pgMembership.count({where:{accountId:resident.id}}),0);
  await assert.rejects(()=>propertyJoinCode(other.id,setup.propertyId),{code:"FORBIDDEN"});
  const rotated=await manageJoinCode(a.id,setup.propertyId,"ROTATE");assert.notEqual(rotated.code,first.code);assert.equal(rotated.revision,2);
- const outsider=await account();await assert.rejects(()=>joinProperty(outsider.id,first.code!),{code:"PG_CODE_UNAVAILABLE"});
- assert.equal((await joinProperty(resident.id,rotated.code!)).id,m.id);
- await manageJoinCode(a.id,setup.propertyId,"DISABLE");await assert.rejects(()=>joinProperty(other.id,rotated.code!),{code:"PG_CODE_UNAVAILABLE"});
- assert.equal((await prisma.pgMembership.findUniqueOrThrow({where:{id:m.id}})).status,"ACTIVE");
- const fresh=await manageJoinCode(a.id,setup.propertyId,"ROTATE");await prisma.pgMembership.update({where:{id:m.id},data:{status:"REVOKED"}});
- await assert.rejects(()=>joinProperty(resident.id,fresh.code!),{code:"MEMBERSHIP_DISABLED"});
- const audit=await prisma.pgAudit.findMany({where:{entityId:m.id}});assert.equal(audit.filter(a=>a.action==="PROPERTY_CODE_JOINED").length,1);assert.ok(!JSON.stringify(audit).includes(first.code!));
+ await assert.rejects(()=>joinProperty(other.id,first.code!,profile),{code:"PG_CODE_UNAVAILABLE"});assert.equal((await joinProperty(resident.id,rotated.code!,profile)).request!.id,m.request!.id);
+ await manageJoinCode(a.id,setup.propertyId,"DISABLE");await assert.rejects(()=>joinProperty(other.id,rotated.code!,profile),{code:"PG_CODE_UNAVAILABLE"});
+ const audit=await prisma.pgAudit.findMany({where:{entityId:m.request!.id}});assert.equal(audit.filter(a=>a.action==="RESIDENT_REQUEST_SUBMITTED").length,1);assert.ok(!JSON.stringify(audit).includes(first.code!));
 });
 test("record assignment requires owner password, identity confirmation and exact property; no email matching",async()=>{
  const {a,setup}=await owner();await prisma.pgOrganisation.update({where:{id:setup.organisationId},data:{legacyAccess:true}});
- const code=await manageJoinCode(a.id,setup.propertyId,"ENSURE"),r=await account(),m=await joinProperty(r.id,code.code!);
+ const code=await manageJoinCode(a.id,setup.propertyId,"ENSURE"),r=await account(),m=await prisma.pgMembership.create({data:{accountId:r.id,propertyId:setup.propertyId,organisationId:setup.organisationId,role:"RESIDENT"}});
  const foreign=await owner();const actor=await prisma.user.create({data:{role:"STUDENT",fullName:"Unrelated tenant"}});
  const record=await prisma.student.create({data:{propertyId:setup.propertyId,userId:actor.id,mobile:"9876543210",joiningDate:new Date(),monthlyRentPaise:850099}});
  await assert.rejects(()=>linkResidentRecord(a.id,setup.propertyId,{membershipId:m.id,studentId:record.id,password:"wrong",identityChecked:true}),{code:"IDENTITY_CONFIRMATION_REQUIRED"});
@@ -53,7 +42,7 @@ test("record assignment requires owner password, identity confirmation and exact
  await linkResidentRecord(a.id,setup.propertyId,{membershipId:m.id,studentId:record.id,password,identityChecked:true});
  await linkResidentRecord(a.id,setup.propertyId,{membershipId:m.id,studentId:record.id,password,identityChecked:true});
  assert.equal(await prisma.pgAudit.count({where:{entityId:m.id,action:"RESIDENT_RECORD_ASSIGNED"}}),1);
- const second=await joinProperty((await account()).id,code.code!);
+ const second=await prisma.pgMembership.create({data:{accountId:(await account()).id,propertyId:setup.propertyId,organisationId:setup.organisationId,role:"RESIDENT"}});
  await assert.rejects(()=>linkResidentRecord(a.id,setup.propertyId,{membershipId:second.id,studentId:record.id,password,identityChecked:true}),{code:"RESIDENCY_ALREADY_LINKED"});
  assert.equal((await prisma.student.findUniqueOrThrow({where:{id:record.id}})).monthlyRentPaise,850099);
 });

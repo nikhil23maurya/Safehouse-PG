@@ -36,8 +36,8 @@ for (const [width, height] of [
     const ownerScreens = [
       ["residents", {}, "03-residents"],
       ["resident", { id: "resident1" }, "04-resident"],
-      ["residentForm", {}, "05-add-resident"],
-      ["residentForm", { id: "resident1" }, "06-edit-resident"],
+      ["residentRequests", {}, "05-resident-requests"],
+      ["residentEdit", { id: "resident1" }, "06-edit-resident"],
       ["rooms", {}, "08-rooms"],
       ["room", { id: "room1" }, "09-room"],
       ["roomForm", {}, "10-add-room"],

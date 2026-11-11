@@ -35,13 +35,14 @@ test('a recovered old-price order returned after review cannot open the UPI SDK'
  expect(await page.evaluate(()=>window.__lastPlanOptions)).toBeUndefined();
 });
 test('exactly two entry paths; resident joins immediately without legacy financial access',async({page})=>{
- await platform(page);await go(page,'welcome');
+ const requestFixture=await platform(page);await go(page,'welcome');
  await expect(page.locator('[data-action=entry]')).toHaveCount(2);
  await page.locator('[data-action=entry][data-role=RESIDENT]').click();
  await expect(page.getByRole('heading',{name:'Create resident account'})).toBeVisible();await signup(page);
  await expect(page).toHaveURL(/#joinWorkspace$/);await expect(page.locator('[data-role]')).toHaveCount(0);
  const financial=[];page.on('request',r=>{if(r.url().includes('/api/student/'))financial.push(r.url());});
- await page.getByLabel('PG code',{exact:true}).fill('ABCD-EFGH-JKLM');await page.getByRole('button',{name:'Join PG',exact:true}).click();
+ await page.getByLabel('PG code',{exact:true}).fill('ABCD-EFGH-JKLM');await page.getByLabel('Full name',{exact:true}).fill('Resident Applicant');await page.getByLabel('Mobile number',{exact:true}).fill('9999999999');await page.getByRole('button',{name:'Send join request',exact:true}).click();
+ await expect(page).toHaveURL(/#joinStatus$/);await expect(page.getByText('Pending review',{exact:true})).toBeVisible();requestFixture.approveRequest();await page.getByRole('button',{name:'Refresh status'}).click();await page.getByRole('button',{name:'Open my PG'}).click();
  await expect(page).toHaveURL(/#studentHome$/);await expect(page.getByRole('heading',{name:'Your room is on its way'})).toBeVisible();
  await expect(page.getByRole('button',{name:'Pay rent',exact:true})).toBeDisabled();
  await expect(page.getByText('Rent due',{exact:true})).toBeVisible();await expect(page.locator('.empty-amount')).toHaveText('—');
@@ -86,7 +87,7 @@ test('button loading keeps geometry and uses three circular reduced-motion dots'
  const button=page.getByRole('button',{name:'Sign in',exact:true}),before=await button.boundingBox();await button.click();
  const loading=page.locator('[aria-busy=true]');await expect(loading).toBeVisible();const after=await loading.boundingBox();expect(after.width).toBe(before.width);expect(after.height).toBe(before.height);
  const dots=await loading.locator('.loading-dots i').evaluateAll(nodes=>nodes.map(n=>{const s=getComputedStyle(n);return {width:s.width,height:s.height,round:s.borderRadius,animation:s.animationName};}));
- expect(dots).toHaveLength(3);for(const d of dots){expect(d.width).toBe(d.height);expect(d.round).toBe('50%');expect(d.animation).toBe('none');}
+ expect(dots).toHaveLength(3);for(const d of dots){expect(d.width).toBe(d.height);expect(d.round).toBe('50%');expect(d.animation).toBe('dot-pulse');}
  release();await expect(page.locator('[aria-busy=true]')).toHaveCount(0);await expect(button).toBeEnabled();
 });
 test('owner UPI password rejection preserves the form and saved details survive restart',async({page})=>{

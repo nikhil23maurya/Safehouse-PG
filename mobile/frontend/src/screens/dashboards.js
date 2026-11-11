@@ -56,7 +56,7 @@ export async function ownerHomeScreen(ctx) {
         : "") +
       section(
         "Get things done",
-        `<div class="quick-actions">${quick("residentForm", "users", "Add resident")}${quick("roomForm", "plus", "Add room")}${quick("dues", "invoice", "View dues")}${quick(ctx.snapshot.platform ? "pgCode" : "dues", ctx.snapshot.platform ? "building" : "wallet", ctx.snapshot.platform ? "Share PG code" : "Record payment", ctx.snapshot.platform ? {} : { recording: true })}</div>`,
+        `<div class="quick-actions">${quick("residentRequests", "users", "Resident requests")}${quick("roomForm", "plus", "Add room")}${quick("dues", "invoice", "View dues")}${quick(ctx.snapshot.platform ? "pgCode" : "dues", ctx.snapshot.platform ? "building" : "wallet", ctx.snapshot.platform ? "Share PG code" : "Record payment", ctx.snapshot.platform ? {} : { recording: true })}</div>`,
       ) +
       metrics([
         [rooms?.length, "Rooms"],

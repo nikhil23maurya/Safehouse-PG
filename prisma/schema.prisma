@@ -4,6 +4,31 @@ generator client {
   moduleFormat = "esm"
 }
 
+model PgResidentRequest {
+  id String @id @default(cuid())
+  accountId String
+  organisationId String
+  propertyId String
+  fullName String
+  mobile String?
+  status String @default("PENDING")
+  membershipId String? @unique
+  studentId String? @unique
+  setupHash String?
+  decidedAt DateTime?
+  activatedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  account PgAccount @relation(fields:[accountId],references:[id],onDelete:Restrict)
+  organisation PgOrganisation @relation(fields:[organisationId],references:[id],onDelete:Restrict)
+  property Property @relation(fields:[propertyId],references:[id],onDelete:Restrict)
+  membership PgMembership? @relation(fields:[membershipId],references:[id],onDelete:Restrict)
+  student Student? @relation(fields:[studentId],references:[id],onDelete:Restrict)
+  @@unique([accountId,propertyId])
+  @@index([propertyId,status,createdAt])
+  @@index([organisationId,status])
+}
+
 datasource db {
   provider = "postgresql"
 }
@@ -75,6 +100,7 @@ model User {
 }
 
 model Property {
+  residentRequests PgResidentRequest[]
   joinCode PgJoinCode?
   ownerUpi PgOwnerUpi?
   directRentClaims PgDirectRentClaim[]
@@ -104,6 +130,7 @@ model Property {
 // PGOne platform expansion: new identities/memberships supplement legacy actors.
 // Existing financial tables, identifiers and values are retained.
 model PgAccount {
+  residentRequests PgResidentRequest[]
   joinCodeAttempts PgJoinCodeAttempt?
   createdJoinCodes PgJoinCode[] @relation("JoinCodeCreator")
   ownerUpi PgOwnerUpi[]
@@ -132,6 +159,7 @@ model PgAccount {
 }
 
 model PgOrganisation {
+  residentRequests PgResidentRequest[]
   joinCodes PgJoinCode[]
   id String @id @default(cuid())
   ownerAccountId String
@@ -165,6 +193,7 @@ model PgPropertySetup {
 }
 
 model PgMembership {
+  residentRequest PgResidentRequest?
   id String @id @default(cuid())
   accountId String
   organisationId String
@@ -543,6 +572,7 @@ model Room {
 }
 
 model Student {
+  residentRequest PgResidentRequest?
   directRentClaims PgDirectRentClaim[]
   id                   String        @id @default(cuid())
   propertyId           String

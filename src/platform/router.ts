@@ -1,3 +1,4 @@
+import {residentRequestRouter} from "./resident-request-router.js";
 import {planStatusRouter} from "./plan-status-router.js";
 import {ownerPaymentsRouter} from "./owner-payments/router.js";
 import {ownerPaymentConfig} from "./owner-payments/config.js";
@@ -172,6 +173,7 @@ platformRouter.use("/auth",emailAuthRouter);
 platformRouter.use("/rent",directRentRouter);
 platformRouter.use("/owner-payments",ownerPaymentsRouter);
 platformRouter.use(joinCodeRouter);
+platformRouter.use(residentRequestRouter);
 platformRouter.use(planStatusRouter);
 platformRouter.post("/refresh",limited,async(req,res)=>{
   const {refreshToken} = z.object({refreshToken:z.string().max(8192)}).parse(req.body);

@@ -40,7 +40,7 @@ export async function residentsScreen(ctx) {
         ctx.snapshot.property?.name,
         "Residents",
         `${data.students.length} resident${data.students.length === 1 ? "" : "s"} shown`,
-        button("Add", { route: "residentForm", glyph: "plus" }),
+        button("Requests", { route: "residentRequests", glyph: "users" }),
       ) +
       periodControl(ctx.snapshot.period) +
       search(q) +
@@ -54,7 +54,7 @@ export async function residentsScreen(ctx) {
         ],
         status,
       ) +
-      `<div class="list">${data.students.length ? data.students.map(residentRow).join("") : empty(q ? "No matching residents" : "Make room for your first resident", q ? "Try a name, room or mobile number." : "Keep their room, rent and account details together.", { glyph: "users", action: button("Add resident", { route: "residentForm", glyph: "plus" }) })}</div>`,
+      `<div class="list">${data.students.length ? data.students.map(residentRow).join("") : empty(q ? "No matching residents" : "Make room for your first resident", q ? "Try a name, room or mobile number." : "Keep their room, rent and account details together.", { glyph: "users", action: button("Review requests", { route: "residentRequests", glyph: "users" }) })}</div>`,
     submit(name, form) {
       if (name === "search")
         return ctx.navigate(
@@ -101,7 +101,7 @@ export async function residentScreen(ctx) {
     content:
       `<div class="resident-profile">${avatar(s.name, true)}<div><h1>${esc(s.name)}</h1><p>${esc(s.room?.number ? `Room ${s.room.number}${s.bedLabel ? ` · ${s.bedLabel}` : ""}` : "Room unassigned")}</p>${badge(s.status === "ACTIVE" ? "Active resident" : s.status === "MOVED_OUT" ? "Moved out" : "Inactive", s.status === "ACTIVE" ? "blue" : "neutral")}</div></div>` +
       button("Edit resident", {
-        route: "residentForm",
+        route: "residentEdit",
         params: { id: s.id },
         kind: "secondary block",
         glyph: "edit",
@@ -156,17 +156,13 @@ export async function residentScreen(ctx) {
         "Payment history",
         `<div class="list">${payments.length ? payments.map((p) => paymentRow(p, false, ctx.snapshot.property?.timezone)).join("") : empty("No payments yet", "Confirmed payments and their receipts will appear here.", { glyph: "wallet" })}</div>`,
       ) +
-      section(
-        "Account access",
-        card(
-          `<p class="subtitle">Residents manage their own email and password. Share a private invitation to connect their account.</p>${button("Invite resident", { route: "invitations", params: { id: s.id }, kind: "secondary block", glyph: "key" })}`,
-        ),
-      ),
+      section("Account access",card(`<p class="subtitle">Residents request access with your PG code. Review their request before linking room and rent.</p>${button("Resident requests",{route:"residentRequests",kind:"secondary block",glyph:"users"})}`)),
   };
 }
 
 export async function residentFormScreen(ctx) {
   const id = ctx.params.id;
+  if(!id)return ctx.navigate("residentRequests",{},{replace:true,force:true});
   const [roomData, residentData] = await Promise.all([
     ctx.read("/api/owner/rooms"),
     id
@@ -184,32 +180,19 @@ export async function residentFormScreen(ctx) {
       r.full && r.id !== s?.room?.id,
     ]),
   ];
-  const today = new Intl.DateTimeFormat("en-CA", {
-    timeZone: ctx.snapshot.property?.timezone || "Asia/Kolkata",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).format(new Date());
-  const sectionD = id
-    ? field("status", "Resident status", {
-        value: s.status,
-        options: [
-          ["ACTIVE", "Active"],
-          ["INACTIVE", "Inactive — account disabled"],
-          ["MOVED_OUT", "Moved out — account disabled"],
-        ],
-        help: "Inactive and moved-out residents lose account access. Existing invoices remain unchanged.",
-      })
-    : notice("The resident creates their own email/password account. Send a private invitation after saving their record.");
+  const sectionD=field("status", "Resident status", {
+    value:s.status,options:[["ACTIVE","Active"],["INACTIVE","Inactive — account disabled"],["MOVED_OUT","Moved out — account disabled"]],
+    help:"Inactive and moved-out residents lose account access. Existing invoices remain unchanged."
+  });
   return {
-    title: id ? "Edit resident" : "Add resident",
+    title: "Room and rent",
     back: true,
     nav: false,
     guardForm: true,
     content:
       heading(
         ctx.snapshot.property?.name,
-        id ? "Edit resident" : "Add resident",
+        "Room and rent",
         id ? s.name : "",
       ) +
       `<nav class="form-steps" aria-label="Form sections">${[
@@ -235,8 +218,7 @@ export async function residentFormScreen(ctx) {
           attrs:
             'autocomplete="name" minlength="2" maxlength="100" enterkeyhint="next"',
         }) +
-          field("email", "Email address", {
-            required: true,
+          field("email", "Email address (optional)", {
             type: "email",
             value: s?.email || "",
             attrs:
@@ -265,13 +247,7 @@ export async function residentFormScreen(ctx) {
             placeholder: "e.g. B1",
             attrs: 'maxlength="30"',
           }) +
-          (id
-            ? `<dl>${detail("Joined", date(s.joiningDate, "UTC"))}</dl>`
-            : field("joiningDate", "Joining date", {
-                type: "date",
-                required: true,
-                value: today,
-              })),
+          `<dl>${detail("Joined", date(s.joiningDate, "UTC"))}</dl>`,
       ) +
       formSection(
         "03",
@@ -289,8 +265,8 @@ export async function residentFormScreen(ctx) {
       ) +
       formSection(
         "04",
-        id ? "Account & status" : "Account setup",
-        id ? "Control access with care." : "Give your resident a secure start.",
+        "Account & status",
+        "Control access with care.",
         sectionD +
           field("notes", "Notes", {
             type: "textarea",
@@ -300,7 +276,7 @@ export async function residentFormScreen(ctx) {
           }),
       ) +
       submitBar(
-        id ? "Save changes" : "Add resident",
+        id ? "Save changes" : "Save changes",
         "Required fields are marked *",
       ) +
       "</form>",
@@ -317,7 +293,7 @@ export async function residentFormScreen(ctx) {
       const v = formValues(form);
       const body = {
         fullName: v.fullName.trim(),
-        email: v.email.trim(),
+        ...(v.email.trim()?{email:v.email.trim()}:{}),
         mobile: v.mobile.trim(),
         roomId: v.roomId || null,
         bedLabel: v.bedLabel.trim() || null,
@@ -325,9 +301,7 @@ export async function residentFormScreen(ctx) {
         securityDeposit: parseRupees(v.securityDeposit),
         rentDueDay: Number(v.rentDueDay),
         notes: v.notes.trim() || null,
-        ...(id
-          ? { status: v.status }
-          : { joiningDate: v.joiningDate }),
+        status:v.status,
       };
       if (id && body.status !== s.status && body.status !== "ACTIVE") {
         if (
@@ -344,8 +318,8 @@ export async function residentFormScreen(ctx) {
           return;
       }
       const data = await ctx.api(
-        `/api/owner/students${id ? `/${encodeURIComponent(id)}` : ""}?${ctx.periodQuery}`,
-        { method: id ? "PATCH" : "POST", body },
+        `/api/owner/students/${encodeURIComponent(id)}?${ctx.periodQuery}`,
+        { method: "PATCH", body },
       );
       ctx.invalidate();
       ctx.markSaved();
@@ -357,9 +331,7 @@ export async function residentFormScreen(ctx) {
           onlyConfirm: true,
         });
       ctx.toast(
-        id
-          ? "Resident updated."
-          : "Resident added. Share their temporary password securely.",
+        "Resident updated.",
       );
       return ctx.navigate(
         "resident",

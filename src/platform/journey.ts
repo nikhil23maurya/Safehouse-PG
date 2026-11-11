@@ -6,6 +6,7 @@ export async function journey(account:{id:string;fullName:string;setupIntent:str
   membership:{role:string;organisationId:string}|null) {
   if(account.passwordChangeRequired)return {state:"PASSWORD_CHANGE_REQUIRED",screen:"password"};
   if(membership?.role==="RESIDENT")return {state:"MEMBERSHIP_ACTIVE",screen:"studentHome"};
+  if(!membership&&await prisma.pgResidentRequest.findFirst({where:{accountId:account.id,status:{in:["PENDING","ACCEPTED","REJECTED"]}}}))return {state:"RESIDENT_REQUEST_REVIEW",screen:"joinStatus"};
   if(!account.fullName.trim())return {state:account.setupIntent?"PROFILE_REQUIRED":"ACCOUNT_CREATED",
     screen:account.setupIntent==="OWNER"?"setupProfile":account.setupIntent==="RESIDENT"?"joinWorkspace":"chooseRole"};
   if(!membership){const count=await prisma.pgMembership.count({where:{accountId:account.id,status:"ACTIVE"}});

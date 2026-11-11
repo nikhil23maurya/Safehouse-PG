@@ -135,6 +135,7 @@ export function createFixtures() {
     mustChangePassword: false,
     invalidSession: false,
     omitPayment: false,
+    requestStatus:"PENDING",
     requests: [],
   };
   const payment = {
@@ -210,6 +211,18 @@ export function createFixtures() {
       propertyId: headers["x-property-id"] || headers["X-Property-Id"],
       body: { ...body, password: undefined, tempPassword: undefined },
     });
+    if(path.includes('/resident-requests')){
+      const request={id:'request1',propertyId:'property1',propertyName:'Maple House',fullName:'Nisha Rao',email:'nisha@example.test',mobile:'+919876543219',status:control.requestStatus,createdAt:new Date().toISOString(),studentId:'resident1',membershipId:'resident-membership'};
+      if(method==='GET')return ok({requests:[request]});
+      if(body.password!=='FixturePass123!')return error(403,'PASSWORD_CONFIRMATION_FAILED','Your password did not match.');
+      if(path.endsWith('/decision')){control.requestStatus=body.decision;return ok({request:{...request,status:control.requestStatus}});}
+      if(path.endsWith('/rent')){
+        if(control.capacityRejected)return error(409,'ROOM_FULL','This room has no vacant beds.');
+        control.requestStatus='ACTIVE';return ok({ok:true,studentId:'resident1',membershipId:'resident-membership'});
+      }
+    }
+    if(path.endsWith('/joined-residents'))return ok({members:[],records:[]});
+    if(path.endsWith('/join-code'))return ok({code:'ABCD-EFGH-JKLM',enabled:true,revision:1});
     if (path === "/api/platform/auth/login") {
       const result=handler({url:"https://fixture.test/api/auth/login",method,body,headers});
       if(result.status===200)result.data={tokens:{...result.data.tokens,kind:"PLATFORM"}};

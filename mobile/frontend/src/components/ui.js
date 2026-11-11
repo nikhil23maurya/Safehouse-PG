@@ -1,4 +1,5 @@
 import { icon, brand } from "./icons.js";
+import {dots} from "./loading.js";
 import { money, invoiceStatus } from "../domain/finance.js";
 
 export const esc = (value) =>
@@ -126,14 +127,7 @@ export function filters(items, active, action = "filter") {
   return `<div class="filter-row" aria-label="Filter">${items.map(([value, label]) => `<button class="filter-chip${active === value ? " selected" : ""}" data-action="${action}" data-value="${esc(value)}" aria-pressed="${active === value}">${esc(label)}</button>`).join("")}</div>`;
 }
 export function skeleton(name = "dashboard") {
-  const rows = [
-    "residents",
-    "rooms",
-    "history",
-    "notifications",
-    "dues",
-  ].includes(name);
-  return `<div class="skeleton" role="status" aria-label="Loading ${esc(name)}"><span class="sr-only">Loading…</span><div class="sk sk-title"></div><div class="sk sk-caption"></div>${rows ? Array.from({ length: 6 }, () => '<div class="sk-row"><div class="sk sk-avatar"></div><div class="sk-text"><div class="sk sk-line"></div><div class="sk sk-line short"></div></div></div>').join("") : `<div class="sk sk-summary"></div><div class="sk-metrics">${'<div class="sk"></div>'.repeat(3)}</div>${'<div class="sk sk-panel"></div>'.repeat(name === "payment" ? 1 : 2)}`}</div>`;
+  return `<div class="screen-loading">${dots(`Loading ${name}`)}</div>`;
 }
 
 const ownerTabs = [

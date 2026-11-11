@@ -1,3 +1,5 @@
+import {backTarget} from "./core/navigation.js";
+import {residentRequestsScreen,residentRequestScreen,residentRentSetupScreen,joinStatusScreen} from "./screens/resident-requests.js";
 import {dots,busyButton} from "./components/motion.js";
 import {brand} from "./components/brand.js";
 import {planVerificationScreen,planSuccessScreen,verificationMarkup} from "./screens/plan-verification.js";
@@ -89,7 +91,11 @@ const routes = {
   planVerification:[planVerificationScreen,"PLATFORM"],
   planSuccess:[planSuccessScreen,"PLATFORM"],
   pgCode:[pgCodeScreen,"OWNER"],
-  joinedResidents:[joinedResidentsScreen,"OWNER"],
+  joinedResidents:[ctx=>ctx.navigate("residentRequests",{},{replace:true,force:true}),"OWNER"],
+  residentRequests:[residentRequestsScreen,"OWNER"],
+  residentRequest:[residentRequestScreen,"OWNER"],
+  residentRentSetup:[residentRentSetupScreen,"OWNER"],
+  joinStatus:[joinStatusScreen,"PLATFORM"],
   merchant: [merchantScreen, "PLATFORM"],
   merchantCollections: [ownerCollectionsScreen,"OWNER"],
   rentVerification: [rentVerificationScreen,"STUDENT"],
@@ -104,7 +110,8 @@ const routes = {
   ownerHome: [ownerHomeScreen, "OWNER"],
   residents: [residentsScreen, "OWNER"],
   resident: [residentScreen, "OWNER"],
-  residentForm: [residentFormScreen, "OWNER"],
+  residentEdit: [residentFormScreen, "OWNER"],
+  residentForm:[ctx=>ctx.navigate(ctx.params.id?"residentEdit":"residentRequests",ctx.params,{replace:true,force:true}),"OWNER"],
   rooms: [roomsScreen, "OWNER"],
   room: [roomScreen, "OWNER"],
   roomForm: [roomFormScreen, "OWNER"],
@@ -302,6 +309,8 @@ async function canLeave() {
 
 function guardedRoute(name) {
   if(name === "legal") return "legal";
+  const owns=state.platform?.memberships?.some(m=>m.role==="OWNER");
+  if(owns&&["chooseRole","joinWorkspace","staffInvitation","joinStatus"].includes(name))return "workspaces";
   if (!state.tokens || !state.user)
     return routes[name]?.[1] === null ? name : "welcome";
   if (routes[name]?.[1] === "PLATFORM") {
@@ -367,9 +376,11 @@ async function back() {
   }
   if (!(await canLeave())) return;
   dirty = false;
+  if(["planVerification","planSuccess","rentVerification","rentSuccess"].includes(state.route.name)){
+    const parent=backTarget(state);if(parent)return navigate(parent,{},{replace:true,force:true});
+  }
   if (depth > 0) history.back();
-  else if (state.tokens && state.route.name !== home())
-    await navigate(home(), {}, { replace: true, force: true });
+  else {const parent=backTarget(state);if(parent)await navigate(parent, {}, { replace: true, force: true });}
 }
 
 window.SafeHouseBack = () => {
@@ -378,7 +389,7 @@ window.SafeHouseBack = () => {
     dirty ||
     submittedForms ||
     depth > 0 ||
-    (state.tokens && state.route.name !== home())
+    backTarget(state)
   ) {
     void back();
     return true;
@@ -397,7 +408,8 @@ window.addEventListener("popstate", async (event) => {
   }
   dirty = false;
   const requested = event.state || {};
-  const name = guardedRoute(requested.name);
+  let name = guardedRoute(requested.name);
+  if(Number(requested.depth)<depth&&name===state.route.name&&name!==requested.name){const parent=backTarget(state);if(parent)name=guardedRoute(parent);}
   depth = Math.max(0, Number(requested.depth) || 0);
   state.route = {
     name,
@@ -450,6 +462,7 @@ async function acceptPlatform(tokens, target) {
   state.period = currentPeriod(state.property?.timezone);
   dirty = false;
   persist();
+  depth=0;
   await navigate(
     target || postAuthRoute(),
     {},
@@ -675,6 +688,7 @@ function makeContext(snapshot, key) {
   };
   return {
     snapshot,
+    canGoBack:depth>0||Boolean(backTarget(snapshot)),
     params: state.route.params,
     periodQuery: periodQuery(snapshot.period),
     api: scopedApi,
@@ -792,7 +806,7 @@ async function render() {
   }, 130);
   document.body.insertAdjacentHTML(
     "beforeend",
-    '<div class="page-progress" aria-hidden="true"></div>',
+    `<div class="page-progress">${dots("Loading page")}</div>`,
   );
   try {
     const next = await routes[state.route.name][0](ctx);
@@ -985,7 +999,10 @@ for (const name of ["input", "change"])
       const error = document.getElementById(`field-${el.name}-error`);
       if (error) error.textContent = "";
     }
-    screen?.[name]?.(el.name, el, form);
+    try {
+      const pending=screen?.[name]?.(el.name, el, form);
+      if(pending?.catch)void pending.catch(error=>toast(error.message,"error"));
+    } catch(error){toast(error.message,"error");}
   });
 document.addEventListener(
   "load",

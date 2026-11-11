@@ -50,6 +50,7 @@ export function createPlatformFixtures() {
       if (path.endsWith("/config"))
         return {
           enabled: true,
+          plan:{amountPaise:100,currency:"INR"},androidBilling:"NOT_CONFIGURED",
           authentication:"EMAIL_PASSWORD",phone:null,
           legal: {
             terms: "https://example.test/terms",
@@ -93,6 +94,7 @@ export function createPlatformFixtures() {
           entitled: paid,
           legacyAccess: false,
           configured: false,
+          plan:{amountPaise:100,currency:"INR"},
           mode: "MANUAL_MONTHLY",
           recurring: false,
           tax: null,
@@ -110,6 +112,7 @@ export function createPlatformFixtures() {
           onboardingAvailable: merchant.enabled,
         };
       if(path.endsWith("/join-code"))return {code:"ABCD-EFGH-JKLM",enabled:true,revision:1};
+      if(path.endsWith("/resident-requests"))return {requests:[],nextCursor:null};
       if (path.endsWith("/invitations")) return { invitations: [] };
       if (path.endsWith("/members")) return { members: [] };
       if (path.endsWith("/logout")) return { ok: true };

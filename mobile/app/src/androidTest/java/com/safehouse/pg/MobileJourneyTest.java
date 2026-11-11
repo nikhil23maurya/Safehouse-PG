@@ -257,7 +257,7 @@ public class MobileJourneyTest {
         await("!window.__beforeReload&&window.__nativeFixtures&&document.getElementById('app').dataset.screen==='ownerHome'"); screenshot("04-session-restored");
         go("residents", "{}"); screenshot("05-residents");
         go("resident", "{id:'resident1'}"); screenshot("06-resident");
-        go("residentForm", "{}"); screenshot("07-add-resident");
+        go("residentEdit", "{id:'resident1'}"); screenshot("07-edit-resident");
         js("document.querySelector('[name=fullName]').value='Draft kept on rotation';document.querySelector('[name=fullName]').dispatchEvent(new Event('input',{bubbles:true}));");
         instrumentation.runOnMainSync(() -> activity.setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE));
         await("innerWidth>innerHeight");
@@ -266,7 +266,10 @@ public class MobileJourneyTest {
         instrumentation.runOnMainSync(() -> activity.setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT));
         await("innerHeight>innerWidth");
         assertEquals("true", js("document.querySelector('[name=fullName]').value==='Draft kept on rotation'"));
-        js("document.querySelector('[data-action=back]').click()"); await("document.querySelector('[data-action=dialog-confirm]')");
+        instrumentation.runOnMainSync(()->activity.onBackPressed()); await("document.querySelector('[data-action=dialog-confirm]')");
+        instrumentation.runOnMainSync(()->activity.onBackPressed()); await("!document.querySelector('[role=dialog]')");
+        assertEquals("true",js("document.querySelector('[name=fullName]').value==='Draft kept on rotation'"));
+        instrumentation.runOnMainSync(()->activity.onBackPressed()); await("document.querySelector('[data-action=dialog-confirm]')");
         js("document.querySelector('[data-action=dialog-confirm]').click()"); await("!document.querySelector('[data-form=resident]')");
         go("rooms", "{}"); screenshot("08-rooms");
         go("room", "{id:'room1'}"); screenshot("09-room");
@@ -423,7 +426,11 @@ public class MobileJourneyTest {
         go("merchant", "{}"); screenshot("48-merchant");
         assertEquals("No premature bank/KYC collection", "0", js("document.querySelectorAll('input').length"));
         go("invitations", "{}"); screenshot("49-invitations");
-        go("joinWorkspace", "{}"); screenshot("50-join-pg");
+        js("history.pushState({safehouse:true,name:'joinWorkspace',params:{},depth:1},'','#joinWorkspace');dispatchEvent(new PopStateEvent('popstate',{state:history.state}));");
+        await("document.getElementById('app').dataset.screen==='workspaces'&&!document.querySelector('.page-progress')");
+        assertEquals("Owners must not receive resident joining actions","false",js("[...document.querySelectorAll('button')].some(e=>/Join with a PG code|I'm a Resident|Add resident/.test(e.textContent))"));
+        screenshot("50-owner-role-guard");
+        go("residentRequests","{}"); screenshot("51-resident-requests");
         instrumentation.runOnMainSync(() -> activity.finish());
     }
 }
