@@ -5,6 +5,9 @@ import android.app.Instrumentation;
 import android.content.Context;
 import android.content.Intent;
 import android.graphics.Bitmap;
+import android.os.Handler;
+import android.os.Looper;
+import android.view.PixelCopy;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
@@ -128,22 +131,61 @@ public class MobileJourneyTest {
             CountDownLatch painted = new CountDownLatch(1);
             instrumentation.runOnMainSync(() -> web.postVisualStateCallback(System.nanoTime(), new WebView.VisualStateCallback() {
                 @Override public void onComplete(long requestId) {
+                    // WebView readiness precedes submission of the activity surface.
+                    // Wait for a hardware frame commit before copying that surface;
+                    // a display screenshot can otherwise contain the previous page.
+                    View decor = activity.getWindow().getDecorView();
+                    assertTrue("Screenshot acceptance requires hardware rendering", decor.isHardwareAccelerated());
+                    decor.getViewTreeObserver().registerFrameCommitCallback(painted::countDown);
                     web.invalidate();
-                    activity.getWindow().getDecorView().postInvalidateOnAnimation();
-                    web.postOnAnimation(() -> web.postOnAnimation(painted::countDown));
+                    decor.postInvalidateOnAnimation();
                 }
             }));
-            assertTrue("WebView did not present the current frame: " + name, painted.await(10, TimeUnit.SECONDS));
+            assertTrue("Activity did not commit the current frame: " + name, painted.await(10, TimeUnit.SECONDS));
         }
-        // Allow short UI transitions and emulator composition to finish before capture.
+        // Let the short presentation transitions settle. Capture the actual Window
+        // buffer for app pages, retaining full-display captures for external UI.
         Thread.sleep(1200);
-        captureBitmap(name);
+        if (requireAppFocus) {
+            captureWindow(name);
+            if (name.contains("keyboard")) captureBitmap(name + "-full-display");
+        } else captureBitmap(name);
+    }
+    private void captureWindow(String name) throws Exception {
+        AtomicReference<Bitmap> pixels = new AtomicReference<>();
+        AtomicReference<Integer> result = new AtomicReference<>();
+        CountDownLatch copied = new CountDownLatch(1);
+        instrumentation.runOnMainSync(() -> {
+            View decor = activity.getWindow().getDecorView();
+            Bitmap bitmap = Bitmap.createBitmap(decor.getWidth(), decor.getHeight(), Bitmap.Config.ARGB_8888);
+            pixels.set(bitmap);
+            PixelCopy.request(activity.getWindow(), bitmap, status -> {
+                result.set(status);
+                copied.countDown();
+            }, new Handler(Looper.getMainLooper()));
+        });
+        try {
+            assertTrue("Window pixel copy timed out: " + name, copied.await(10, TimeUnit.SECONDS));
+            assertEquals("Window pixel copy failed: " + name, Integer.valueOf(PixelCopy.SUCCESS), result.get());
+            writeBitmap(name, pixels.get());
+            File directory = new File(target.getExternalFilesDir(null), "qa");
+            try (FileOutputStream output = new FileOutputStream(new File(directory, name + ".json"))) {
+                String state = js("JSON.stringify({screen:document.getElementById('app').dataset.screen||null,hash:location.hash,text:document.body.innerText.slice(0,800)})");
+                output.write(("{\"capture\":\"PixelCopy Window after hardware frame commit\",\"dom\":" + state + "}").getBytes(StandardCharsets.UTF_8));
+            }
+        } finally {
+            if (pixels.get() != null) pixels.get().recycle();
+        }
     }
     private void captureBitmap(String name) throws Exception {
         Bitmap bitmap = instrumentation.getUiAutomation().takeScreenshot(); assertNotNull(bitmap);
+        try { writeBitmap(name, bitmap); } finally { bitmap.recycle(); }
+    }
+    private void writeBitmap(String name, Bitmap bitmap) throws Exception {
         File directory = new File(target.getExternalFilesDir(null), "qa"); directory.mkdirs();
-        try (FileOutputStream output = new FileOutputStream(new File(directory, name + ".png"))) { bitmap.compress(Bitmap.CompressFormat.PNG, 100, output); }
-        bitmap.recycle();
+        try (FileOutputStream output = new FileOutputStream(new File(directory, name + ".png"))) {
+            assertTrue("PNG encoding failed: " + name, bitmap.compress(Bitmap.CompressFormat.PNG, 100, output));
+        }
     }
     private void signIn(boolean student) throws Exception {
         js("document.querySelector('[name=email]').value='" + (student ? "resident" : "owner") + "@example.test';document.querySelector('[name=password]').value='FixturePass123!';document.querySelector('form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));");
