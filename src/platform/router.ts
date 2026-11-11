@@ -1,4 +1,5 @@
 import {planStatusRouter} from "./plan-status-router.js";
+import {ownerPaymentsRouter} from "./owner-payments/router.js";
 import express, { type Request } from "express";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
@@ -167,6 +168,7 @@ platformRouter.post("/phone", (_req,_res) => {
 });
 platformRouter.use("/auth",emailAuthRouter);
 platformRouter.use("/rent",directRentRouter);
+platformRouter.use("/owner-payments",ownerPaymentsRouter);
 platformRouter.use(joinCodeRouter);
 platformRouter.use(planStatusRouter);
 platformRouter.post("/refresh",limited,async(req,res)=>{
