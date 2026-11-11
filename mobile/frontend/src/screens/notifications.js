@@ -33,7 +33,7 @@ function deviceCard(ctx, config) {
     ? ctx.native.call("notificationPermissionStatus")
     : "unavailable";
   return card(
-    `<div class="notification-permission"><span class="row-icon">${icon("bell")}</span><div><h2>${permission === "granted" ? "Notifications allowed" : "Keep up with your home"}</h2><p>${!config ? "Notification service status is temporarily unavailable." : !config.clientEnabled || !config.serverEnabled ? "Push notifications are currently unavailable for this property." : permission === "granted" ? "Device permission is enabled. Registration is checked when the app connects." : native ? "Allow notifications for rent updates and property announcements." : "Device push notifications are available in the Android app."}</p>${native && config?.clientEnabled && permission !== "granted" ? button("Allow notifications", { action: "enablePush", kind: "secondary", glyph: "bell" }) : ""}</div></div>`,
+    `<div class="notification-permission"><span class="row-icon">${icon("bell")}</span><div><h2>${permission === "granted" ? "Notifications allowed" : "Keep up with your home"}</h2><p>${!config ? "Notification service status is temporarily unavailable." : !config.clientEnabled || !config.serverEnabled ? "Push notifications are currently unavailable for this property." : permission === "granted" ? "Notifications are allowed on this device." : native ? "Allow notifications for rent updates and property announcements." : "Device push notifications are available in the Android app."}</p>${native && config?.clientEnabled && permission !== "granted" ? button("Allow notifications", { action: "enablePush", kind: "secondary", glyph: "bell" }) : ""}</div></div>`,
   );
 }
 
@@ -192,7 +192,7 @@ export async function notificationFormScreen(ctx) {
             attrs: 'minlength="2" maxlength="240" data-notification-preview',
             help: "Supported variables: {{name}}, {{property}}, {{room}}, {{month}}, {{amount}}, {{due_date}}, {{days_overdue}}.",
           }) +
-          `<div class="notification-preview"><small>${icon("bell")} Message preview · variables filled by server</small><strong data-preview-title>Rent reminder</strong><p data-preview-body>Hi {{name}}, your {{month}} rent of {{amount}} is pending. Please check your invoice in PGOne.</p></div>`,
+          `<div class="notification-preview"><small>${icon("bell")} Preview · resident details filled when sent</small><strong data-preview-title>Rent reminder</strong><p data-preview-body>Hi {{name}}, your {{month}} rent of {{amount}} is pending. Please check your invoice in PGOne.</p></div>`,
       ) +
       formSection(
         "02",
@@ -218,7 +218,7 @@ export async function notificationFormScreen(ctx) {
               ],
               attrs: `data-notification-frequency data-schedule-control ${scheduled ? "" : "disabled"}`,
             },
-          )}${[1, 2, 3].map((num, index) => `<div data-time-field="${num}" ${num === 1 ? "" : "hidden"}>${field(`time${num}`, `Time ${num}`, { type: "time", value: ["10:00", "18:00", "20:00"][index], attrs: `min="08:00" max="22:00" data-schedule-time="${num}" ${scheduled && num === 1 ? "required" : "disabled"}` })}</div>`).join("")}<p class="field-help">Up to 3 sends per day, between 08:00 and 22:00. Campaigns may run for up to 30 days. The server rechecks rent audiences at each send.</p></div>`,
+          )}${[1, 2, 3].map((num, index) => `<div data-time-field="${num}" ${num === 1 ? "" : "hidden"}>${field(`time${num}`, `Time ${num}`, { type: "time", value: ["10:00", "18:00", "20:00"][index], attrs: `min="08:00" max="22:00" data-schedule-time="${num}" ${scheduled && num === 1 ? "required" : "disabled"}` })}</div>`).join("")}<p class="field-help">Up to 3 sends per day, between 08:00 and 22:00. Campaigns may run for up to 30 days. Recipients are refreshed before each send.</p></div>`,
       ) +
       (!config.serverEnabled
         ? notice(

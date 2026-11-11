@@ -115,7 +115,7 @@ export async function roomFormScreen(ctx) {
           ? `Update room ${room.number}.`
           : "",
       ) +
-      `<form data-form="room" novalidate><div class="card"><div class="form-error" role="alert"></div>${field("number", "Room number", { value: room?.number || "", required: true, attrs: 'maxlength="30" autocomplete="off"', placeholder: "e.g. 203" })}${field("capacity", "Number of beds", { type: "number", value: room?.capacity || "", required: true, attrs: `min="${Math.max(1, room?.occupied || 0)}" max="50" step="1" inputmode="numeric"`, help: room ? `${room.occupied} beds are currently occupied. Capacity cannot be lower than occupancy.` : "Between 1 and 50 beds. Real occupancy is checked by the server." })}</div>${submitBar(room ? "Save room" : "Add room")}</form>`,
+      `<form data-form="room" novalidate><div class="card"><div class="form-error" role="alert"></div>${field("number", "Room number", { value: room?.number || "", required: true, attrs: 'maxlength="30" autocomplete="off"', placeholder: "e.g. 203" })}${field("capacity", "Number of beds", { type: "number", value: room?.capacity || "", required: true, attrs: `min="${Math.max(1, room?.occupied || 0)}" max="50" step="1" inputmode="numeric"`, help: room ? `${room.occupied} beds are currently occupied. Capacity cannot be lower than occupancy.` : "Choose how many residents this room can accommodate (1–50)." })}</div>${submitBar(room ? "Save room" : "Add room")}</form>`,
     async submit(name, form) {
       if (name !== "room") return;
       const v = formValues(form);

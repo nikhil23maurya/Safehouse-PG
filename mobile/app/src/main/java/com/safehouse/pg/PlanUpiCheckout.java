@@ -126,7 +126,7 @@ final class PlanUpiCheckout {
             gateway=factory.create(activity,key,view);
             emit("DISCOVERING","Finding your installed UPI apps…");
             progress=new AlertDialog.Builder(activity).setTitle("PGOne · Finding UPI apps").setView(new BouncingDotsView(activity)).create();progress.setCancelable(true);
-            progress.setOnCancelListener(d->finish("CANCELLED_BEFORE_SUBMIT","App selection cancelled. No payment was submitted."));progress.show();
+            progress.setOnCancelListener(d->finish("CANCELLED_BEFORE_SUBMIT","App selection cancelled. No payment was submitted."));progress.show();polishDialog(progress);
             view.postDelayed(()->{if(id.equals(order)&&!submitted&&chooser==null)finish("APP_DISCOVERY_TIMEOUT","UPI app discovery timed out. Check your connection and retry.");},20000);
             gateway.discover(new Apps(){
                 public void failed(String code){activity.runOnUiThread(()->{if(id.equals(order))finish("SDK_UNAVAILABLE","Razorpay could not prepare UPI checkout ("+code+"). Check payment status, then retry.");});}
@@ -151,7 +151,7 @@ final class PlanUpiCheckout {
                         }catch(Exception e){finish("SDK_UNAVAILABLE","UPI checkout could not start. Check payment status, then retry.");}
                     }).setNegativeButton("Cancel",(dialog,which)->finish("CANCELLED_BEFORE_SUBMIT","App selection cancelled. No payment was submitted."))
                       .setOnCancelListener(dialog->finish("CANCELLED_BEFORE_SUBMIT","App selection cancelled. No payment was submitted.")).create();
-                    chooser.show();
+                    chooser.show();polishDialog(chooser);
                 });}
             });
         }catch(Exception e){
@@ -174,6 +174,24 @@ final class PlanUpiCheckout {
         for(String field:new String[]{"order_id","amount","currency"})payload.put(field,input.get(field));
         return payload.put("email",email).put("contact",contact).put("method","upi")
             .put("_[flow]","intent").put("description","PGOne monthly workspace access");
+    }
+    private void polishDialog(AlertDialog dialog) {
+        // Visual styling only; SDK selection, submission and cancellation stay unchanged.
+        android.view.Window window=dialog.getWindow();if(window==null)return;
+        float density=activity.getResources().getDisplayMetrics().density;
+        android.graphics.drawable.GradientDrawable panel=new android.graphics.drawable.GradientDrawable(android.graphics.drawable.GradientDrawable.Orientation.TL_BR,new int[]{android.graphics.Color.WHITE,android.graphics.Color.rgb(245,248,255)});
+        panel.setCornerRadius(27f*density);window.setBackgroundDrawable(panel);
+        window.setGravity(android.view.Gravity.BOTTOM);
+        window.setLayout(activity.getResources().getDisplayMetrics().widthPixels-Math.round(28f*density),android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+        android.view.WindowManager.LayoutParams params=window.getAttributes();params.y=Math.round(14f*density);params.dimAmount=.32f;window.setAttributes(params);
+        if(dialog.getListView()!=null){dialog.getListView().setDivider(new android.graphics.drawable.ColorDrawable(android.graphics.Color.rgb(232,238,249)));dialog.getListView().setDividerHeight(Math.max(1,Math.round(density)));}
+        android.graphics.Typeface face;
+        try{face=android.graphics.Typeface.createFromAsset(activity.getAssets(),"ManropeVariable.ttf");}catch(Exception ignored){face=android.graphics.Typeface.create("sans-serif",android.graphics.Typeface.NORMAL);}
+        styleDialogText(window.getDecorView(),face);
+    }
+    private void styleDialogText(View view,android.graphics.Typeface face) {
+        if(view instanceof android.widget.TextView){android.widget.TextView text=(android.widget.TextView)view;text.setTypeface(face,text.getTypeface()==null?0:text.getTypeface().getStyle());text.setTextColor(android.graphics.Color.rgb(20,47,103));}
+        if(view instanceof android.view.ViewGroup){android.view.ViewGroup group=(android.view.ViewGroup)view;for(int i=0;i<group.getChildCount();i++)styleDialogText(group.getChildAt(i),face);}
     }
     static JSONObject rentPaymentPayload(JSONObject input) throws Exception {
         return paymentPayload(input).put("description","PG rent payment");

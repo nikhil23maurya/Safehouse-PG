@@ -282,7 +282,7 @@ export async function residentFormScreen(ctx) {
           value: s ? rupeesInput(s.monthlyRentPaise) : "",
           attrs: 'inputmode="decimal" autocomplete="off"',
           help: id
-            ? "The server decides the effective month. Paid invoices and historical snapshots are protected."
+            ? "The effective month is confirmed when you save. Existing paid invoices are preserved."
             : "The monthly rent used to prepare this resident’s invoices.",
         }) +
           `<div class="two-columns">${field("securityDeposit", "Deposit (₹)", { required: true, value: s ? rupeesInput(s.securityDepositPaise) : "0", attrs: 'inputmode="decimal"' })}${field("rentDueDay", "Rent due day", { type: "number", required: true, value: s?.rentDueDay || 5, attrs: 'min="1" max="28" step="1" inputmode="numeric"' })}</div>`,
@@ -352,7 +352,7 @@ export async function residentFormScreen(ctx) {
       if (data.rentChange)
         await ctx.confirm({
           title: "Rent updated",
-          message: `The new rent applies from ${month(data.rentChange.effectiveYear, data.rentChange.effectiveMonth)}. ${data.rentChange.appliedToSelectedInvoice ? "The selected invoice was updated by the server." : "The selected invoice keeps its existing rent."}`,
+          message: `The new rent applies from ${month(data.rentChange.effectiveYear, data.rentChange.effectiveMonth)}. ${data.rentChange.appliedToSelectedInvoice ? "The selected invoice has been updated." : "The selected invoice keeps its existing rent."}`,
           confirmLabel: "Continue",
           onlyConfirm: true,
         });
