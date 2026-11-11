@@ -35,8 +35,13 @@ export async function processOwnerEvent(id:string,provider:OwnerProvider=razorpa
  const auth=await prisma.pgOwnerAuthorization.findUnique({where:{mode_providerAccountId:{mode:event.mode,providerAccountId:event.providerAccountId}},include:{merchant:true}});
  assert(auth,503,"OWNER_CONNECTION_NOT_SEEN","Merchant authorization is not available yet. Retain this event for retry.");
  if(event.eventType==="account.app.authorization_revoked"){
-  if(p.createdAt*1000<auth.authorizedAt.getTime()-1000)return;
-  await atomic(async tx=>{await tx.pgOwnerAuthorization.update({where:{id:auth.id},data:{current:false,status:"DISABLED",paymentEnabled:false,settlementReady:false,accessCipher:null,refreshCipher:null,publicToken:null,revision:{increment:1}}});await audit(tx,null,auth.merchant.organisationId,"OWNER_MERCHANT_AUTHORIZATION_REVOKED",auth.id);});return;
+  await atomic(async tx=>{
+   // Read the connection generation inside the same serializable transaction:
+   // a delayed revocation must not clear tokens saved by a newer OAuth callback.
+   const current=await tx.pgOwnerAuthorization.findUniqueOrThrow({where:{id:auth.id}});
+   if(p.createdAt*1000<current.authorizedAt.getTime()-1000)return;
+   await tx.pgOwnerAuthorization.update({where:{id:current.id},data:{current:false,status:"DISABLED",paymentEnabled:false,settlementReady:false,accessCipher:null,refreshCipher:null,publicToken:null,revision:{increment:1}}});await audit(tx,null,auth.merchant.organisationId,"OWNER_MERCHANT_AUTHORIZATION_REVOKED",current.id);
+  });return;
  }
  if(event.eventType.startsWith("account.")||event.eventType==="product.payment_gateway.activated"){
   if(p.bankState&&(!auth.accountEventAt||p.createdAt*1000>=auth.accountEventAt.getTime()))await prisma.pgOwnerAuthorization.update({where:{id:auth.id},data:{bankStatus:p.bankState==="verified"?"VERIFIED":"PENDING",accountEventAt:new Date(p.createdAt*1000),settlementReady:false,paymentEnabled:false,revision:{increment:1}}});

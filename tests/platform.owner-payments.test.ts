@@ -207,3 +207,9 @@ test("explicit provider order rejection releases only an uncreated reservation",
  const rejected=await prisma.pgOwnerRentOrder.findFirstOrThrow({where:{invoiceId:r.invoice.id}});assert.equal(rejected.status,"FAILED");assert.equal(rejected.open,false);assert.equal(rejected.providerOrderId,null);
  o.provider.createOrder=original;const retry=await createRentOrder(r.account.id,r.membership.id,r.invoice.id,suffix()+suffix(),o.provider);assert.notEqual(retry.orderId,rejected.id);assert.equal(o.provider.creates,1);
 });
+test("delayed revocation cannot clear a newer connection; current revocation disables it",async()=>{
+ const o=await owner();const body=Buffer.from(JSON.stringify({account_id:o.auth!.providerAccountId,event:"account.app.authorization_revoked",created_at:Math.floor(Date.now()/1000)-60,payload:{}}));
+ await receiveOwnerWebhook(body,crypto.createHmac("sha256",process.env.RAZORPAY_OWNER_WEBHOOK_SECRET!).update(body).digest("hex"),suffix());await drainOwnerEvents(o.provider);
+ assert.equal((await prisma.pgOwnerAuthorization.findUniqueOrThrow({where:{id:o.auth!.id}})).current,true);
+ await event(o,"account.app.authorization_revoked");await drainOwnerEvents(o.provider);const revoked=await prisma.pgOwnerAuthorization.findUniqueOrThrow({where:{id:o.auth!.id}});assert.equal(revoked.current,false);assert.equal(revoked.accessCipher,null);assert.equal(revoked.refreshCipher,null);
+});
