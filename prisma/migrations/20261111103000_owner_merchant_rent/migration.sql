@@ -13,6 +13,8 @@ CREATE TABLE "PgOwnerAuthorization" (
     "expiresAt" TIMESTAMP(3),
     "refreshLeaseUntil" TIMESTAMP(3),
     "authorizedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "lastReconciledAt" TIMESTAMP(3),
+    "reconciliationLeaseUntil" TIMESTAMP(3),
     "revision" INTEGER NOT NULL DEFAULT 1,
     "accountActivated" BOOLEAN NOT NULL DEFAULT false,
     "productActivated" BOOLEAN NOT NULL DEFAULT false,

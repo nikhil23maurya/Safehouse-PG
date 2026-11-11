@@ -45,6 +45,8 @@ export async function createRentOrder(accountId:string,membershipId:string,invoi
  const reservation=await atomic(async tx=>{
   await tx.$queryRaw`SELECT id FROM "RentInvoice" WHERE id=${invoice.id} FOR UPDATE`;
   const fresh=await tx.rentInvoice.findUniqueOrThrow({where:{id:invoice.id}});
+  assert(await tx.pgMembership.findFirst({where:{id:membershipId,accountId,role:"RESIDENT",status:"ACTIVE",propertyId:m.propertyId,organisationId:m.organisationId,actorUserId:m.actorUserId,account:{status:"ACTIVE"}}}),403,"RESIDENT_INACTIVE","Your residency changed. Refresh before paying.");
+  assert(await tx.student.findFirst({where:{id:student.id,propertyId:m.propertyId,status:"ACTIVE"}}),403,"RESIDENT_INACTIVE","This residency is no longer active.");
   const existing=await tx.pgOwnerRentOrder.findFirst({where:{OR:[{accountId,requestKey},{invoiceId,open:true}]}});
   if(existing){assert(existing.accountId===accountId&&existing.invoiceId===invoiceId&&existing.organisationId===m.organisationId,409,"OWNER_RENT_IDEMPOTENCY_CONFLICT","This request belongs to another payment.");return {order:existing,created:false};}
   assert(fresh.status==="DUE"&&fresh.totalPaise-fresh.paidPaise>=100,409,"RENT_NOT_PAYABLE","This invoice has no payable online balance of at least ₹1.");
@@ -63,6 +65,15 @@ export async function createRentOrder(accountId:string,membershipId:string,invoi
  return {orderId:order.id,status:"CREATED"};
 }
 export async function reconcileRentOrder(orderId:string,provider:OwnerProvider=razorpayOwnerProvider) {
+ try{return await reconcileRentOrderInternal(orderId,provider);}catch(error){
+  if(error instanceof AppError&&error.statusCode===409)await atomic(async tx=>{
+   const order=await tx.pgOwnerRentOrder.findUniqueOrThrow({where:{id:orderId}});
+   if(order.status!=="REVIEW_REQUIRED")await audit(tx,null,order.organisationId,"OWNER_RENT_REVIEW_REQUIRED",order.id,{reason:error.code});
+   await tx.pgOwnerRentOrder.update({where:{id:orderId},data:{status:"REVIEW_REQUIRED",lastErrorCode:error.code,lastCheckedAt:new Date()}});
+  });throw error;
+ }
+}
+async function reconcileRentOrderInternal(orderId:string,provider:OwnerProvider) {
  let order=await prisma.pgOwnerRentOrder.findUniqueOrThrow({where:{id:orderId},include:{authorization:true,application:true}});
  const auth=order.authorization,token=await accessToken(auth.id,provider);
  let remote=order.providerOrderId?await provider.order(token,order.providerOrderId):await provider.findOrder(token,order.reference,Math.floor(order.createdAt.getTime()/1000)-60);
@@ -84,7 +95,7 @@ export async function reconcileRentOrder(orderId:string,provider:OwnerProvider=r
   else if(p.status==="failed")failed=true;
   else pending=true;
  }
- if(!captured)await prisma.pgOwnerRentOrder.update({where:{id:order.id},data:{status:pending?"AUTHORIZED":failed?"FAILED":"CREATED",lastCheckedAt:new Date()}});
+ if(!captured)await prisma.pgOwnerRentOrder.update({where:{id:order.id},data:{status:order.status==="REVIEW_REQUIRED"?"REVIEW_REQUIRED":pending||remote.status==="paid"?"AUTHORIZED":failed?"FAILED":"CREATED",lastCheckedAt:new Date()}});
 }
 export async function applyCapture(orderId:string,payment:any,refunds:any[]) {
  return atomic(async tx=>{
@@ -125,6 +136,7 @@ export async function checkoutSession(accountId:string,membershipId:string,invoi
  const cfg=requireOwnerPayments(),{m,invoice}=await residency(accountId,membershipId,invoiceId);
  let order=await prisma.pgOwnerRentOrder.findFirst({where:{id:orderId,accountId,invoiceId,propertyId:m.propertyId,organisationId:m.organisationId},include:{authorization:true}});assert(order,404,"OWNER_RENT_ORDER_NOT_FOUND","This payment request does not belong to your residency.");
  await reconcileRentOrder(order.id,provider);
+ await refreshConnection(order.authorizationId,provider);
  order=await prisma.pgOwnerRentOrder.findUniqueOrThrow({where:{id:order.id},include:{authorization:true}});
  assert(order.authorization.mode===cfg.RAZORPAY_OWNER_MODE&&canCollect(order.authorization)&&order.authorization.providerAccountId!==cfg.PGONE_SUBSCRIPTION_MERCHANT_ACCOUNT_ID,409,"OWNER_MERCHANT_NOT_READY","This owner payment account cannot accept a new payment.");
  assert(order.open&&["CREATED","FAILED"].includes(order.status)&&order.providerOrderId&&invoiceSnapshot(invoice)===order.invoiceSnapshot,409,"OWNER_PAYMENT_PENDING","Check your existing payment status. Do not submit another payment while confirmation is pending.");

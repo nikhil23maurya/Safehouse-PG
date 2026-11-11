@@ -57,6 +57,8 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
     private WebView webView;
     // Separate provider-owned WebView: never expose the app session JS bridge to a bank/payment page.
     private PlanUpiCheckout planCheckout;
+    private PlanUpiCheckout rentCheckout;
+    private volatile boolean merchantReturnPending;
     private View splashView;
     private FrameLayout hostView;
     private SessionVault sessionVault;
@@ -83,6 +85,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         configureSystemBars();
         registerFcmReceiver();
         handleNotificationIntent(getIntent(), false);
+        handleMerchantReturn(getIntent());
         sessionVault = new SessionVault(this);
         hostView = new FrameLayout(this);
         hostView.setBackgroundColor(Color.WHITE);
@@ -91,6 +94,8 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         setContentView(hostView);
         planCheckout = new PlanUpiCheckout(this,hostView,(order,status,message) -> callJs(
             "window.PGOnePlanPaymentResult && window.PGOnePlanPaymentResult("+q(order)+","+q(status)+","+q(message)+");"));
+        rentCheckout = new PlanUpiCheckout(this,hostView,(order,status,message) -> callJs(
+            "window.PGOneRentPaymentResult && window.PGOneRentPaymentResult("+q(order)+","+q(status)+","+q(message)+");"),true);
         hostView.setOnApplyWindowInsetsListener((view, insets) -> {
             if (Build.VERSION.SDK_INT >= 30) {
                 android.graphics.Insets bars = insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
@@ -234,6 +239,15 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         super.onNewIntent(intent);
         setIntent(intent);
         handleNotificationIntent(intent, true);
+        handleMerchantReturn(intent);
+    }
+
+    private void handleMerchantReturn(Intent intent) {
+        Uri uri=intent==null?null:intent.getData();
+        if(uri!=null&&"pgone".equals(uri.getScheme())&&"payments".equals(uri.getHost())&&"/return".equals(uri.getPath())){
+            merchantReturnPending=true;
+            callJs("window.PGOneMerchantReturned && window.PGOneMerchantReturned();");
+        }
     }
 
     private void registerFcmReceiver() {
@@ -249,6 +263,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
             try { unregisterReceiver(registrationReceiver); } catch (Exception ignored) {}
         }
         if(planCheckout!=null)planCheckout.destroy();
+        if(rentCheckout!=null)rentCheckout.destroy();
         super.onDestroy();
     }
 
@@ -322,6 +337,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
         if(planCheckout!=null)planCheckout.activityResult(requestCode,resultCode,data);
+        if(rentCheckout!=null)rentCheckout.activityResult(requestCode,resultCode,data);
     }
 
     private void callJs(String js) {
@@ -332,6 +348,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     @Override
     public void onBackPressed() {
+        if (rentCheckout != null && rentCheckout.back()) return;
         if (planCheckout != null && planCheckout.back()) return;
         if (webView != null && pageReady) {
             webView.evaluateJavascript("Boolean(window.SafeHouseBack && window.SafeHouseBack())", handled -> { if (!"true".equals(handled)) finish(); });
@@ -378,7 +395,17 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
             });
         }
 
-        @JavascriptInterface public void openPlanRazorpayUpi(String raw){runOnUiThread(()->planCheckout.open(raw));}
+        @JavascriptInterface public void openPlanRazorpayUpi(String raw){runOnUiThread(()->{if(rentCheckout!=null&&rentCheckout.busy()){Toast.makeText(MainActivity.this,"Finish the existing rent checkout first",Toast.LENGTH_SHORT).show();return;}planCheckout.open(raw);});}
+        @JavascriptInterface public void openOwnerRentUpi(String raw){runOnUiThread(()->{if(planCheckout!=null&&planCheckout.busy()){Toast.makeText(MainActivity.this,"Finish the existing PGOne plan checkout first",Toast.LENGTH_SHORT).show();return;}rentCheckout.open(raw);});}
+        @JavascriptInterface public String getRentPaymentState(){return rentCheckout==null?"{}":rentCheckout.snapshot();}
+        @JavascriptInterface public void acknowledgeRentPayment(String id){runOnUiThread(()->{if(rentCheckout!=null)rentCheckout.acknowledge(id);});}
+        @JavascriptInterface public boolean getMerchantReturnPending(){return merchantReturnPending;}
+        @JavascriptInterface public void acknowledgeMerchantReturn(){merchantReturnPending=false;}
+        @JavascriptInterface public void connectOwnerPaymentAccount(String url){
+            try{Uri uri=Uri.parse(url);if(!"https".equals(uri.getScheme())||!"auth.razorpay.com".equals(uri.getHost())||!"/authorize".equals(uri.getPath())||uri.getUserInfo()!=null||uri.getPort()!=-1)return;
+                runOnUiThread(()->openExternal(url));
+            }catch(Exception ignored){}
+        }
         @JavascriptInterface public String getPlanPaymentState(){return planCheckout==null?"{}":planCheckout.snapshot();}
         @JavascriptInterface public void acknowledgePlanPayment(String id){runOnUiThread(()->{if(planCheckout!=null)planCheckout.acknowledge(id);});}
         @JavascriptInterface public void copyPgCode(String code){

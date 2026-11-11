@@ -1,5 +1,6 @@
 import {ownerAtomic as atomic} from "./transaction.js";
 import crypto from "node:crypto";
+import type {PgOwnerAuthorization} from "../../generated/prisma/client.js";
 import {prisma} from "../../db.js";
 import {assert,AppError} from "../../errors.js";
 import {audit,ownerOrganisation} from "../service.js";
@@ -68,6 +69,8 @@ export async function finishConnection(state:string,code:string|undefined,denied
   assert(account.id===token.razorpay_account_id,409,"OWNER_MERCHANT_MISMATCH","The connected merchant identity did not match.");
   const connectionId=crypto.randomUUID();
   await atomic(async tx=>{
+   assert(await tx.pgSession.findFirst({where:{id:flow.sessionId,accountId:flow.accountId,revokedAt:null,expiresAt:{gt:new Date()}}}),401,"SESSION_INVALID","Sign in again before connecting payments.");
+   assert(await tx.pgOrganisation.findFirst({where:{id:flow.merchant.organisationId,ownerAccountId:flow.accountId,owner:{status:"ACTIVE"},legacyOwner:{status:"ACTIVE"}}}),403,"FORBIDDEN","The owner organisation changed during connection.");
    const conflict=await tx.pgOwnerAuthorization.findUnique({where:{mode_providerAccountId:{mode:flow.mode,providerAccountId:token.razorpay_account_id}}});
    assert(!conflict||conflict.merchantId===flow.merchantId,409,"OWNER_MERCHANT_ALREADY_CONNECTED","This merchant account is already connected to a different owner organisation.");
    const prior=await tx.pgOwnerAuthorization.findFirst({where:{merchantId:flow.merchantId,mode:flow.mode,current:true}});
@@ -99,7 +102,7 @@ export async function accessToken(id:string,provider:OwnerProvider=razorpayOwner
   assert(saved.count===1,409,"OWNER_AUTHORIZATION_CHANGED","The merchant connection changed. Check its status.");return result.access_token;
  }catch(error){await prisma.pgOwnerAuthorization.updateMany({where:{id,revision:auth.revision,refreshLeaseUntil:lease},data:{status:"ACTION_REQUIRED",paymentEnabled:false,settlementReady:false,refreshLeaseUntil:null}});throw error;}
 }
-export async function refreshConnection(id:string,provider:OwnerProvider=razorpayOwnerProvider) {
+export async function refreshConnection(id:string,provider:OwnerProvider=razorpayOwnerProvider,attempt=0):Promise<PgOwnerAuthorization> {
  let prior=await prisma.pgOwnerAuthorization.findUniqueOrThrow({where:{id},include:{merchant:true}});
  const token=await accessToken(id,provider),account=await provider.account(token,prior.providerAccountId);
  prior=await prisma.pgOwnerAuthorization.findUniqueOrThrow({where:{id},include:{merchant:true}});
@@ -123,8 +126,8 @@ export async function refreshConnection(id:string,provider:OwnerProvider=razorpa
    await audit(tx,null,prior.merchant.organisationId,"OWNER_SETTLEMENT_DESTINATION_CHANGED",id,{previous:prior.bankFingerprint,current:data.bankFingerprint});
   }
   await audit(tx,null,prior.merchant.organisationId,"OWNER_MERCHANT_STATUS_VERIFIED",id,{status:data.status,paymentEnabled:data.paymentEnabled,settlementReady:data.settlementReady});
-  return tx.pgOwnerAuthorization.update({where:{id},data});
- });
+  return tx.pgOwnerAuthorization.update({where:{id},data:{...data,revision:{increment:1}}});
+ }).catch(error=>{if(error?.code==="OWNER_AUTHORIZATION_CHANGED"&&attempt<2)return refreshConnection(id,provider,attempt+1);throw error;});
 }
 export async function disconnect(accountId:string,organisationId:string,password:string,provider:OwnerProvider=razorpayOwnerProvider) {
  await ownerOrganisation(accountId,organisationId);const account=await prisma.pgAccount.findUniqueOrThrow({where:{id:accountId}});

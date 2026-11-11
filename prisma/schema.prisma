@@ -363,6 +363,8 @@ model PgOwnerAuthorization {
   expiresAt DateTime?
   refreshLeaseUntil DateTime?
   authorizedAt DateTime @default(now())
+  lastReconciledAt DateTime?
+  reconciliationLeaseUntil DateTime?
   revision Int @default(1)
   accountActivated Boolean @default(false)
   productActivated Boolean @default(false)

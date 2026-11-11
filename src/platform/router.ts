@@ -1,5 +1,6 @@
 import {planStatusRouter} from "./plan-status-router.js";
 import {ownerPaymentsRouter} from "./owner-payments/router.js";
+import {ownerPaymentConfig} from "./owner-payments/config.js";
 import express, { type Request } from "express";
 import { rateLimit } from "express-rate-limit";
 import { z } from "zod";
@@ -74,6 +75,7 @@ platformRouter.get("/config", (req, res) => {
     enabled: platformEnabled(),
     phone: null,
     authentication: "EMAIL_PASSWORD",
+    ownerRent: {enabled:ownerPaymentConfig().enabled&&ownerPaymentConfig().ledgerAllowed},
     recoveryAvailable: mailReady(),
     googleEnabled: false,
     customWebBilling: {

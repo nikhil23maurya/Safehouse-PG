@@ -39,7 +39,7 @@ export async function processOwnerEvent(id:string,provider:OwnerProvider=razorpa
   await atomic(async tx=>{await tx.pgOwnerAuthorization.update({where:{id:auth.id},data:{current:false,status:"DISABLED",paymentEnabled:false,settlementReady:false,accessCipher:null,refreshCipher:null,publicToken:null,revision:{increment:1}}});await audit(tx,null,auth.merchant.organisationId,"OWNER_MERCHANT_AUTHORIZATION_REVOKED",auth.id);});return;
  }
  if(event.eventType.startsWith("account.")||event.eventType==="product.payment_gateway.activated"){
-  if(p.bankState&&(!auth.accountEventAt||p.createdAt*1000>=auth.accountEventAt.getTime()))await prisma.pgOwnerAuthorization.update({where:{id:auth.id},data:{bankStatus:p.bankState==="verified"?"VERIFIED":"PENDING",accountEventAt:new Date(p.createdAt*1000),settlementReady:false,paymentEnabled:false}});
+  if(p.bankState&&(!auth.accountEventAt||p.createdAt*1000>=auth.accountEventAt.getTime()))await prisma.pgOwnerAuthorization.update({where:{id:auth.id},data:{bankStatus:p.bankState==="verified"?"VERIFIED":"PENDING",accountEventAt:new Date(p.createdAt*1000),settlementReady:false,paymentEnabled:false,revision:{increment:1}}});
   if(p.productId){assert(p.productMerchant===auth.providerAccountId&&/^acc_prd_[A-Za-z0-9]+$/.test(p.productId),409,"OWNER_PRODUCT_MISMATCH","Wrong merchant payment product.");await prisma.pgOwnerAuthorization.update({where:{id:auth.id},data:{productId:p.productId}});}
   if(auth.current)await refreshConnection(auth.id,provider);return;
  }
@@ -65,6 +65,23 @@ export async function drainOwnerEvents(provider:OwnerProvider=razorpayOwnerProvi
  }
 }
 let worker:ReturnType<typeof setInterval>|null=null;
+export async function reconcileOwnerHistory(provider:OwnerProvider=razorpayOwnerProvider) {
+ const now=new Date();
+ const auth=await prisma.pgOwnerAuthorization.findFirst({where:{mode:ownerPaymentConfig().RAZORPAY_OWNER_MODE,current:true,accessCipher:{not:null},orders:{some:{application:{isNot:null}}},OR:[{lastReconciledAt:null},{lastReconciledAt:{lt:new Date(Date.now()-10*60_000)}}],AND:[{OR:[{reconciliationLeaseUntil:null},{reconciliationLeaseUntil:{lt:now}}]}]},orderBy:{lastReconciledAt:{sort:"asc",nulls:"first"}}});
+ if(!auth)return;
+ const lease=new Date(Date.now()+180_000),claimed=await prisma.pgOwnerAuthorization.updateMany({where:{id:auth.id,OR:[{reconciliationLeaseUntil:null},{reconciliationLeaseUntil:{lt:now}}]},data:{reconciliationLeaseUntil:lease}});if(!claimed.count)return;
+ try{
+  // Round-robin all historical captures, not only recent ones: late refunds must
+  // remain recoverable even when the provider webhook was never delivered.
+  const orders=await prisma.pgOwnerRentOrder.findMany({where:{authorizationId:auth.id,application:{isNot:null}},orderBy:{lastCheckedAt:{sort:"asc",nulls:"first"}},take:5});
+  for(const order of orders)await reconcileRentOrder(order.id,provider);
+  for(let offset=0;offset<3;offset++){
+   const day=new Date(Date.now()-offset*86400000),parts=new Intl.DateTimeFormat("en-CA",{timeZone:"Asia/Kolkata",year:"numeric",month:"2-digit",day:"2-digit"}).format(day).split("-").map(Number);
+   await reconcileSettlementDay(auth.id,{year:parts[0]!,month:parts[1]!,day:parts[2]!},provider);
+  }
+  await prisma.pgOwnerAuthorization.updateMany({where:{id:auth.id,reconciliationLeaseUntil:lease},data:{lastReconciledAt:new Date(),reconciliationLeaseUntil:null}});
+ }catch{await prisma.pgOwnerAuthorization.updateMany({where:{id:auth.id,reconciliationLeaseUntil:lease},data:{lastReconciledAt:new Date(Date.now()-8*60_000),reconciliationLeaseUntil:null}});}
+}
 export function startOwnerPaymentWorker() {
  if(worker||process.env.NODE_ENV==="test")return;
  let running=false;
@@ -72,5 +89,6 @@ export function startOwnerPaymentWorker() {
   await drainOwnerEvents();
   const orders=await prisma.pgOwnerRentOrder.findMany({where:{authorization:{mode:ownerPaymentConfig().RAZORPAY_OWNER_MODE},open:true,status:{not:"REVIEW_REQUIRED"},OR:[{lastCheckedAt:null},{lastCheckedAt:{lt:new Date(Date.now()-60_000)}}]},orderBy:{updatedAt:"asc"},take:3});
   for(const order of orders)try{await reconcileRentOrder(order.id);}catch{await prisma.pgOwnerRentOrder.update({where:{id:order.id},data:{lastCheckedAt:new Date()}});}
+  await reconcileOwnerHistory();
  }catch{/* Persistent inbox retains work. Never log tokens or provider payloads. */}finally{running=false;}},15000);worker.unref();
 }

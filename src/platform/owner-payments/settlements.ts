@@ -3,6 +3,7 @@ import {prisma} from "../../db.js";
 import {assert} from "../../errors.js";
 import {audit,ownerOrganisation} from "../service.js";
 import {accessToken} from "./merchant.js";
+import {ownerPaymentConfig} from "./config.js";
 import {razorpayOwnerProvider,type OwnerProvider} from "./provider.js";
 
 export async function reconcileSettlement(authorizationId:string,settlementId:string,provider:OwnerProvider=razorpayOwnerProvider) {
@@ -38,10 +39,18 @@ export async function collectionDashboard(accountId:string,organisationId:string
  const org=await ownerOrganisation(accountId,organisationId);
  const properties=await prisma.property.findMany({where:{ownerId:org.legacyOwnerId},select:{id:true,name:true}});
  const invoices=await prisma.rentInvoice.findMany({where:{propertyId:{in:properties.map(p=>p.id)},year,month}});
- const orders=await prisma.pgOwnerRentOrder.findMany({where:{organisationId,invoiceId:{in:invoices.map(i=>i.id)}},include:{application:{include:{refunds:true,settlementItems:{include:{settlement:true}}}}},orderBy:{createdAt:"desc"},take:200});
- const settlements=await prisma.pgOwnerSettlement.findMany({where:{authorization:{merchant:{organisationId}}},orderBy:{verifiedAt:"desc"},take:30});
- return {period:{year,month},totalBilledPaise:invoices.reduce((n,i)=>n+i.totalPaise,0),totalCollectedPaise:invoices.reduce((n,i)=>n+i.paidPaise,0),outstandingPaise:invoices.reduce((n,i)=>n+Math.max(0,i.totalPaise-i.paidPaise),0),pendingVerification:orders.filter(o=>o.open).length,failedAttempts:orders.filter(o=>o.status==="FAILED").length,
-  onlineRefundedPaise:orders.reduce((n,o)=>n+(o.application?.refundedPaise||0),0),
+ const scope={organisationId,invoiceId:{in:invoices.map(i=>i.id)},authorization:{mode:ownerPaymentConfig().RAZORPAY_OWNER_MODE}};
+ const [orders,pendingVerification,failedAttempts,refundTotals,failedPayments,settlements]=await Promise.all([
+  prisma.pgOwnerRentOrder.findMany({where:scope,include:{application:{include:{refunds:true,settlementItems:{include:{settlement:true}}}}},orderBy:{createdAt:"desc"},take:200}),
+  prisma.pgOwnerRentOrder.count({where:{...scope,open:true}}),
+  prisma.pgOwnerPaymentObservation.count({where:{order:scope,status:"failed"}}),
+  prisma.pgOwnerRentApplication.aggregate({where:{order:scope},_sum:{refundedPaise:true}}),
+  prisma.pgOwnerPaymentObservation.findMany({where:{order:scope,status:"failed"},include:{order:{select:{invoiceId:true}}},orderBy:{observedAt:"desc"},take:50}),
+  prisma.pgOwnerSettlement.findMany({where:{authorization:{merchant:{organisationId},mode:ownerPaymentConfig().RAZORPAY_OWNER_MODE}},orderBy:{verifiedAt:"desc"},take:30}),
+ ]);
+ return {period:{year,month},totalBilledPaise:invoices.reduce((n,i)=>n+i.totalPaise,0),totalCollectedPaise:invoices.reduce((n,i)=>n+i.paidPaise,0),outstandingPaise:invoices.reduce((n,i)=>n+Math.max(0,i.totalPaise-i.paidPaise),0),pendingVerification,failedAttempts,
+  onlineRefundedPaise:refundTotals._sum.refundedPaise||0,
+  failedPayments:failedPayments.map(p=>({reference:p.providerPaymentId,invoiceId:p.order.invoiceId,amountPaise:p.amountPaise,observedAt:p.observedAt})),
   payments:orders.map(o=>({id:o.id,invoiceId:o.invoiceId,propertyId:o.propertyId,status:o.status,amountPaise:o.amountPaise,reference:o.application?.providerPaymentId||o.reference,paidAt:o.application?.paidAt||null,refundedPaise:o.application?.refundedPaise||0,receiptId:o.application?.paymentId||null,settlement:o.application?.settlementItems.map(i=>({status:i.settlement.status,netPaise:i.netPaise,feePaise:i.feePaise,taxPaise:i.taxPaise}))||[]})),
   settlements:settlements.map(s=>({id:s.id,status:s.status,amountPaise:s.amountPaise,utr:s.utr,verifiedAt:s.verifiedAt,settledAt:s.settledAt})),truncated:orders.length===200};
 }

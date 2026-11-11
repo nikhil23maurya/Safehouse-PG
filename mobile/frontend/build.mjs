@@ -29,7 +29,7 @@ await build({
   );
 });
 const css = await Promise.all(
-  ["tokens", "components", "screens", "platform", "premium", "motion"].map((name) =>
+  ["tokens", "components", "screens", "platform", "premium", "motion", "owner-payments"].map((name) =>
     readFile(path.join(here, `src/styles/${name}.css`), "utf8"),
   ),
 );

@@ -3,6 +3,10 @@ import {brand} from "./components/brand.js";
 import {planVerificationScreen,planSuccessScreen,verificationMarkup} from "./screens/plan-verification.js";
 import {pgCodeScreen,joinedResidentsScreen,unassignedResident,unassignedHomeScreen,unassignedRecordsScreen,unassignedProfileScreen} from "./screens/joining.js";
 import {planCheckout} from "./payments/plan.js";
+import {rentCheckout} from "./payments/rent.js";
+import {rentPaymentEntry} from "./screens/owner-rent.js";
+import {ownerCollectionsScreen} from "./screens/owner-collections.js";
+import {rentVerificationScreen,rentSuccessScreen,rentVerificationMarkup} from "./screens/rent-verification.js";
 import {
   state,
   currentPeriod,
@@ -86,6 +90,10 @@ const routes = {
   pgCode:[pgCodeScreen,"OWNER"],
   joinedResidents:[joinedResidentsScreen,"OWNER"],
   merchant: [merchantScreen, "PLATFORM"],
+  merchantCollections: [ownerCollectionsScreen,"OWNER"],
+  rentVerification: [rentVerificationScreen,"STUDENT"],
+  rentSuccess: [rentSuccessScreen,"STUDENT"],
+  directOwnerPayment: [directRentScreen,"STUDENT"],
 
   invitations: [invitationsScreen, "PLATFORM"],
   staffInvitation:[staffInvitationScreen,"PLATFORM"],
@@ -106,7 +114,7 @@ const routes = {
   studentHome: [ctx=>unassignedResident(ctx.snapshot)?unassignedHomeScreen(ctx):studentHomeScreen(ctx), "STUDENT"],
   invoices: [ctx=>unassignedResident(ctx.snapshot)?unassignedRecordsScreen(ctx):invoicesScreen(ctx), "STUDENT"],
   history: [ctx=>unassignedResident(ctx.snapshot)?unassignedRecordsScreen(ctx):paymentsScreen(ctx), "STUDENT"],
-  payment: [(ctx)=>ctx.snapshot.tokens?.kind === "PLATFORM" && !ctx.snapshot.platform?.memberships?.find(m=>m.id===ctx.snapshot.platform.membershipId)?.organisation?.legacyAccess ? directRentScreen(ctx) : paymentScreen(ctx), "STUDENT"],
+  payment: [rentPaymentEntry, "STUDENT"],
   ownerDirectRent: [ownerDirectRentScreen,"OWNER"],
   invoice: [invoiceScreen, "BOTH"],
   profile: [ctx=>unassignedResident(ctx.snapshot)?unassignedProfileScreen(ctx):profileScreen(ctx), "BOTH"],
@@ -154,6 +162,8 @@ const home = () =>
 let pendingNotificationRoute = null;
 let restoringMetadata = null;
 function postAuthRoute() {
+  if(state.user?.role==="STUDENT"&&state.tokens?.kind==="PLATFORM"&&rentCheckout.restore(native,state.platform?.membershipId)&&!["DISCOVERING","CHOOSING_APP"].includes(rentCheckout.status))return "rentVerification";
+  if(state.user?.role==="OWNER"&&native.call("getMerchantReturnPending"))return "merchant";
   const org=state.platform?.memberships?.find(m=>m.id===state.platform.membershipId&&m.role==="OWNER")?.organisation;
   if(org){planCheckout.restore(native,org.id);if(planCheckout.orderId&&!planCheckout.receipt&&!["DISCOVERING","CHOOSING_APP"].includes(planCheckout.status))return "planVerification";}
   if (state.user?.mustChangePassword) return "password";
@@ -215,6 +225,7 @@ function clearSession() {
   onboarding.config = null;
   onboarding.configFetchedAt = 0;
   planCheckout.clear();
+  rentCheckout.clear();
   onboarding.attempt = "";
   onboarding.exchangeAttempt = "";
   onboarding.sentAt = 0;
@@ -576,6 +587,15 @@ window.PGOnePlanPaymentResult=(order,status,message)=>{
     else void screen?.onPlanResult?.();
   }
 };
+window.PGOneRentPaymentResult=(providerOrder,status)=>{
+  if(state.user?.role!=="STUDENT"||state.platform?.membershipId!==rentCheckout.membershipId)return;
+  if(!rentCheckout.receive(providerOrder,status))return;
+  if(!["DISCOVERING","CHOOSING_APP"].includes(status)){
+    if(state.route.name==="rentVerification")void screen?.onRentResult?.();
+    else void navigate("rentVerification",{},{replace:true,force:true});
+  }
+};
+window.PGOneMerchantReturned=()=>{if(state.user?.role==="OWNER"&&state.tokens?.kind==="PLATFORM")void navigate("merchant",{},{replace:true,force:true});};
 window.PGOneDirectUpiResult=(opened,message)=>screen?.directUpiResult?.(opened,message);
 // The native Custom SDK returns a UPI-app result, never an entitlement.
 window.PGOnePlanPaymentError = (message) => {
@@ -584,6 +604,9 @@ window.PGOnePlanPaymentError = (message) => {
 };
 window.SafeHouseResume = () => {
   applyMotionPreference();
+  if(state.route?.name==="rentVerification"){void screen?.onRentResult?.();return;}
+  if(state.user?.role==="STUDENT"&&state.platform?.membershipId===rentCheckout.membershipId&&rentCheckout.orderId&&!["DISCOVERING","CHOOSING_APP"].includes(rentCheckout.status)){void navigate("rentVerification",{},{replace:true,force:true});return;}
+  if(state.user?.role==="OWNER"&&native.call("getMerchantReturnPending")){window.PGOneMerchantReturned();return;}
   if (screen?.paymentFlow) void payment.resume();
   else if(state.route?.name==="planVerification")void screen?.onPlanResult?.();
   else if(planCheckout.orderId&&planCheckout.organisationId&&!["DISCOVERING","CHOOSING_APP"].includes(planCheckout.status))void navigate("planVerification",{},{replace:true,force:true});
@@ -762,7 +785,7 @@ async function render() {
   loadingTimer = setTimeout(() => {
     if (seq !== sequence) return;
     document.getElementById("app").innerHTML = shell(
-      ["planSuccess","planVerification"].includes(state.route.name)?{bare:true,content:verificationMarkup()}:{ title: "Loading", content: skeleton(state.route.name), nav },
+      ["rentSuccess","rentVerification"].includes(state.route.name)?{bare:true,content:rentVerificationMarkup()}:["planSuccess","planVerification"].includes(state.route.name)?{bare:true,content:verificationMarkup()}:{ title: "Loading", content: skeleton(state.route.name), nav },
       snapshot,
     );
   }, 130);
@@ -1100,7 +1123,7 @@ async function boot() {
     restoringMetadata = stored;
     state.tokens = stored.tokens;
     document.getElementById("app").innerHTML =
-      (()=>{try{const pending=JSON.parse(native.call("getPlanPaymentState")||"null");if(pending?.orderId)return verificationMarkup();}catch{}return `<main class="boot session-restore">${brand()}<p>Restoring your account…</p>${dots("Restoring account")}</main>`;})();
+      (()=>{try{const rentPending=JSON.parse(native.call("getRentPaymentState")||"null");if(rentPending?.orderId)return rentVerificationMarkup();const pending=JSON.parse(native.call("getPlanPaymentState")||"null");if(pending?.orderId)return verificationMarkup();}catch{}return `<main class="boot session-restore">${brand()}<p>Restoring your account…</p>${dots("Restoring account")}</main>`;})();
     requestAnimationFrame(() => native.call("ready"));
     try {
       if (state.tokens.kind !== "PLATFORM") {
