@@ -426,7 +426,11 @@ public class MobileJourneyTest {
         go("merchant", "{}"); screenshot("48-merchant");
         assertEquals("No premature bank/KYC collection", "0", js("document.querySelectorAll('input').length"));
         go("invitations", "{}"); screenshot("49-invitations");
-        go("joinWorkspace", "{}"); screenshot("50-join-pg");
+        js("history.pushState({safehouse:true,name:'joinWorkspace',params:{},depth:1},'','#joinWorkspace');dispatchEvent(new PopStateEvent('popstate',{state:history.state}));");
+        await("document.getElementById('app').dataset.screen==='workspaces'&&!document.querySelector('.page-progress')");
+        assertEquals("Owners must not receive resident joining actions","false",js("[...document.querySelectorAll('button')].some(e=>/Join with a PG code|I'm a Resident|Add resident/.test(e.textContent))"));
+        screenshot("50-owner-role-guard");
+        go("residentRequests","{}"); screenshot("51-resident-requests");
         instrumentation.runOnMainSync(() -> activity.finish());
     }
 }
