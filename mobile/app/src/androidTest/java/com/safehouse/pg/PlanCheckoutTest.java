@@ -90,6 +90,25 @@ public class PlanCheckoutTest {
             assertEquals("INVALID_PAYMENT_CONTACT",status[0]);assertEquals(children,host.getChildCount());activity.finish();
         });
     }
+    @Test public void oneRupeePlanShowsAndSubmitsExactReducedPrice() throws Exception {
+        MainActivity activity=start();final JSONObject[] submitted={null};
+        instrumentation.runOnMainSync(()->{
+            try{
+                FrameLayout host=(FrameLayout)((android.view.ViewGroup)activity.findViewById(android.R.id.content)).getChildAt(0);
+                PlanUpiCheckout checkout=new PlanUpiCheckout(activity,host,(id,status,message)->{},(owner,key,view)->new PlanUpiCheckout.Gateway(){
+                    public void discover(PlanUpiCheckout.Apps result){result.ready(java.util.Arrays.asList(new PlanUpiCheckout.App("Synthetic UPI","fixture.upi.app")));}
+                    public void submit(JSONObject value,PaymentResultListener listener){submitted[0]=value;listener.onPaymentError(7,"Synthetic cancellation");}
+                    public void activityResult(int request,int result,Intent data){}public void back(){}
+                });
+                checkout.open(input().put("amount",100).toString());
+                java.lang.reflect.Field field=PlanUpiCheckout.class.getDeclaredField("chooser");field.setAccessible(true);AlertDialog chooser=(AlertDialog)field.get(checkout);
+                ArrayList<View> titles=new ArrayList<>();chooser.getWindow().getDecorView().findViewsWithText(titles,"PGOne · Pay ₹1",View.FIND_VIEWS_WITH_TEXT);assertFalse(titles.isEmpty());
+                chooser.getListView().performItemClick(chooser.getListView().getChildAt(0),0,0);
+                assertEquals(100,submitted[0].getInt("amount"));assertEquals("order_NATIVEFIXTURE",submitted[0].getString("order_id"));assertFalse(submitted[0].has("subscription_id"));
+                activity.finish();
+            }catch(Exception e){throw new RuntimeException(e);}
+        });
+    }
     @Test public void providerValidationCauseIsReadableAndPayerDataIsRedacted() throws Exception {
         String raw=new JSONObject().put("error",new JSONObject().put("code","BAD_REQUEST_ERROR")
             .put("description","Could not validate payment create request due to: contact: cannot be blank. payer@example.invalid 9999999999")).toString();

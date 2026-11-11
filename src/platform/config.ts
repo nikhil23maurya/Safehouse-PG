@@ -37,20 +37,24 @@ export const subscriptionCredentials = () =>
 export const PLAN = Object.freeze({
   code: "PGONE_MONTHLY",
   name: "PGOne",
-  amountPaise: 24900,
+  amountPaise: 100,
   currency: "INR",
   interval: "month",
 });
+// Only new manual-month purchases use the current price. Original orders,
+// receipts and retired recurring contracts keep their original amount.
+export const LEGACY_RECURRING_AMOUNT_PAISE = 24900;
+export const PLAN_PAID_AMOUNTS = Object.freeze([100, LEGACY_RECURRING_AMOUNT_PAISE]);
 export const STAFF_PERMISSIONS = ["OCCUPANCY_READ"] as const;
 
-export function taxBreakdown(bps: number | undefined) {
+export function taxBreakdown(bps: number | undefined, amountPaise: number = PLAN.amountPaise) {
   if (bps === undefined) return null;
-  const taxablePaise = Math.round((PLAN.amountPaise * 10000) / (10000 + bps));
+  const taxablePaise = Math.round((amountPaise * 10000) / (10000 + bps));
   return {
     taxablePaise,
-    taxPaise: PLAN.amountPaise - taxablePaise,
+    taxPaise: amountPaise - taxablePaise,
     rateBps: bps,
-    totalPaise: PLAN.amountPaise,
+    totalPaise: amountPaise,
     inclusive: true,
   };
 }

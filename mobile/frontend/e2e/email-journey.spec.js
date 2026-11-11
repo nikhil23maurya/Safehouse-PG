@@ -39,8 +39,8 @@ test("one PG, unpaid route denial and server-confirmed entitlement through nativ
   await forceRoute(page,"ownerHome");await expect(page).toHaveURL(/#subscription$/);
   await forceRoute(page,"merchant");await expect(page).toHaveURL(/#subscription$/);
   await page.getByLabel("Mobile number for payment").fill("9999999999");
-  await page.getByRole("button",{name:"Pay ₹249 with UPI"}).click();
-  await expect.poll(()=>page.evaluate(()=>window.__lastPlanOptions)).toMatchObject({amount:24900,currency:"INR",email:"rahul@example.test",order_id:"order_SYNTHETIC001"});
+  await page.getByRole("button",{name:"Pay ₹1 with UPI"}).click();
+  await expect.poll(()=>page.evaluate(()=>window.__lastPlanOptions)).toMatchObject({amount:100,currency:"INR",email:"rahul@example.test",order_id:"order_SYNTHETIC001"});
   expect(await page.evaluate(()=>window.__lastPlanOptions.contact)).toBe("+919999999999");
   await page.evaluate(()=>window.PGOnePlanPaymentResult("order_SYNTHETIC001","RETURNED_CHECK_PROVIDER"));
   await expect(page).toHaveURL(/#planVerification$/);
@@ -52,7 +52,7 @@ test("one PG, unpaid route denial and server-confirmed entitlement through nativ
 test("missing or invalid payment contact creates no order; a valid contact reaches native checkout",async({page})=>{
   await platform(page,{billing:true});await createOwnerProperty(page);
   let orders=0;page.on('request',req=>{if(req.url().includes('/plan/android/orders'))orders++;});
-  const pay=page.getByRole('button',{name:'Pay ₹249 with UPI'});
+  const pay=page.getByRole('button',{name:'Pay ₹1 with UPI'});
   await pay.click();
   await expect(page.locator('#field-paymentContact-error')).toContainText('required');
   expect(orders).toBe(0);
@@ -98,17 +98,17 @@ test("email screens fit supported mobile widths",async({page})=>{
 test("native checkout failure survives navigation and does not unlock owner access",async({page})=>{
   const fixture=await platform(page,{billing:true});await createOwnerProperty(page);
   await page.getByLabel("Mobile number for payment").fill("9999999999");
-  await page.getByRole("button",{name:"Pay ₹249 with UPI"}).click();
+  await page.getByRole("button",{name:"Pay ₹1 with UPI"}).click();
   await expect(page.locator('[data-plan-checkout-status]')).toContainText("Finding");
   await forceRoute(page,"workspaces");
   await page.evaluate(()=>window.PGOnePlanPaymentResult("order_SYNTHETIC001","NO_SUPPORTED_APP","Razorpay did not return a supported UPI app. No payment was submitted."));
   await expect(page.getByRole("heading",{name:"Payment not confirmed yet"})).toBeVisible();
   await page.getByRole("button",{name:"Back to my plan"}).click();
   await expect(page.locator('[data-plan-checkout-status]')).toContainText("No payment was submitted");
-  await expect(page.getByRole("button",{name:"Pay ₹249 with UPI"})).toBeEnabled();
+  await expect(page.getByRole("button",{name:"Pay ₹1 with UPI"})).toBeEnabled();
   expect(fixture.entitled).toBe(false);
   await page.getByLabel("Mobile number for payment").fill("9999999999");
-  await page.getByRole("button",{name:"Pay ₹249 with UPI"}).click();
+  await page.getByRole("button",{name:"Pay ₹1 with UPI"}).click();
   await page.locator('[data-action="dialog-confirm"]').click();
   await expect(page.locator('[data-plan-checkout-status]')).toContainText("Finding");
   expect(fixture.entitled).toBe(false);

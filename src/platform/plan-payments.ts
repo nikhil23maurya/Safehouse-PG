@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { prisma } from "../db.js";
 import { config } from "../config.js";
 import { AppError, assert } from "../errors.js";
-import { PLAN, platformConfig, platformEnabled, subscriptionCredentials, taxBreakdown } from "./config.js";
+import { PLAN, PLAN_PAID_AMOUNTS, platformConfig, platformEnabled, subscriptionCredentials, taxBreakdown } from "./config.js";
 import { atomic, audit, ownerOrganisation } from "./service.js";
 import { subscriptionStatus, webhookSignature } from "./billing.js";
 import { indiaDay, nextCalendarMonth, paidAccessChain } from "./plan-period.js";
@@ -35,14 +35,14 @@ export function matchingOrder(remote: any, local: LocalOrder) {
 }
 
 export function exactCapturedPayment(payment: any, order: LocalOrder) {
-  return /^pay_[a-zA-Z0-9]+$/.test(payment?.id || "") && payment.order_id === order.providerOrderId &&
-    (payment.status === "captured" || (payment.status === "refunded" && payment.amount_refunded === 24900)) &&
-    payment.captured === true && payment.amount === 24900 &&
+  return PLAN_PAID_AMOUNTS.includes(order.amountPaise) && /^pay_[a-zA-Z0-9]+$/.test(payment?.id || "") && payment.order_id === order.providerOrderId &&
+    (payment.status === "captured" || (payment.status === "refunded" && payment.amount_refunded === order.amountPaise)) &&
+    payment.captured === true && payment.amount === order.amountPaise &&
     payment.currency === "INR" && Number.isSafeInteger(payment.created_at) && payment.created_at > 0 &&
     payment.created_at * 1000 >= order.createdAt.getTime() - 300000 &&
     payment.created_at * 1000 <= Date.now() + 30000 &&
     Number.isSafeInteger(payment.amount_refunded ?? 0) && (payment.amount_refunded ?? 0) >= 0 &&
-    (payment.amount_refunded ?? 0) <= 24900;
+    (payment.amount_refunded ?? 0) <= order.amountPaise;
 }
 
 export class RazorpayPlanOrders {
@@ -63,7 +63,7 @@ export class RazorpayPlanOrders {
     return await response.json() as any;
   }
   create(order: LocalOrder) {
-    return this.request("/orders", { amount: 24900, currency: "INR", receipt: order.receiptReference, partial_payment: false,
+    return this.request("/orders", { amount: order.amountPaise, currency: "INR", receipt: order.receiptReference, partial_payment: false,
       notes: { pgone_plan_order: order.id, pgone_organisation_id: order.organisationId, pgone_product: "PGONE_MANUAL_MONTH" } });
   }
   order(id: string) { return this.request(`/orders/${encodeURIComponent(id)}`); }
@@ -122,10 +122,10 @@ export async function reconcilePlanOrder(id: string, provider = new RazorpayPlan
   assert(/^pay_[a-zA-Z0-9]+$/.test(paymentId || ""), 502, "PLAN_PAYMENT_MISMATCH", "Invalid payment confirmation.");
   const payment = await provider.payment(paymentId);
   const previouslyCapturedRefund = Boolean(receipt && payment.status === "refunded" && payment.order_id === local.providerOrderId &&
-    payment.amount === 24900 && payment.currency === "INR" && payment.amount_refunded === 24900 &&
+    payment.amount === local.amountPaise && payment.currency === "INR" && payment.amount_refunded === local.amountPaise &&
     payment.created_at === Math.floor(receipt.paidAt.getTime() / 1000));
-  assert(exactCapturedPayment(payment, local) || previouslyCapturedRefund, 502, "PLAN_PAYMENT_MISMATCH", "Only the exact captured INR 249 payment can activate access.");
-  assert(remote.status === "paid" && remote.amount_paid === 24900 && remote.amount_due === 0,
+  assert(exactCapturedPayment(payment, local) || previouslyCapturedRefund, 502, "PLAN_PAYMENT_MISMATCH", "Only the captured payment matching this order's original amount can activate access.");
+  assert(remote.status === "paid" && remote.amount_paid === local.amountPaise && remote.amount_due === 0,
     502, "PLAN_ORDER_UNPAID", "The provider has not confirmed the complete order payment.");
   await atomic(async tx => {
     const existing = await tx.pgPlanReceipt.findUnique({ where: { orderId: id } });
@@ -155,13 +155,13 @@ export async function reconcilePlanOrder(id: string, provider = new RazorpayPlan
     const refunded = payment.amount_refunded ?? 0;
     receipt = await tx.pgPlanReceipt.create({ data: {
       organisationId: local.organisationId, orderId: id, providerPaymentId: payment.id,
-      receiptNumber: `PGONE-${local.receiptReference}`, amountPaise: 24900, taxPaise: local.taxPaise,
+      receiptNumber: `PGONE-${local.receiptReference}`, amountPaise: local.amountPaise, taxPaise: local.taxPaise,
       refundedPaise: refunded, status: refunded ? "REFUNDED" : "CAPTURED", paidAt: new Date(payment.created_at * 1000),
       periodStart: start, periodEnd: end, anchorDay,
     } });
     await tx.pgPlanOrder.update({ where: { id }, data: { status: refunded ? "REFUNDED" : "CAPTURED", open: false } });
     await audit(tx, null, local.organisationId, "PLAN_MONTH_PAYMENT_CAPTURED", receipt.id,
-      { amountPaise: 24900, providerPaymentId: payment.id, periodStart: start.toISOString(), periodEnd: end.toISOString(), refundedPaise: refunded });
+      { amountPaise: local.amountPaise, providerPaymentId: payment.id, periodStart: start.toISOString(), periodEnd: end.toISOString(), refundedPaise: refunded });
   });
   return prisma.pgPlanOrder.findUniqueOrThrow({ where: { id } });
 }
@@ -185,9 +185,9 @@ export async function createPlanOrder(accountId: string, organisationId: string,
     assert(!paidAccessChain(new Date(), [...future, ...oldPaid.map(p => ({ ...p, anchorDay: indiaDay(p.periodEnd) }))]).gap,
       409, "PLAN_PERIOD_REVIEW_REQUIRED", "A refund left a gap before a future paid month. Contact support before making another payment.");
     const local = await tx.pgPlanOrder.create({ data: { organisationId, requestKey, receiptReference: reference,
-      providerKeyId: credentials.keyId, amountPaise: 24900, taxPaise: tax.taxPaise } });
+      providerKeyId: credentials.keyId, amountPaise: PLAN.amountPaise, taxPaise: tax.taxPaise } });
     await audit(tx, accountId, organisationId, "PLAN_ONE_TIME_PAYMENT_REQUESTED", local.id, {
-      amountPaise: 24900, interval: "CALENDAR_MONTH", recurring: false, terms: platformConfig.PGONE_TERMS_URL, privacy: platformConfig.PGONE_PRIVACY_URL,
+      amountPaise: PLAN.amountPaise, interval: "CALENDAR_MONTH", recurring: false, terms: platformConfig.PGONE_TERMS_URL, privacy: platformConfig.PGONE_PRIVACY_URL,
     });
     return { local, created: true };
   });
@@ -214,7 +214,7 @@ export async function createPlanOrder(accountId: string, organisationId: string,
     local = await reconcilePlanOrder(local.id, provider);
   }
   return { id: local.id, orderId: local.providerOrderId, keyId: local.providerKeyId,
-    amountPaise: 24900, currency: "INR", status: local.status, payable: local.open && ["PENDING","FAILED"].includes(local.status), recurring: false };
+    amountPaise: local.amountPaise, currency: "INR", status: local.status, payable: local.open && ["PENDING","FAILED"].includes(local.status), recurring: false };
 }
 
 export async function verifyPlanPayment(accountId: string, organisationId: string, id: string,
@@ -226,7 +226,7 @@ export async function verifyPlanPayment(accountId: string, organisationId: strin
   assert(orderSignature(local.providerOrderId, input.paymentId, input.signature, subscriptionCredentials()!.keySecret),
     400, "INVALID_PLAN_SIGNATURE", "Payment authorisation could not be verified.");
   const payment = await provider.payment(input.paymentId);
-  assert(payment.order_id === local.providerOrderId && payment.amount === 24900 && payment.currency === "INR",
+  assert(payment.order_id === local.providerOrderId && payment.amount === local.amountPaise && payment.currency === "INR",
     400, "PLAN_PAYMENT_MISMATCH", "Payment does not match this order.");
   await atomic(async tx => {
     await tx.pgPlanOrder.update({ where: { id }, data: { signatureVerifiedAt: new Date() } });
@@ -260,7 +260,7 @@ export async function manualPlanStatus(accountId: string, organisationId: string
   }
   return { ...base, entitled: base.entitled || Boolean(active), mode: "MANUAL_MONTHLY", recurring: false,
     configured: planProviderConfigured(), checkoutEnabled: manualCheckoutEnabled(), renewalCycles: null,
-    accessEnd, pendingOrder: open ? { id: open.id, providerOrderId:open.providerOrderId, status: open.status } : null,
+    accessEnd, pendingOrder: open ? { id: open.id, providerOrderId:open.providerOrderId, status: open.status, amountPaise:open.amountPaise } : null,
     // Keep old contracts/history in the response; never reinterpret them as new mandates.
     legacySubscription: base.subscription,
     subscription: { status: base.legacyAccess ? "LEGACY_ACCESS" : active || base.entitled ? "ACTIVE" : "NOT_ACTIVE",

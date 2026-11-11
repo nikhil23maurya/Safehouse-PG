@@ -1,5 +1,6 @@
 import { createApiClient } from "../../mobile/frontend/src/core/api.js";
 import { brand, icon } from "../../mobile/frontend/src/components/icons.js";
+import { money } from "../../mobile/frontend/src/domain/finance.js";
 import {
   esc,
   date,
@@ -120,10 +121,13 @@ async function status(recheck = false) {
 }
 function renderPlan() {
   const subscribed = data.entitled || data.legacyAccess;
+  const amountPaise=data.plan?.amountPaise??config.plan?.amountPaise,price=money(amountPaise);
+  const pendingPriceReview=Boolean(data.pendingOrder?.providerOrderId&&data.pendingOrder.amountPaise!==amountPaise);
+  const canPay=Number.isSafeInteger(amountPaise)&&amountPaise>=100&&!pendingPriceReview;
   page(
     "More calm. Every month.",
     "One simple plan for your PG workspaces.",
-    `<div class="royal-plan"><span class="plan-name">PGOne</span><div class="plan-price">₹249<small>/ month</small></div><p>One-time payment · one calendar month · no auto-debit</p><ul><li>${icon("check")}Rooms & residents</li><li>${icon("check")}Rent records & receipts</li><li>${icon("check")}Owner-approved team access</li></ul></div>${notice(subscribed ? (data.legacyAccess ? "Your existing workspace access is preserved." : "Your access is active for the confirmed paid period.") : "Make a fresh ₹249 payment to activate one calendar month of PGOne.")}${data.accessEnd ? `<p class="legal-copy">Access until ${date(data.accessEnd)}. An early renewal adds a month after this date.</p>` : ""}${!data.legacyAccess && config.customWebBilling?.enabled && data.mode === "MANUAL_MONTHLY" ? `<form data-form="prepare" novalidate><div class="form-error" role="alert"></div>${field("email", "Payment contact email", { type: "email", required: true, value: account.email || "", attrs: 'autocomplete="email"' })}<label class="billing-consent"><input name="consent" type="checkbox" required><span>I agree to pay ₹249 once for one calendar month, including applicable tax. Each renewal needs a fresh payment. No recurring mandate or automatic debit.</span></label>${button(subscribed ? "Renew for ₹249" : "Pay ₹249 for one month", { type: "submit", kind: "primary block" })}</form><div data-payment-apps></div>` : !subscribed ? notice("Monthly payments are awaiting merchant configuration. No payment will be initiated.") : ""}${button("Refresh payment status", { action: "refresh", kind: "secondary block" })}${data.legacySubscription?.provider && !data.legacySubscription.cancelAtPeriodEnd ? button("Cancel previous auto-renewal", { action: "cancel", kind: "text-button" }) : ""}<p class="legal-copy">Payments use Razorpay’s official Custom SDK and your UPI app. PGOne never asks for your UPI PIN or card details.</p>${data.subscription?.payments?.length ? `<h2 class="royal-section-title">Payment records</h2>${data.subscription.payments.map((p) => `<div class="billing-record"><strong>₹${(p.amountPaise / 100).toFixed(2)}</strong><span>${date(p.paidAt)} · ${esc(p.receiptNumber)}</span>${p.refundedPaise ? `<small>Refunded ₹${(p.refundedPaise / 100).toFixed(2)}</small>` : `<small>Access ${date(p.periodStart)} – ${date(p.periodEnd)}</small>`}</div>`).join("")}` : ""}`,
+    `<div class="royal-plan"><span class="plan-name">PGOne</span><div class="plan-price">${esc(price)}<small>/ month</small></div><p>One-time payment · one calendar month · no auto-debit</p><ul><li>${icon("check")}Rooms & residents</li><li>${icon("check")}Rent records & receipts</li><li>${icon("check")}Owner-approved team access</li></ul></div>${notice(subscribed ? (data.legacyAccess ? "Your existing workspace access is preserved." : "Your access is active for the confirmed paid period.") : `Make a fresh ${price} payment to activate one calendar month of PGOne.`)}${data.accessEnd ? `<p class="legal-copy">Access until ${date(data.accessEnd)}. An early renewal adds a month after this date.</p>` : ""}${!data.legacyAccess && canPay && config.customWebBilling?.enabled && data.mode === "MANUAL_MONTHLY" ? `<form data-form="prepare" novalidate><div class="form-error" role="alert"></div>${field("email", "Payment contact email", { type: "email", required: true, value: account.email || "", attrs: 'autocomplete="email"' })}<label class="billing-consent"><input name="consent" type="checkbox" required><span>I agree to pay ${esc(price)} once for one calendar month, including applicable tax. Each renewal needs a fresh payment. No recurring mandate or automatic debit.</span></label>${button(subscribed ? `Renew for ${price}` : `Pay ${price} for one month`, { type: "submit", kind: "primary block" })}</form><div data-payment-apps></div>` : pendingPriceReview ? notice(`Your earlier ${money(data.pendingOrder.amountPaise)} payment needs confirmation before a new ${price} payment. Refresh its status before paying again.`) : !subscribed ? notice("Monthly payments are awaiting merchant configuration. No payment will be initiated.") : ""}${button("Refresh payment status", { action: "refresh", kind: "secondary block" })}${data.legacySubscription?.provider && !data.legacySubscription.cancelAtPeriodEnd ? button("Cancel previous auto-renewal", { action: "cancel", kind: "text-button" }) : ""}<p class="legal-copy">Payments use Razorpay’s official Custom SDK and your UPI app. PGOne never asks for your UPI PIN or card details.</p>${data.subscription?.payments?.length ? `<h2 class="royal-section-title">Payment records</h2>${data.subscription.payments.map((p) => `<div class="billing-record"><strong>₹${(p.amountPaise / 100).toFixed(2)}</strong><span>${date(p.paidAt)} · ${esc(p.receiptNumber)}</span>${p.refundedPaise ? `<small>Refunded ₹${(p.refundedPaise / 100).toFixed(2)}</small>` : `<small>Access ${date(p.periodStart)} – ${date(p.periodEnd)}</small>`}</div>`).join("")}` : ""}`,
   );
 }
 async function prepare(values) {
@@ -180,13 +184,18 @@ async function prepare(values) {
     `/api/platform/organisations/${organisationId}/plan/orders`,
     {
       method: "POST",
-      body: { accepted: true, amountPaise: 24900, recurring: false, requestKey },
+      body: { accepted: true, amountPaise: data.plan?.amountPaise??config.plan?.amountPaise, recurring: false, requestKey },
     },
   );
   current();
   if (!authorisation.payable) {
     await status();
     message("This payment is already processed. Review your access and receipt before starting another renewal.");
+    return;
+  }
+  if(authorisation.amountPaise!==(data.plan?.amountPaise??config.plan?.amountPaise)){
+    await status();
+    message("An earlier payment has a different amount. Refresh its status before making another payment.");
     return;
   }
   paymentOrder = authorisation;
@@ -270,6 +279,7 @@ document.addEventListener("click", async (event) => {
       processing = true;
       adapter.pay({
         orderId: authorisation.orderId,
+        amountPaise: authorisation.amountPaise,
         contact: authorisation.contact,
         email: authorisation.email,
         app: b.dataset.app,

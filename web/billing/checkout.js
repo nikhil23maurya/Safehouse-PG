@@ -41,10 +41,11 @@ export class CustomUpiPayment {
     } catch { return []; }
     finally { clearTimeout(timer); }
   }
-  pay({ orderId, contact, email, app }) {
+  pay({ orderId, amountPaise, contact, email, app }) {
     if (this.busy) return false;
     if (
       !/^order_[a-zA-Z0-9]+$/.test(orderId) ||
+      !Number.isSafeInteger(amountPaise) || ![100,24900].includes(amountPaise) ||
       (contact && !/^(\+91)?[6-9]\d{9}$/.test(contact)) ||
       !this.appIds.has(app)
     )
@@ -55,7 +56,7 @@ export class CustomUpiPayment {
     try {
       this.sdk.createPayment(
         {
-          amount: 24900,
+          amount: amountPaise,
           currency: "INR",
           order_id: orderId,
           method: "upi",

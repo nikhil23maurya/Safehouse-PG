@@ -34,7 +34,7 @@ export async function merchantView(accountId:string,organisationId:string) {
   status:auth?.status||(started?.status==="STARTED"&&started.expiresAt>new Date()?"ONBOARDING_STARTED":"NOT_CONNECTED"),
   bank:{status:auth?.bankStatus||"UNKNOWN",last4:auth?.bankLast4||null},paymentAcceptance:auth?.paymentEnabled?"ENABLED":"NOT_ENABLED",settlementReadiness:auth?.settlementReady?"READY":"NOT_READY",
   requiredAction:!cfg.enabled?"Razorpay merchant onboarding is awaiting platform activation.":auth?.status==="ACTIVATED"?null:"Complete Razorpay verification, then refresh your account status.",
-  connected:Boolean(auth?.current),message:"Rent is processed under your own merchant account. The ₹249 PGOne plan is separate."};
+  connected:Boolean(auth?.current),message:"Rent is processed under your own merchant account. Your PGOne software plan is separate."};
 }
 export async function startConnection(accountId:string,organisationId:string,sessionId:string) {
  const cfg=requireOwnerPayments();await ownerOrganisation(accountId,organisationId);

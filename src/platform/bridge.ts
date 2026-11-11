@@ -96,7 +96,7 @@ export async function platformWorkspaceBridge(
         await entitlement(membership.organisation.id),
         402,
         "SUBSCRIPTION_REQUIRED",
-        "Activate PGOne for ₹249/month before accessing your management workspace.",
+        "Activate your PGOne plan before accessing your management workspace.",
       );
     }
     if (owner && req.method !== "GET") {
