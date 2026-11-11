@@ -115,6 +115,7 @@ final class PlanUpiCheckout {
                 events.result(id,"INVALID_PAYMENT_CONTACT","Enter a valid mobile number for payment.");return;
             }
             JSONObject payload=ownerRent?rentPaymentPayload(input):paymentPayload(input);
+            String amountLabel=java.math.BigDecimal.valueOf(input.getLong("amount"),2).stripTrailingZeros().toPlainString();
             order=id;submitted=false;
             prefs.edit().putString("organisation",input.optString("organisationId","")).apply();
             if(ownerRent){android.content.SharedPreferences.Editor edit=prefs.edit();for(String field:new String[]{"invoiceId","rentOrderId","membershipId"})edit.putString(field,input.optString(field,""));edit.apply();}
@@ -139,7 +140,6 @@ final class PlanUpiCheckout {
                     }
                     emit("CHOOSING_APP","Choose your UPI app.");
                     String[] labels=new String[apps.size()];for(int i=0;i<apps.size();i++)labels[i]=apps.get(i).label;
-                    String amountLabel=java.math.BigDecimal.valueOf(input.getLong("amount"),2).stripTrailingZeros().toPlainString();
                     chooser=new AlertDialog.Builder(activity).setTitle(ownerRent?"PGOne · Pay rent":"PGOne · Pay ₹"+amountLabel).setItems(labels,(dialog,which)->{
                         if(!id.equals(order))return;
                         try {
