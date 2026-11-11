@@ -24,7 +24,7 @@ await writeFile(
   new URL("billing.css", out),
   (
     await Promise.all(
-      ["tokens", "components", "platform"].map((n) =>
+      ["tokens", "components", "platform", "motion", "product-ux"].map((n) =>
         readFile(new URL(`styles/${n}.css`, source), "utf8"),
       ),
     )

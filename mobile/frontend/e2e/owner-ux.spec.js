@@ -20,8 +20,8 @@ test("reject request closes access and does not expose rent activation",async({p
 });
 test("all three loading bubbles keep moving with a subtle reduced-motion alternative",async({page})=>{
  await setup(page);await login(page);await page.emulateMedia({reducedMotion:'reduce'});let release;const hold=new Promise(r=>release=r);
- await page.route('**/api/owner/rooms',async route=>{await hold;await route.fulfill({json:{rooms:[]}});});
- await page.locator('.nav-item[data-route=rooms]').click();await expect(page.locator('.screen-loading .loading-dots i')).toHaveCount(3);
+ await page.route('**/resident-requests',async route=>{await hold;await route.fulfill({json:{requests:[]}});});
+ await page.locator('.quick-actions [data-route=residentRequests]').click();await expect(page.locator('.screen-loading .loading-dots i')).toHaveCount(3);
  const sample=()=>page.locator('.screen-loading .loading-dots i').evaluateAll(nodes=>nodes.map(n=>({opacity:getComputedStyle(n).opacity,animation:getComputedStyle(n).animationName,transform:getComputedStyle(n).transform})));
  const frames=[];for(let i=0;i<5;i++){frames.push(await sample());await page.waitForTimeout(130);}
  expect(new Set(frames.map(f=>f.map(n=>n.opacity).join(','))).size).toBeGreaterThan(2);expect(frames.flat().every(n=>n.animation==='dot-pulse'&&n.transform==='none')).toBe(true);
@@ -33,4 +33,10 @@ test("payment and subscription remain light; back never initiates another paymen
  await go(page,'subscription');await page.getByLabel('Mobile number for payment').fill('9999999999');await page.getByRole('button',{name:'Pay ₹1 with UPI'}).click();await page.evaluate(()=>window.PGOnePlanPaymentResult('order_SYNTHETIC001','RETURNED_CHECK_PROVIDER'));await expect(page).toHaveURL(/#planVerification$/);
  await expect(page.locator('.verification-page')).toHaveCSS('background-color','rgb(248, 250, 255)');await expect(page.getByRole('button',{name:'Go back'})).toBeVisible();const order=await page.evaluate(()=>window.__lastPlanOptions.order_id);await page.getByRole('button',{name:'Go back'}).click();await expect(page).toHaveURL(/#subscription$/);expect(await page.evaluate(()=>window.__lastPlanOptions.order_id)).toBe(order);expect(f.propertiesCreated).toBe(1);
  await fs.mkdir('visual-evidence/owner-ux',{recursive:true});await page.screenshot({path:'visual-evidence/owner-ux/light-plan.png',fullPage:true});
+ f.activatePaid();await go(page,'workspaces');await page.getByRole('button',{name:'Add another property'}).click();
+ await page.getByLabel('PG name').fill('Second PG');await page.getByLabel('City',{exact:true}).fill('Pune');await page.getByRole('button',{name:'Create my PG'}).click();
+ await expect(page).toHaveURL(/#properties$/);await expect(page.getByRole('button',{name:/Second PG/})).toBeVisible();expect(f.propertiesCreated).toBe(2);
+ await page.getByRole('button',{name:'Go back'}).click();await expect(page).toHaveURL(/#ownerHome$/);await expect(page.locator('.property-context')).toContainText('Second PG');
+ await go(page,'workspaces');await expect(page.getByRole('button',{name:/I'm a Resident|Join with a PG code/})).toHaveCount(0);
+ await page.screenshot({path:'visual-evidence/owner-ux/owner-properties.png',fullPage:true});
 });

@@ -176,6 +176,7 @@ export async function platform(page, { billing = false, pendingAmount = null, or
       },
     }),
   );
+  await page.route("**/api/owner/properties",route=>route.fulfill({json:{properties:memberships.filter(m=>m.role==="OWNER").map(m=>m.property)}}));
   return {
     ...fixtures,
     requests,

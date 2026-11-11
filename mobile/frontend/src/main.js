@@ -376,6 +376,9 @@ async function back() {
   }
   if (!(await canLeave())) return;
   dirty = false;
+  if(["planVerification","planSuccess","rentVerification","rentSuccess"].includes(state.route.name)){
+    const parent=backTarget(state);if(parent)return navigate(parent,{},{replace:true,force:true});
+  }
   if (depth > 0) history.back();
   else {const parent=backTarget(state);if(parent)await navigate(parent, {}, { replace: true, force: true });}
 }

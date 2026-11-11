@@ -156,12 +156,7 @@ export async function residentScreen(ctx) {
         "Payment history",
         `<div class="list">${payments.length ? payments.map((p) => paymentRow(p, false, ctx.snapshot.property?.timezone)).join("") : empty("No payments yet", "Confirmed payments and their receipts will appear here.", { glyph: "wallet" })}</div>`,
       ) +
-      section(
-        "Account access",
-        card(
-          `<p class="subtitle">Residents manage their own email and password. Share a private invitation to connect their account.</p>${button("Invite resident", { route: "invitations", params: { id: s.id }, kind: "secondary block", glyph: "key" })}`,
-        ),
-      ),
+      section("Account access",card(`<p class="subtitle">Residents request access with your PG code. Review their request before linking room and rent.</p>${button("Resident requests",{route:"residentRequests",kind:"secondary block",glyph:"users"})}`)),
   };
 }
 

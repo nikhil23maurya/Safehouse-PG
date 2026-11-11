@@ -82,7 +82,7 @@ export function setupPropertyScreen(ctx) {
   return {
     ...page(
       adding?"Add property":"Your first PG",
-      `${intro("", "Set up your PG", "")}${adding?"":step(2, "Your property")}${form("setupProperty", `${field("name", "PG name", { value: draft?.values?.name || "", required: true, placeholder: "e.g. Maple House", attrs: 'minlength="2" maxlength="120" autocomplete="organization"' })}${field("city", "City", { value: draft?.values?.city || "", required: true, placeholder: "e.g. Bengaluru", attrs: 'minlength="2" maxlength="100" autocomplete="address-level2"' })}${field("approximateRooms", "Approximate number of rooms", { value: draft?.values?.approximateRooms || "", type: "number", placeholder: "Optional", attrs: 'min="1" max="100000" inputmode="numeric"' })}`, "Create my PG")}`,
+      `${intro("", adding?"Add another property":"Set up your PG", "")}${adding?"":step(2, "Your property")}${form("setupProperty", `${field("name", "PG name", { value: draft?.values?.name || "", required: true, placeholder: "e.g. Maple House", attrs: 'minlength="2" maxlength="120" autocomplete="organization"' })}${field("city", "City", { value: draft?.values?.city || "", required: true, placeholder: "e.g. Bengaluru", attrs: 'minlength="2" maxlength="100" autocomplete="address-level2"' })}${field("approximateRooms", "Approximate number of rooms", { value: draft?.values?.approximateRooms || "", type: "number", placeholder: "Optional", attrs: 'min="1" max="100000" inputmode="numeric"' })}`, "Create my PG")}`,
       adding?"properties":"setupProfile",
     ),
     input(_name, _el, form) {
@@ -230,27 +230,12 @@ export async function invitationsScreen(ctx) {
   const { members = [] } = await ctx.api(
     `/api/platform/organisations/${org.id}/members`,
   );
-  const { students = [] } = await ctx.api(
-    `/api/owner/students?${ctx.periodQuery}`,
-  );
   return {
     ...page(
       "Invite your people",
-      `${intro("BETTER TOGETHER", "The right people. The right access.", "Invite a resident or staff member to your PG.")}${form("createInvitation", `<label class="field"><span class="field-label">Invite as</span><select name="role"><option value="STAFF">Staff · occupancy access</option><option value="RESIDENT">Resident · their own records</option></select></label>${field("email", "Invitation email", { required: true, type:"email", attrs: 'autocomplete="email" maxlength="254"' })}<div data-invited-resident hidden>${field("studentId", "Resident", { options: [["", "Choose a resident"], ...students.filter((s) => s.status === "ACTIVE").map((s) => [s.id, `${s.name} / ${s.mobile}`])], help: "Add residents in Resident Management before inviting them." })}</div>`, "Create invitation")}<div data-invitation-result aria-live="polite"></div><h2 class="royal-section-title">Recent invitations</h2>${list.invitations.map((i) => `<div class="invitation-row"><span><strong>${esc(i.role)}</strong><small>${esc(i.email || "Retired phone invitation — issue a new email invitation")}</small></span>${badge(i.status)}${i.status === "REQUESTED" ? button("Review access request",{action:"approveInvitation",kind:"secondary",attrs:`data-id="${esc(i.id)}" data-account="${esc(i.requestedAccountId)}" data-email="${esc(i.email)}"`}) : ""}${["PENDING","REQUESTED"].includes(i.status) ? button("Revoke", { action: "revoke", kind: "text-button", attrs: `data-id="${esc(i.id)}"` }) : ""}</div>`).join("") || '<p class="legal-copy">Your invitations will appear here.</p>'}<h2 class="royal-section-title">People with access</h2>${members.map((m) => `<div class="invitation-row"><span><strong>${esc(m.fullName || m.role)}</strong><small>${esc(m.role)} / ${esc(m.propertyName)}</small></span>${button("Remove access", { action: "revokeMember", kind: "text-button", attrs: `data-id="${esc(m.id)}"` })}</div>`).join("") || '<p class="legal-copy">No resident or staff memberships yet.</p>'}`,
+      `${intro("BETTER TOGETHER", "The right people. The right access.", "Invite staff with occupancy access. Residents join through PG requests.")}${form("createInvitation",field("email", "Staff email", { required: true, type:"email", attrs: 'autocomplete="email" maxlength="254"' }),"Invite staff")}<div data-invitation-result aria-live="polite"></div><h2 class="royal-section-title">Recent invitations</h2>${list.invitations.map((i) => `<div class="invitation-row"><span><strong>${esc(i.role)}</strong><small>${esc(i.email || "Retired phone invitation — issue a new email invitation")}</small></span>${badge(i.status)}${i.status === "REQUESTED" ? button("Review access request",{action:"approveInvitation",kind:"secondary",attrs:`data-id="${esc(i.id)}" data-account="${esc(i.requestedAccountId)}" data-email="${esc(i.email)}"`}) : ""}${["PENDING","REQUESTED"].includes(i.status) ? button("Revoke", { action: "revoke", kind: "text-button", attrs: `data-id="${esc(i.id)}"` }) : ""}</div>`).join("") || '<p class="legal-copy">Your invitations will appear here.</p>'}<h2 class="royal-section-title">People with access</h2>${members.map((m) => `<div class="invitation-row"><span><strong>${esc(m.fullName || m.role)}</strong><small>${esc(m.role)} / ${esc(m.propertyName)}</small></span>${button("Remove access", { action: "revokeMember", kind: "text-button", attrs: `data-id="${esc(m.id)}"` })}</div>`).join("") || '<p class="legal-copy">No resident or staff memberships yet.</p>'}`,
       "profile",
     ),
-    change(name, el, form) {
-      if (name === "role") {
-        const group = form.querySelector("[data-invited-resident]");
-        group.hidden = el.value !== "RESIDENT";
-        form.elements.studentId.required = el.value === "RESIDENT";
-      }
-      if (name === "studentId") {
-        const student = students.find((s) => s.id === el.value);
-        if (student)
-          form.elements.email.value = student.email || "";
-      }
-    },
     async submit(_name, el) {
       const v = formValues(el);
       const result = await ctx.api("/api/platform/invitations", {
@@ -258,10 +243,9 @@ export async function invitationsScreen(ctx) {
         body: {
           organisationId: org.id,
           propertyId: ctx.snapshot.property.id,
-          role: v.role,
+          role: "STAFF",
           email: v.email.trim().toLowerCase(),
-          ...(v.studentId ? { studentId: v.studentId } : {}),
-          permissions: v.role === "STAFF" ? ["OCCUPANCY_READ"] : [],
+          permissions: ["OCCUPANCY_READ"],
         },
       });
       ctx.markSaved();

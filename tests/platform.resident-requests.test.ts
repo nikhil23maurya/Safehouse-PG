@@ -6,7 +6,8 @@ process.env.PGONE_PLATFORM_ENABLED="true";
 const url=new URL(process.env.DATABASE_URL||"invalid:");assert.equal(process.env.NODE_ENV,"test");assert.equal(url.hostname,"127.0.0.1");assert.equal(url.pathname,"/pgone_test");
 const {prisma}=await import("../src/db.js");
 const {registerEmail}=await import("../src/platform/email-auth.js");
-const {saveProfile,createProperty,platformPair,membershipTokens}=await import("../src/platform/service.js").then(async s=>({...s,...await import("../src/platform/tokens.js")}));
+const {saveProfile,createProperty,membershipTokens}=await import("../src/platform/service.js");
+const {issueSession}=await import("../src/platform/sessions.js");
 const {manageJoinCode,joinProperty}=await import("../src/platform/join-codes.js");
 const {decideResidentRequest,setupRequestedResident,propertyResidentRequests,myResidentRequests}=await import("../src/platform/resident-requests.js");
 const {platformRouter}=await import("../src/platform/router.js");
@@ -57,12 +58,36 @@ test("rejected requests stay idempotent and owners cannot request their own or o
  assert.equal(await prisma.pgAudit.count({where:{entityId:r.id,action:"RESIDENT_REQUEST_REJECTED"}}),1);
 });
 test("actual request APIs require authentication, strict rent bodies and property-scoped owner access",async()=>{
- const o=await owner(),r=await account(),auth={authorization:`Bearer ${platformPair(r).accessToken}`,"content-type":"application/json"};
+ const o=await owner(),r=await account(),auth={authorization:`Bearer ${(await issueSession(r)).accessToken}`,"content-type":"application/json"};
  assert.equal((await fetch(`${base}/api/platform/resident-requests`)).status,401);
  const submitted=await fetch(`${base}/api/platform/join`,{method:"POST",headers:auth,body:JSON.stringify({code:o.code,...profile})});const body:any=await submitted.json();assert.equal(submitted.status,200);assert.equal(body.pendingApproval,true);assert.equal(body.tokens,undefined);
  const denied=await fetch(`${base}/api/platform/properties/${o.setup.propertyId}/resident-requests`,{headers:auth});assert.equal(denied.status,403);
- const own={authorization:`Bearer ${platformPair(o.a).accessToken}`,"content-type":"application/json"},path=`${base}/api/platform/properties/${o.setup.propertyId}/resident-requests/${body.requestId}`;
+ const own={authorization:`Bearer ${(await issueSession(o.a)).accessToken}`,"content-type":"application/json"},path=`${base}/api/platform/properties/${o.setup.propertyId}/resident-requests/${body.requestId}`;
  assert.equal((await fetch(path+"/decision",{method:"POST",headers:own,body:JSON.stringify({decision:"ACCEPTED",password})})).status,200);
  assert.equal((await fetch(path+"/rent",{method:"POST",headers:own,body:JSON.stringify({...rent(o.room.id),monthlyRentPaise:100.1})})).status,400);
  assert.equal(await prisma.pgMembership.count({where:{accountId:r.id}}),0);
+ const active=await fetch(path+"/rent",{method:"POST",headers:own,body:JSON.stringify(rent(o.room.id))});assert.equal(active.status,200);const enabled:any=await active.json();assert.ok(enabled.membershipId);
+ assert.equal((await fetch(path+"/rent",{method:"POST",headers:own,body:JSON.stringify(rent(o.room.id))})).status,200);
+});
+test("multiple owner properties share the plan while requests, rooms and rent remain property scoped",async()=>{
+ const o=await owner(),second=await createProperty(o.a.id,{name:"Second Request PG",city:"Pune",key:crypto.randomUUID()}),resident=await account();assert.equal(second.organisationId,o.setup.organisationId);
+ const code=await manageJoinCode(o.a.id,second.propertyId,"ENSURE"),r=(await joinProperty(resident.id,code.code!,profile)).request!;
+ assert.equal((await propertyResidentRequests(o.a.id,o.setup.propertyId)).requests.length,0);assert.equal((await propertyResidentRequests(o.a.id,second.propertyId)).requests[0].id,r.id);
+ await assert.rejects(()=>decideResidentRequest(o.a.id,o.setup.propertyId,r.id,"ACCEPTED",password),{code:"REQUEST_NOT_FOUND"});
+ await decideResidentRequest(o.a.id,second.propertyId,r.id,"ACCEPTED",password);
+ await assert.rejects(()=>setupRequestedResident(o.a.id,second.propertyId,r.id,rent(o.room.id)),{code:"ROOM_NOT_FOUND"});
+ assert.equal(await prisma.pgMembership.count({where:{accountId:resident.id}}),0);
+});
+test("linking a historical record preserves invoices and rejects duplicated mobile or another account",async()=>{
+ const o=await owner(),resident=await account(),r=(await joinProperty(resident.id,o.code,profile)).request!,input=rent(o.room.id);
+ const user=await prisma.user.create({data:{fullName:"Historical Resident",role:"STUDENT"}});
+ const student=await prisma.student.create({data:{userId:user.id,propertyId:o.setup.propertyId,roomId:o.room.id,bedLabel:"A",mobile:profile.mobile.slice(-10),joiningDate:new Date(input.joiningDate+"T12:00:00Z"),monthlyRentPaise:input.monthlyRentPaise,securityDepositPaise:input.securityDepositPaise,rentDueDay:7}});
+ const now=new Date(),old=await prisma.rentInvoice.create({data:{propertyId:o.setup.propertyId,studentId:student.id,year:now.getUTCFullYear()-1,month:1,dueDate:new Date("2025-01-07"),rentPaise:123456,totalPaise:123456,paidPaise:123456,status:"PAID"}});
+ await prisma.room.update({where:{id:o.room.id},data:{capacity:2}});await decideResidentRequest(o.a.id,o.setup.propertyId,r.id,"ACCEPTED",password);
+ await assert.rejects(()=>setupRequestedResident(o.a.id,o.setup.propertyId,r.id,input),{code:"EXISTING_RESIDENT_RECORD"});
+ await assert.rejects(()=>setupRequestedResident(o.a.id,o.setup.propertyId,r.id,{...input,existingStudentId:student.id,monthlyRentPaise:100}),{code:"EXISTING_RECORD_MISMATCH"});
+ const linked=await setupRequestedResident(o.a.id,o.setup.propertyId,r.id,{...input,existingStudentId:student.id});assert.equal(linked.studentId,student.id);
+ assert.deepEqual(await prisma.rentInvoice.findUnique({where:{id:old.id}}),old);assert.equal(await prisma.student.count({where:{propertyId:o.setup.propertyId}}),1);assert.equal(await prisma.rentRevision.count({where:{studentId:student.id}}),0,"linking must not invent an initial revision for existing history");
+ const other=await account(),r2=(await joinProperty(other.id,o.code,{...profile,mobile:"+919123456787"})).request!;await decideResidentRequest(o.a.id,o.setup.propertyId,r2.id,"ACCEPTED",password);
+ await assert.rejects(()=>setupRequestedResident(o.a.id,o.setup.propertyId,r2.id,{...input,existingStudentId:student.id}),{code:"RESIDENCY_ALREADY_LINKED"});
 });

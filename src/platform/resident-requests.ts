@@ -22,13 +22,15 @@ export async function requestPropertyAccess(accountId:string,propertyId:string,o
   const fullName=(profile.fullName||account.fullName).trim(),mobile=profile.mobile||account.contactPhone;
   assert(fullName.length>=2&&fullName.length<=100&&/^\+91[6-9]\d{9}$/.test(mobile||""),400,"RESIDENT_DETAILS_REQUIRED","Enter your full name and valid Indian mobile number.");
   const request=await tx.pgResidentRequest.create({data:{accountId,propertyId,organisationId,fullName,mobile:mobile!,status:member?"ACCEPTED":"PENDING",membershipId:member?.id}});
+  if(!account.fullName.trim())await tx.pgAccount.update({where:{id:accountId},data:{fullName,contactPhone:mobile,setupIntent:account.setupIntent||"RESIDENT"}});
   await audit(tx,accountId,organisationId,"RESIDENT_REQUEST_SUBMITTED",request.id,{propertyId});
   return {request};
  });
 }
 async function owned(accountId:string,propertyId:string){
  const setup=await prisma.pgPropertySetup.findUnique({where:{propertyId},include:{property:true}});
- assert(setup,404,"PROPERTY_NOT_FOUND","Property not found.");await ownerOrganisation(accountId,setup.organisationId);return setup;
+ assert(setup,404,"PROPERTY_NOT_FOUND","Property not found.");const org=await ownerOrganisation(accountId,setup.organisationId);
+ assert(setup.property.ownerId===org.legacyOwnerId,403,"PROPERTY_SCOPE_INVALID","This property relationship needs review.");return setup;
 }
 const summary=(r:any)=>({id:r.id,propertyId:r.propertyId,propertyName:r.property?.name,fullName:r.fullName,email:r.account?.email,mobile:r.mobile,status:r.status,createdAt:r.createdAt,decidedAt:r.decidedAt,studentId:r.studentId,membershipId:r.membershipId});
 export async function myResidentRequests(accountId:string){
@@ -61,11 +63,12 @@ export async function decideResidentRequest(accountId:string,propertyId:string,i
 export type ResidentRentSetup={roomId:string;bedLabel?:string;joiningDate:string;monthlyRentPaise:number;securityDepositPaise:number;rentDueDay:number;mobile:string;password:string;identityChecked:true;existingStudentId?:string};
 export async function setupRequestedResident(accountId:string,propertyId:string,id:string,input:ResidentRentSetup){
  const setup=await verifyOwner(accountId,propertyId,input.password);
- const {password,identityChecked,...financial}=input;
+ const {identityChecked}=input;
  assert(identityChecked,400,"IDENTITY_CONFIRMATION_REQUIRED","Verify the resident's identity first.");
  const joining=parseDateOnly(input.joiningDate);
  assert(joining.toISOString().slice(0,10)===input.joiningDate,400,"INVALID_DATE","Enter a valid joining date.");
  const period=datePartsInTimeZone(setup.property.timezone,joining);
+ const financial={roomId:input.roomId,bedLabel:input.bedLabel||"",joiningDate:input.joiningDate,monthlyRentPaise:input.monthlyRentPaise,securityDepositPaise:input.securityDepositPaise,rentDueDay:input.rentDueDay,mobile:input.mobile,existingStudentId:input.existingStudentId||null};
  const fingerprint=crypto.createHash("sha256").update(JSON.stringify(financial)).digest("hex");
  const result=await atomic(async tx=>{
   const request=await tx.pgResidentRequest.findFirst({where:{id,propertyId,organisationId:setup.organisationId},include:{account:true}});
@@ -89,12 +92,12 @@ export async function setupRequestedResident(accountId:string,propertyId:string,
    const linked=await tx.pgMembership.findFirst({where:{actorUserId:student.userId,status:"ACTIVE",accountId:{not:request.accountId}}});
    const legacy=await tx.pgAccount.findUnique({where:{legacyUserId:student.userId}});
    assert(!linked&&(!legacy||legacy.id===request.accountId),409,"RESIDENCY_ALREADY_LINKED","This record belongs to another account.");
-   assert(student.roomId===room.id&&student.monthlyRentPaise===input.monthlyRentPaise&&student.securityDepositPaise===input.securityDepositPaise&&student.rentDueDay===input.rentDueDay,409,"EXISTING_RECORD_MISMATCH","Existing rent records cannot be rewritten during linking. Review their saved room and rent.");
+   assert(student.roomId===room.id&&student.monthlyRentPaise===input.monthlyRentPaise&&student.securityDepositPaise===input.securityDepositPaise&&student.rentDueDay===input.rentDueDay&&student.joiningDate.toISOString().slice(0,10)===input.joiningDate&&(student.bedLabel||"")===(input.bedLabel||"")&&student.mobile.replace(/\D/g,"").slice(-10)===input.mobile.slice(-10),409,"EXISTING_RECORD_MISMATCH","Existing rent records cannot be rewritten during linking. Review their saved room and rent.");
   }else{
    const occupied=await tx.student.count({where:{roomId:room.id,status:"ACTIVE"}});
    assert(occupied<room.capacity,409,"ROOM_FULL","This room is full. Choose another room.");
    if(input.bedLabel)assert(!await tx.student.findFirst({where:{roomId:room.id,status:"ACTIVE",bedLabel:input.bedLabel}}),409,"BED_OCCUPIED","This bed is already assigned.");
-   assert(!await tx.student.findUnique({where:{propertyId_mobile:{propertyId,mobile:input.mobile}}}),409,"EXISTING_RESIDENT_RECORD","A resident record already has this mobile number. Review and link that record instead of creating a duplicate.");
+   assert(!await tx.student.findFirst({where:{propertyId,mobile:{in:[input.mobile,input.mobile.slice(-10),input.mobile.slice(1)]}}}),409,"EXISTING_RESIDENT_RECORD","A resident record already has this mobile number. Review and link that record instead of creating a duplicate.");
    const user=await tx.user.create({data:{fullName:request.fullName,email:null,passwordHash:null,role:"STUDENT",mustChangePassword:false}});
    student=await tx.student.create({data:{propertyId,userId:user.id,roomId:room.id,mobile:input.mobile,bedLabel:input.bedLabel||null,joiningDate:joining,monthlyRentPaise:input.monthlyRentPaise,securityDepositPaise:input.securityDepositPaise,rentDueDay:input.rentDueDay}});
    await tx.rentRevision.create({data:{propertyId,studentId:student.id,amountPaise:input.monthlyRentPaise,effectiveYear:period.year,effectiveMonth:period.month,reason:"INITIAL_RENT",createdByUserId:setup.property.ownerId}});

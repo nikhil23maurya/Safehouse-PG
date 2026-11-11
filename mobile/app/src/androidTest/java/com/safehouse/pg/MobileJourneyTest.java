@@ -266,7 +266,10 @@ public class MobileJourneyTest {
         instrumentation.runOnMainSync(() -> activity.setRequestedOrientation(android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT));
         await("innerHeight>innerWidth");
         assertEquals("true", js("document.querySelector('[name=fullName]').value==='Draft kept on rotation'"));
-        js("document.querySelector('[data-action=back]').click()"); await("document.querySelector('[data-action=dialog-confirm]')");
+        instrumentation.runOnMainSync(()->activity.onBackPressed()); await("document.querySelector('[data-action=dialog-confirm]')");
+        instrumentation.runOnMainSync(()->activity.onBackPressed()); await("!document.querySelector('[role=dialog]')");
+        assertEquals("true",js("document.querySelector('[name=fullName]').value==='Draft kept on rotation'"));
+        instrumentation.runOnMainSync(()->activity.onBackPressed()); await("document.querySelector('[data-action=dialog-confirm]')");
         js("document.querySelector('[data-action=dialog-confirm]').click()"); await("!document.querySelector('[data-form=resident]')");
         go("rooms", "{}"); screenshot("08-rooms");
         go("room", "{id:'room1'}"); screenshot("09-room");

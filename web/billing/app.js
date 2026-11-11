@@ -1,6 +1,7 @@
 import { createApiClient } from "../../mobile/frontend/src/core/api.js";
 import { brand, icon } from "../../mobile/frontend/src/components/icons.js";
 import { money } from "../../mobile/frontend/src/domain/finance.js";
+import {busyButton} from "../../mobile/frontend/src/components/motion.js";
 import {
   esc,
   date,
@@ -214,7 +215,7 @@ document.addEventListener("submit", async (event) => {
   const generation = flowGeneration;
   form.dataset.busy = "true";
   const submit = form.querySelector('[type="submit"]');
-  submit.disabled = true;
+  const restoreBusy=busyButton(submit);
   try {
     const values = formValues(form);
     if (form.dataset.form === "email") {
@@ -227,7 +228,7 @@ document.addEventListener("submit", async (event) => {
     else message(error.message);
   } finally {
     delete form.dataset.busy;
-    submit.disabled = false;
+    restoreBusy();
   }
 });
 document.addEventListener("click", async (event) => {
@@ -235,6 +236,7 @@ document.addEventListener("click", async (event) => {
   if (!b || b.disabled || b.dataset.busy) return;
   const action = b.dataset.action;
   b.dataset.busy = "true";
+  const restoreBusy=busyButton(b);
   try {
     if (action === "toggle-password") {
       const input = document.getElementById(b.dataset.target);
@@ -295,6 +297,7 @@ document.addEventListener("click", async (event) => {
     message(error.message);
   } finally {
     delete b.dataset.busy;
+    restoreBusy();
   }
 });
 try {
