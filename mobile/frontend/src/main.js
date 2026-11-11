@@ -688,6 +688,7 @@ function makeContext(snapshot, key) {
   };
   return {
     snapshot,
+    canGoBack:depth>0||Boolean(backTarget(snapshot)),
     params: state.route.params,
     periodQuery: periodQuery(snapshot.period),
     api: scopedApi,

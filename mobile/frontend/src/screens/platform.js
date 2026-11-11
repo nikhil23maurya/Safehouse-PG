@@ -26,7 +26,7 @@ const arrow = icon("arrow");
 const primary = (label, props = {}) =>
   button(label, { kind: "primary block royal-button", ...props });
 const top = (back = "welcome") =>
-  `<header class="onboarding-top"><button class="royal-back" data-action="back" aria-label="Go back">${icon("back")}</button>${brand()}</header>`;
+  `<header class="onboarding-top">${back===false?"":`<button class="royal-back" data-action="back" aria-label="Go back">${icon("back")}</button>`}${brand()}</header>`;
 const step = (number, label) =>
   `<div class="setup-step"><span>Step ${number} of 2</span><span class="setup-track"><i style="width:${number * 50}%"></i></span><small>${esc(label)}</small></div>`;
 const form = (name, content, label = "Continue") =>
@@ -140,7 +140,7 @@ export async function workspacesScreen(ctx) {
     ...page(
       "Your workspaces",
       `${intro("WELCOME BACK", data.account.fullName ? `Hello, ${data.account.fullName.split(" ")[0]}.` : "Your PG, connected.", "Choose a workspace to continue.")}<div class="workspace-list">${data.memberships.map((m) => `<button class="workspace-option" data-action="workspace" data-id="${esc(m.id)}"><span class="role-icon">${icon(m.role === "OWNER" ? "building" : "home")}</span><span><strong>${esc(m.property.name)}</strong><small>${esc(m.role === "RESIDENT" ? "Resident" : m.role === "STAFF" ? "Staff" : "Property owner")}</small></span>${icon("arrow")}</button>`).join("") || notice("You haven’t joined a property yet. Create your PG or join with a PG code.")}</div>${owns?primary("Add another property",{route:"setupProperty",glyph:"plus"}):primary("Join with a PG code",{route:"joinWorkspace",glyph:"plus"})}${owns?"":button("My PG requests",{route:"joinStatus",kind:"secondary block"})}${owns?"":button("Staff invitation",{route:"staffInvitation",kind:"text-button block"})}${button("Change password",{route:"password",kind:"secondary block"})}${button("Sign out", { action: "logout", kind: "text-button" })}`,
-      "chooseRole",
+      ctx.canGoBack?"profile":false,
     ),
     action(name, el) {
       if (name === "workspace") return ctx.selectWorkspace(el.dataset.id);
