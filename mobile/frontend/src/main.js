@@ -1,3 +1,5 @@
+import {pendingDirect,saveDirect} from "./payments/direct-return.js";
+import {directPaymentScreen,transferProofScreen,ownerTransferReviewScreen} from "./screens/direct-transfers.js";
 import {backTarget} from "./core/navigation.js";
 import {residentRequestsScreen,residentRequestScreen,residentRentSetupScreen,joinStatusScreen} from "./screens/resident-requests.js";
 import {dots,busyButton} from "./components/motion.js";
@@ -123,6 +125,8 @@ const routes = {
   invoices: [ctx=>unassignedResident(ctx.snapshot)?unassignedRecordsScreen(ctx):invoicesScreen(ctx), "STUDENT"],
   history: [ctx=>unassignedResident(ctx.snapshot)?unassignedRecordsScreen(ctx):paymentsScreen(ctx), "STUDENT"],
   payment: [rentPaymentEntry, "STUDENT"],
+  transferProof:[transferProofScreen,"STUDENT"],
+  ownerTransferReview:[ownerTransferReviewScreen,"OWNER"],
   ownerDirectRent: [ownerDirectRentScreen,"OWNER"],
   invoice: [invoiceScreen, "BOTH"],
   profile: [ctx=>unassignedResident(ctx.snapshot)?unassignedProfileScreen(ctx):profileScreen(ctx), "BOTH"],
@@ -611,6 +615,12 @@ window.PGOneRentPaymentResult=(providerOrder,status)=>{
 };
 window.PGOneMerchantReturned=()=>{if(state.user?.role==="OWNER"&&state.tokens?.kind==="PLATFORM")void navigate("merchant",{},{replace:true,force:true});};
 window.PGOneDirectUpiResult=(opened,message)=>screen?.directUpiResult?.(opened,message);
+window.PGOneDirectUpiReturned=()=>{
+  const pending=pendingDirect(state,native);
+  if(state.user?.role!=="STUDENT"||!pending||pending.stage!=="PROOF")return;
+  if(state.route.name==="transferProof"&&state.route.params.id===pending.transferId)screen?.directReturned?.();
+  else if(!dirty&&!submittedForms)void navigate("transferProof",{id:pending.transferId,invoiceId:pending.invoiceId},{replace:true,force:true});
+};
 // The native Custom SDK returns a UPI-app result, never an entitlement.
 window.PGOnePlanPaymentError = (message) => {
   toast(message || "UPI checkout could not open. Check payment status before retrying.", "error");
@@ -618,6 +628,10 @@ window.PGOnePlanPaymentError = (message) => {
 };
 window.SafeHouseResume = () => {
   applyMotionPreference();
+  if(state.user?.role==="STUDENT"&&pendingDirect(state,native)?.stage==="PROOF"){
+    if(state.route.name==="transferProof"&&dirty)return;
+    window.PGOneDirectUpiReturned();return;
+  }
   if(state.route?.name==="rentVerification"){void screen?.onRentResult?.();return;}
   if(state.user?.role==="STUDENT"&&state.platform?.membershipId===rentCheckout.membershipId&&rentCheckout.orderId&&!["DISCOVERING","CHOOSING_APP"].includes(rentCheckout.status)){void navigate("rentVerification",{},{replace:true,force:true});return;}
   if(state.user?.role==="OWNER"&&native.call("getMerchantReturnPending")){window.PGOneMerchantReturned();return;}
@@ -1198,6 +1212,8 @@ async function boot() {
       persist();
       restoringMetadata = null;
       state.route = { name: guardedRoute(postAuthRoute()), params: {} };
+      const directPending=state.user?.role==="STUDENT"?pendingDirect(state,native):null;
+      if(directPending)state.route={name:guardedRoute("transferProof"),params:{id:directPending.transferId,invoiceId:directPending.invoiceId}};
     } catch (error) {
       if (state.authEpoch !== restoreEpoch) return;
       if (error.status === 401 || !state.tokens) clearSession();

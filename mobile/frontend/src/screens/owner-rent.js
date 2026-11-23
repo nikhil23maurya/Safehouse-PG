@@ -5,12 +5,14 @@ import {platformConfig,requestId} from "../platform/client.js";
 import {paymentContact} from "../payments/plan.js";
 import {rentCheckout} from "../payments/rent.js";
 import {directRentScreen} from "./direct-rent.js";
+import {directPaymentScreen} from "./direct-transfers.js";
 import {paymentScreen} from "./payment.js";
 
 export async function rentPaymentEntry(ctx){
  if(ctx.snapshot.tokens?.kind!=="PLATFORM")return paymentScreen(ctx);
  const member=ctx.snapshot.platform?.memberships?.find(m=>m.id===ctx.snapshot.platform.membershipId);
  const cfg=await platformConfig(ctx,{force:true});
+ if(cfg.directRentProof===true)return directPaymentScreen(ctx);
  if(cfg.ownerRent?.enabled)return ownerRentScreen(ctx);
  return member?.organisation?.legacyAccess?paymentScreen(ctx):directRentScreen(ctx);
 }

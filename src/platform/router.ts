@@ -1,3 +1,4 @@
+import {directTransferRouter} from "./direct-transfer-router.js";
 import {residentRequestRouter} from "./resident-request-router.js";
 import {planStatusRouter} from "./plan-status-router.js";
 import {ownerPaymentsRouter} from "./owner-payments/router.js";
@@ -77,6 +78,7 @@ platformRouter.get("/config", (req, res) => {
     phone: null,
     authentication: "EMAIL_PASSWORD",
     ownerRent: {enabled:ownerPaymentConfig().enabled&&ownerPaymentConfig().ledgerAllowed},
+    directRentProof: true,
     recoveryAvailable: mailReady(),
     googleEnabled: false,
     customWebBilling: {
@@ -171,6 +173,7 @@ platformRouter.post("/phone", (_req,_res) => {
 });
 platformRouter.use("/auth",emailAuthRouter);
 platformRouter.use("/rent",directRentRouter);
+platformRouter.use("/direct-payments",directTransferRouter);
 platformRouter.use("/owner-payments",ownerPaymentsRouter);
 platformRouter.use(joinCodeRouter);
 platformRouter.use(residentRequestRouter);

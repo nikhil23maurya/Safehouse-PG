@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application>
+        <provider android:name="com.safehouse.pg.EvidenceFixtureProvider" android:authorities="com.safehouse.pg.testing.test.evidence" android:exported="true" android:grantUriPermissions="true" />
         <!-- Disabled until the controlled handoff assertion; never in the app APK. -->
         <activity android:name="com.safehouse.pg.UpiFixtureActivity" android:exported="true" android:enabled="false" android:label="UPI Test Receiver">
             <intent-filter>

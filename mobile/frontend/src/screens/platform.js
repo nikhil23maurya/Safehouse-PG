@@ -1,4 +1,5 @@
 import {ownerMerchantScreen} from "./owner-merchant.js";
+import {ownerDirectRentScreen} from "./direct-rent.js";
 import {money} from "../domain/finance.js";
 import {planCheckout,paymentContact} from "../payments/plan.js";
 import { brand, icon } from "../components/icons.js";
@@ -220,7 +221,7 @@ export async function subscriptionScreen(ctx) {
  };
 }
 
-export async function merchantScreen(ctx) { return ownerMerchantScreen(ctx); }
+export async function merchantScreen(ctx) { const cfg=await platformConfig(ctx);return cfg.directRentProof===true?ownerDirectRentScreen(ctx):ownerMerchantScreen(ctx); }
 export async function invitationsScreen(ctx) {
   const org = organisation(ctx.snapshot);
   if (!org) throw new Error("Select your owner workspace first.");

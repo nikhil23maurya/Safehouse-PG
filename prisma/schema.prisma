@@ -809,6 +809,81 @@ model PgEmailAction {
 }
 
 
+model PgRentEvidence {
+  id String @id @default(cuid())
+  accountId String
+  propertyId String
+  purpose String
+  data Bytes
+  sha256 String
+  width Int
+  height Int
+  createdAt DateTime @default(now())
+  @@unique([accountId, propertyId, purpose, sha256])
+  @@index([accountId, createdAt])
+}
+
+model PgElectricityBill {
+  id String @id @default(cuid())
+  invoiceId String @unique
+  propertyId String
+  studentId String
+  accountId String
+  amountPaise Int
+  meterEvidenceId String
+  revision Int @default(1)
+  status String @default("DUE")
+  paidAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  @@index([propertyId, status])
+}
+
+model PgDirectTransfer {
+  id String @id @default(cuid())
+  accountId String
+  propertyId String
+  studentId String
+  invoiceId String
+  billId String?
+  rentClaimId String?
+  requestKey String
+  rentPaise Int
+  electricityPaise Int
+  amountPaise Int
+  payeeAddress String
+  payeeName String
+  payeeRevision Int
+  reference String @unique
+  status String @default("READY")
+  bankKey String? @unique
+  rentPaymentId String? @unique
+  receiptNumber String? @unique
+  createdAt DateTime @default(now())
+  confirmedAt DateTime?
+  proofs PgTransferProof[]
+  @@unique([accountId, requestKey])
+  @@index([propertyId, id])
+  @@index([invoiceId, status])
+  @@index([billId])
+}
+
+model PgTransferProof {
+  id String @id @default(cuid())
+  transferId String
+  transfer PgDirectTransfer @relation(fields:[transferId],references:[id],onDelete:Restrict)
+  requestKey String
+  evidenceId String
+  bankReference String
+  status String @default("PENDING")
+  reason String?
+  reviewerAccountId String?
+  reviewedAt DateTime?
+  createdAt DateTime @default(now())
+  @@unique([transferId, requestKey])
+  @@index([transferId, createdAt])
+}
+
 model PgOwnerUpi {
   property Property @relation(fields:[propertyId], references:[id], onDelete:Restrict)
   owner PgAccount @relation(fields:[ownerAccountId], references:[id], onDelete:Restrict)

@@ -307,6 +307,37 @@ public class MobileJourneyTest {
         js("document.querySelector('[data-action=logout]').click()"); await("document.querySelector('[data-action=dialog-confirm]')");
         js("document.querySelector('[data-action=dialog-confirm]').click()"); await("document.querySelector('[data-form=login]')");
         signIn(true); screenshot("20-resident-home");
+        // New direct UPI flow: installed WebView, OS image-picker callback,
+        // server-backed synthetic allocations, resume and proof submission.
+        // The monitor returns only a synthetic image; no real UPI payment.
+        js("window.__directFixtureEnabled=true");
+        go("payment","{invoiceId:'invoice1'}");
+        android.net.Uri evidenceUri=android.net.Uri.parse("content://com.safehouse.pg.testing.test.evidence/photo");
+        instrumentation.getContext().grantUriPermission(target.getPackageName(),evidenceUri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        Instrumentation.ActivityMonitor photoMonitor=instrumentation.addMonitor(new android.content.IntentFilter(Intent.ACTION_OPEN_DOCUMENT),new Instrumentation.ActivityResult(Activity.RESULT_OK,new Intent().setData(evidenceUri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)),true);
+        js("document.querySelector('[name=amount]').value='650.25';document.querySelector('[name=meter]').click()");
+        await("document.querySelector('[name=meter]').files.length===1");
+        js("document.querySelector('[data-form=electricityBill]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
+        await("window.__directFixtures.bill && document.querySelector('[name=charges] option[value=BOTH]')");
+        js("document.querySelector('[name=charges]').value='BOTH';document.querySelector('[data-form=chooseTransfer]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
+        await("document.getElementById('app').dataset.screen==='transferProof'");screenshot("60-direct-combined-payment");
+        assertEquals("Combined bank amount is rent plus independent electricity","915124",js("window.__directFixtures.transfers[0].amountPaise"));
+        // Resume is independent of any success callback. Resident can always
+        // return manually; app recovery opens the upload step, never Paid.
+        setReceiverEnabled(true);
+        Instrumentation.ActivityMonitor upiMonitor=instrumentation.addMonitor(new android.content.IntentFilter(Intent.ACTION_CHOOSER),new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null),true);
+        js("document.querySelector('[data-action=openTransferUpi]').click()");
+        await("!document.querySelector('[data-proof-upload]').hidden");screenshot("61-direct-attach-proof");
+        assertTrue("Direct UPI must launch through the native chooser",upiMonitor.getHits()>=1);
+        instrumentation.removeMonitor(upiMonitor);setReceiverEnabled(false);
+        js("document.querySelector('[name=reference]').value='123456789012';document.querySelector('[name=proof]').click()");
+        await("document.querySelector('[name=proof]').files.length===1");
+        js("document.querySelector('[data-form=transferProof]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
+        await("window.__directFixtures.transfers[0].status==='SUBMITTED'&&!document.querySelector('.page-progress')");screenshot("62-direct-owner-review-pending");
+        assertTrue("The native image picker must service both uploads",photoMonitor.getHits()>=2);
+        assertEquals("A screenshot must never confirm a bank credit","false",js("Boolean(document.querySelector('[data-action=transferReceipt]'))"));
+        instrumentation.removeMonitor(photoMonitor);
+        js("window.SafeHouseNative.saveDirectTransferState('[]');window.__directFixtureEnabled=false");
         go("invoices", "{}"); screenshot("21-invoices");
         go("history", "{}"); screenshot("22-history");
         // New owner-merchant flow uses a synthetic native gateway. It never

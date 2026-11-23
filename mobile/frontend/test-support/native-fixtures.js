@@ -1,6 +1,9 @@
 import { createFixtures } from "../e2e/fixtures.mjs";
 import { createPlatformFixtures } from "./platform-fixtures.js";
 import {createOwnerPaymentFixtures} from "./owner-payment-fixtures.js";
+import {createDirectPaymentFixtures} from "./direct-payment-fixtures.js";
+window.__directFixtureEnabled=false;
+window.__directFixtures=createDirectPaymentFixtures();
 window.__nativeFixtures = createFixtures();
 window.__platformFixtures = createPlatformFixtures();
 window.__platformFixtureEnabled = false;
@@ -16,6 +19,7 @@ window.fetch = async (input, options = {}) => {
   } catch {
     /* no request body */
   }
+  if(window.__directFixtureEnabled){const d=window.__directFixtures.handler(url,options.method||"GET",body);if(d){if(d.image){const bytes=Uint8Array.from(atob(d.data),c=>c.charCodeAt(0));return new Response(bytes,{status:d.status,headers:{"Content-Type":"image/jpeg"}});}return new Response(JSON.stringify(d.data),{status:d.status,headers:{"Content-Type":"application/json"}});}}
   if(window.__ownerRentFixtureEnabled){if(window.__ownerRentHold&&url.endsWith('/orders/rent-synthetic/recheck'))await new Promise(resolve=>window.__releaseOwnerRentCheck=resolve);const ownerResult=window.__ownerRentFixtures.handler(url,options.method||"GET",body);if(ownerResult!==null)return new Response(JSON.stringify(ownerResult),{status:200,headers:{"Content-Type":"application/json"}});}
   if (
     window.__platformFixtureEnabled &&

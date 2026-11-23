@@ -55,6 +55,8 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
     private static final int NOTIFICATION_PERMISSION_REQUEST = 9421;
 
     private WebView webView;
+    private PaymentProofPicker proofPicker;
+    private static final int DIRECT_UPI_REQUEST=9424;
     // Separate provider-owned WebView: never expose the app session JS bridge to a bank/payment page.
     private PlanUpiCheckout planCheckout;
     private PlanUpiCheckout rentCheckout;
@@ -133,13 +135,15 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
         settings.setTextZoom(Math.round(getResources().getConfiguration().fontScale * 100));
         settings.setDomStorageEnabled(true);
         settings.setAllowFileAccess(false);
-        settings.setAllowContentAccess(false);
+        settings.setAllowContentAccess(true);
         settings.setAllowFileAccessFromFileURLs(false);
         settings.setAllowUniversalAccessFromFileURLs(false);
         settings.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         settings.setCacheMode(WebSettings.LOAD_DEFAULT);
         settings.setMediaPlaybackRequiresUserGesture(false);
         webView.addJavascriptInterface(new NativeBridge(), "SafeHouseNative");
+        proofPicker=new PaymentProofPicker(this);
+        webView.setWebChromeClient(proofPicker);
         webView.setWebViewClient(new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -259,6 +263,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     @Override
     protected void onDestroy() {
+        if(proofPicker!=null)proofPicker.close();
         if (registrationReceiverAdded) {
             try { unregisterReceiver(registrationReceiver); } catch (Exception ignored) {}
         }
@@ -336,6 +341,8 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     @Override protected void onActivityResult(int requestCode,int resultCode,Intent data){
         super.onActivityResult(requestCode,resultCode,data);
+        if(proofPicker!=null&&proofPicker.result(requestCode,resultCode,data))return;
+        if(requestCode==DIRECT_UPI_REQUEST){callJs("window.PGOneDirectUpiReturned && window.PGOneDirectUpiReturned();");return;}
         if(planCheckout!=null)planCheckout.activityResult(requestCode,resultCode,data);
         if(rentCheckout!=null)rentCheckout.activityResult(requestCode,resultCode,data);
     }
@@ -365,6 +372,11 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
             return android.provider.Settings.Global.getFloat(getContentResolver(), android.provider.Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f;
         }
         @JavascriptInterface public String getSession() { return sessionVault.load(); }
+        @JavascriptInterface public String getDirectTransferState(){return getSharedPreferences("pgone_direct_return",MODE_PRIVATE).getString("references","");}
+        @JavascriptInterface public boolean saveDirectTransferState(String value){
+            if(value==null||value.length()>16384)return false;
+            try{new org.json.JSONArray(value);return getSharedPreferences("pgone_direct_return",MODE_PRIVATE).edit().putString("references",value).commit();}catch(Exception ignored){return false;}
+        }
         @JavascriptInterface public boolean saveSession(String value) { return sessionVault.save(value); }
         @JavascriptInterface public void ready() {
             runOnUiThread(() -> {
@@ -431,7 +443,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
             try{
                 Intent intent=new Intent(Intent.ACTION_VIEW,DirectRentQr.validate(uri));
                 if(getPackageManager().queryIntentActivities(intent,PackageManager.MATCH_DEFAULT_ONLY).isEmpty())throw new ActivityNotFoundException();
-                startActivity(Intent.createChooser(intent,"Pay your PG owner"));
+                startActivityForResult(Intent.createChooser(intent,"Pay your PG owner"),DIRECT_UPI_REQUEST);
                 callJs("window.PGOneDirectUpiResult && window.PGOneDirectUpiResult(true,'');");
             }catch(Exception e){callJs("window.PGOneDirectUpiResult && window.PGOneDirectUpiResult(false,"+q("No compatible UPI app could open. You can use the optional QR or your owner's UPI address.")+");");}
         });}
@@ -572,7 +584,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                 try {
                     Uri uri = Uri.parse(url == null ? "" : url);
                     if (!"https".equals(uri.getScheme()) || !"safehouse-api.onrender.com".equals(uri.getHost()) ||
-                        (uri.getPort() != -1 && uri.getPort() != 443) || uri.getPath() == null || !(uri.getPath().matches("/api/(owner|student)/payments/[a-zA-Z0-9_-]+/receipt\\.pdf") || uri.getPath().matches("/api/platform/organisations/[a-zA-Z0-9_-]+/plan/receipts/[a-zA-Z0-9_-]+\\.pdf")) || uri.getQuery() != null || uri.getUserInfo() != null) {
+                        (uri.getPort() != -1 && uri.getPort() != 443) || uri.getPath() == null || !(uri.getPath().matches("/api/(owner|student)/payments/[a-zA-Z0-9_-]+/receipt\\.pdf") || uri.getPath().matches("/api/platform/organisations/[a-zA-Z0-9_-]+/plan/receipts/[a-zA-Z0-9_-]+\\.pdf") || uri.getPath().matches("/api/platform/direct-payments/transfers/[a-zA-Z0-9_-]+/receipt\\.pdf")) || uri.getQuery() != null || uri.getUserInfo() != null) {
                         Toast.makeText(MainActivity.this, "Invalid receipt link", Toast.LENGTH_SHORT).show(); return;
                     }
                     if (Build.VERSION.SDK_INT <= 28 && checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {

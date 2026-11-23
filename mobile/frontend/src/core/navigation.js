@@ -1,6 +1,8 @@
 /** Logical parents are used only when there is no usable in-app history. */
 export function backTarget(snapshot){
  const name=snapshot.route.name,authenticated=Boolean(snapshot.tokens&&snapshot.user);
+ if(name==="ownerTransferReview")return "ownerDirectRent";
+ if(name==="transferProof")return "invoices";
  if(!authenticated)return name==="forgotPassword"?"login":name==="login"||name==="signup"?"welcome":null;
  const owner=snapshot.user.role==="OWNER",home=owner?"ownerHome":snapshot.user.role==="STUDENT"?"studentHome":"workspaces";
  if(name==="workspaces"&&owner)return snapshot.platform?.memberships?.some(m=>m.id===snapshot.platform.membershipId&&m.organisation?.entitled===true)?"ownerHome":null;
