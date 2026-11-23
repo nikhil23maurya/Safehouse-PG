@@ -43,7 +43,7 @@ after(async () => {
   await browser?.close();
   server?.close();
 });
-async function fixture(enabled, supportedApps = ["phonepe"], pendingAmount = null, orderAmount = 100) {
+async function fixture(enabled, supportedApps = ["phonepe"], pendingAmount = null, orderAmount = 15900) {
   const page = await browser.newPage({ viewport: { width: 393, height: 852 } });
   let activated = false,
     starts = 0,
@@ -58,7 +58,7 @@ async function fixture(enabled, supportedApps = ["phonepe"], pendingAmount = nul
       if (path.endsWith("/config"))
         data = {
           enabled: true,
-          plan:{amountPaise:100,currency:"INR"},
+          plan:{amountPaise:15900,currency:"INR"},
           phone: null,
           customWebBilling: { enabled, keyId: "synthetic-test-key" },
           legal: {
@@ -112,7 +112,7 @@ async function fixture(enabled, supportedApps = ["phonepe"], pendingAmount = nul
           entitled: activated,
           legacyAccess: false,
           mode: "MANUAL_MONTHLY",
-          plan:{amountPaise:100,currency:"INR"},
+          plan:{amountPaise:15900,currency:"INR"},
           pendingOrder:pendingAmount?{providerOrderId:"order_Test01",amountPaise:pendingAmount,status:"PENDING"}:null,
           recurring: false,
           accessEnd: activated ? "2027-01-01" : null,
@@ -162,17 +162,17 @@ async function fixture(enabled, supportedApps = ["phonepe"], pendingAmount = nul
     },
   };
 }
-test("reduced price holds historical requests without starting another checkout",async()=>{
-  const f=await fixture(true,["phonepe"],24900);
-  await expect(f.page.getByText(/earlier ₹249 payment needs confirmation before a new ₹1 payment/)).toBeVisible();
-  await expect(f.page.getByRole("button",{name:"Pay ₹1 for one month"})).toHaveCount(0);
+for(const pendingAmount of [100,24900])test(`Current price holds historical ${pendingAmount/100} requests without starting another checkout`,async()=>{
+  const f=await fixture(true,["phonepe"],pendingAmount);
+  await expect(f.page.getByText(new RegExp(`earlier ₹${pendingAmount/100} payment needs confirmation before a new ₹159 payment`))).toBeVisible();
+  await expect(f.page.getByRole("button",{name:"Pay ₹159 for one month"})).toHaveCount(0);
   assert.equal(f.starts,0);assert.equal(f.scripts,0);assert.deepEqual(f.errors,[]);
   await f.page.close();
 });
 test("recovered old-price web order never opens a payment-app action",async()=>{
   const f=await fixture(true,["phonepe"],null,24900),page=f.page;
   await page.getByLabel("Payment contact email").fill("owner@example.test");await page.getByRole("checkbox").check();
-  await page.getByRole("button",{name:"Pay ₹1 for one month"}).click();
+  await page.getByRole("button",{name:"Pay ₹159 for one month"}).click();
   await expect(page.getByText(/earlier payment has a different amount/)).toBeVisible();
   await expect(page.getByRole("button",{name:"PhonePe",exact:true})).toHaveCount(0);
   assert.equal(await page.evaluate(()=>window.__payment),undefined);assert.equal(f.starts,1);assert.deepEqual(f.errors,[]);
@@ -189,7 +189,7 @@ test("separate web surface stays unavailable without custom merchant enablement"
   assert.equal(f.scripts, 0);
   assert.equal(f.starts, 0);
   await expect(
-    f.page.getByRole("button", { name: "Pay ₹1 for one month" }),
+    f.page.getByRole("button", { name: "Pay ₹159 for one month" }),
   ).toHaveCount(0);
   assert.deepEqual(f.errors, []);
   await f.page.close();
@@ -198,7 +198,7 @@ test("custom one-time SDK payment stays pending until a server-confirmed paid pe
   const f = await fixture(true),
     page = f.page;
   await page.getByRole("checkbox").check();
-  await page.getByRole("button", { name: "Pay ₹1 for one month" }).click();
+  await page.getByRole("button", { name: "Pay ₹159 for one month" }).click();
   await page.getByRole("button", { name: "PhonePe", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "PhonePe", exact: true }),
@@ -206,7 +206,7 @@ test("custom one-time SDK payment stays pending until a server-confirmed paid pe
   const payload = await page.evaluate(() => window.__payment);
   assert.equal(payload.data.order_id, "order_Test01");
   assert.equal(payload.data.subscription_id, undefined);
-  assert.equal(payload.data.amount, 100);
+  assert.equal(payload.data.amount, 15900);
   assert.equal(payload.data.method, "upi");
   assert.equal(f.starts, 1);
   await expect(page.getByText("No recurring mandate or automatic debit.", { exact: false })).toHaveCount(1);
@@ -230,7 +230,7 @@ test("custom one-time SDK payment stays pending until a server-confirmed paid pe
       exact: true,
     }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Renew for ₹1", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Renew for ₹159", exact: true })).toBeVisible();
   await expect(page.locator("#billing-message")).toHaveText("");
   await expect(page.getByRole("button", { name: "Cancel future renewal" })).toHaveCount(0);
   await mkdir(new URL("screenshots/", import.meta.url), { recursive: true });
@@ -248,11 +248,11 @@ test("custom one-time SDK payment stays pending until a server-confirmed paid pe
 test("Android's generic UPI chooser uses the exact existing server order",async()=>{
   const f=await fixture(true,["phonepe","gpay","navi","any"]),page=f.page;
   await page.getByRole("checkbox").check();
-  await page.getByRole("button",{name:"Pay ₹1 for one month"}).click();
+  await page.getByRole("button",{name:"Pay ₹159 for one month"}).click();
   await page.getByRole("button",{name:"Choose a UPI app",exact:true}).click();
   const payment=await page.evaluate(()=>window.__payment);
   assert.equal(payment.options.app,"any");assert.equal(payment.data.order_id,"order_Test01");
-  assert.equal(payment.data.amount,100);assert.equal(f.starts,1);
+  assert.equal(payment.data.amount,15900);assert.equal(f.starts,1);
   await expect(page.locator("#billing-message")).toContainText("Complete this one-time payment");
   assert.deepEqual(f.errors,[]);await page.close();
 });
@@ -260,7 +260,7 @@ test("Android's generic UPI chooser uses the exact existing server order",async(
 test("an unsupported browser gets browser guidance and creates no payment order",async()=>{
   const f=await fixture(true,[]),page=f.page;
   await page.getByRole("checkbox").check();
-  await page.getByRole("button",{name:"Pay ₹1 for one month"}).click();
+  await page.getByRole("button",{name:"Pay ₹159 for one month"}).click();
   await expect(page.getByRole("alert")).toContainText("UPI app launching is unavailable in this browser");
   assert.equal(f.starts,0);assert.deepEqual(f.errors,[]);await page.close();
 });

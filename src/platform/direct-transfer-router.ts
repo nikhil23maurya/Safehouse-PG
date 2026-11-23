@@ -36,7 +36,7 @@ directTransferRouter.post("/invoices/:id/transfers",async(req,res)=>{
 directTransferRouter.get("/owner",async(req,res)=>{const {account,membership}=await session(req);res.json(await ownerTransfers(account.id,membership.propertyId,req.query.cursor?id.parse(req.query.cursor):undefined));});
 directTransferRouter.get("/history",async(req,res)=>{
  const {account,membership}=await session(req);assert(membership.role==="RESIDENT",403,"RESIDENT_REQUIRED","Select your residency.");
- const rows=await prisma.pgDirectTransfer.findMany({where:{accountId:account.id,propertyId:membership.propertyId,status:"CONFIRMED"},orderBy:{confirmedAt:"desc"},take:100,select:{id:true,invoiceId:true,rentPaise:true,electricityPaise:true,amountPaise:true,receiptNumber:true,confirmedAt:true}});res.json({transfers:rows});
+ const rows=await prisma.pgDirectTransfer.findMany({where:{accountId:account.id,propertyId:membership.propertyId,status:"CONFIRMED"},orderBy:{confirmedAt:"desc"},take:100,select:{id:true,invoiceId:true,status:true,rentPaise:true,electricityPaise:true,amountPaise:true,receiptNumber:true,rentPaymentId:true,confirmedAt:true}});res.json({transfers:rows});
 });
 directTransferRouter.get("/transfers/:id",async(req,res)=>{const {account,membership}=await session(req);res.json(await transferDetail(account.id,membership.id,id.parse(req.params.id)));});
 directTransferRouter.post("/transfers/:id/proof",async(req,res)=>{

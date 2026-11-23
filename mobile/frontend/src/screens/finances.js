@@ -235,6 +235,9 @@ export async function paymentsScreen(ctx) {
   }
   const cfg=ctx.snapshot.tokens?.kind==="PLATFORM"?await platformConfig(ctx):{};
   const direct=cfg.directRentProof===true?await ctx.api(`/api/platform/direct-payments/${owner?"owner":"history"}`):{transfers:[]};
+  const confirmedTransfers=direct.transfers.filter(t=>!t.status||t.status==="CONFIRMED");
+  const linkedRentPayments=new Set(confirmedTransfers.map(t=>t.rentPaymentId).filter(Boolean));
+  payments=payments.filter(p=>!linkedRentPayments.has(p.id));
   const {transferList}=await import("./direct-transfers.js");
   return {
     title: "Payment history",
@@ -247,7 +250,7 @@ export async function paymentsScreen(ctx) {
         "",
       ) +
       (owner ? periodControl(ctx.snapshot.period) : "") +
-      (direct.transfers.length?`<section><h2>Direct UPI payments & electricity</h2><p class="subtitle">Rent portions also appear in rent receipts below; they are the same payment.</p>${transferList(direct.transfers,owner)}</section>`:"")+
+      (confirmedTransfers.length?`<section><h2>Direct UPI payments & electricity</h2><p class="subtitle">Owner-confirmed transfers with rent and electricity shown separately in each receipt.</p>${transferList(confirmedTransfers,owner)}</section>`:"")+
       `<div class="list">${payments.length ? payments.map((p) => paymentRow(p, owner, ctx.snapshot.property?.timezone)).join("") : empty("No payments yet", owner ? "No recorded payments for this billing month." : "Your recorded payments and receipts will appear here.", { glyph: "wallet" })}</div>` +
       button("Refresh payments", {
         action: "reload",

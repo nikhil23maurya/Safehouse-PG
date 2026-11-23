@@ -80,7 +80,7 @@ test("proof rejection never credits rent; correction is appended and old review 
 test("bank confirmation is mandatory; confirmed UTR cannot credit another transfer or property for same payee",async()=>{
  const f=await fixture(),t=await f.prepare(),p=await f.submit(t.id,"123456789012");
  await assert.rejects(()=>reviewTransfer(f.owner.id,f.pg.propertyId,t.id,{proofId:p.id,approve:true}),{code:"BANK_CHECK_REQUIRED"});await f.confirm(t.id,p.id);
- await f.electricity();const e=await f.prepare(false,true),ep=await f.submit(e.id,"123456789012");await assert.rejects(()=>f.confirm(e.id,ep.id),{code:"BANK_REFERENCE_USED"});
+ await f.electricity();const e=await f.prepare(false,true),ep=await f.submit(e.id,"123456-789012");await assert.rejects(()=>f.confirm(e.id,ep.id),{code:"BANK_REFERENCE_USED"});
  assert.equal((await prisma.pgElectricityBill.findUniqueOrThrow({where:{invoiceId:f.invoice.id}})).status,"DUE");
 });
 test("no-debit cancellation allows a new selection; submitted or uncertain proof cannot be cancelled",async()=>{
@@ -110,6 +110,11 @@ test("private image validation limits bytes/dimensions and strips metadata; uplo
  assert.throws(()=>evidenceImage("a".repeat(800000)),{code:"INVALID_IMAGE"});
  const f=await fixture();assert.equal((await storeEvidence(f.resident.id,f.member.id,"METER",jpeg())).id,f.meter.id);
  assert.equal(evidenceImage(jpeg()).width,1);assert.ok((await ownerTransfers(f.owner.id,f.pg.propertyId)).transfers);
+});
+test("electricity amounts reject negative, fractional-paise and excessive values; photo purpose cannot be substituted",async()=>{
+ const f=await fixture();for(const amountPaise of [0,-1,1.5,10000001,Number.NaN])await assert.rejects(()=>f.electricity(amountPaise),{code:"INVALID_AMOUNT"});
+ await assert.rejects(()=>saveElectricity(f.resident.id,f.member.id,f.invoice.id,{amountPaise:100,meterEvidenceId:f.proof.id}),{code:"METER_PHOTO_REQUIRED"});
+ const t=await f.prepare();await assert.rejects(()=>submitProof(f.resident.id,f.member.id,t.id,{key:crypto.randomUUID(),bankReference:"123456789012",evidenceId:f.meter.id}),{code:"PAYMENT_PROOF_REQUIRED"});
 });
 test("actual authenticated HTTP routes keep proof private and issue a split receipt only after owner confirmation",async()=>{
  const f=await fixture(),g=await fixture();await prisma.pgOrganisation.update({where:{id:f.pg.organisationId},data:{legacyAccess:true}});

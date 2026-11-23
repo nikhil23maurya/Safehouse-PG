@@ -617,9 +617,9 @@ window.PGOneMerchantReturned=()=>{if(state.user?.role==="OWNER"&&state.tokens?.k
 window.PGOneDirectUpiResult=(opened,message)=>screen?.directUpiResult?.(opened,message);
 window.PGOneDirectUpiReturned=()=>{
   const pending=pendingDirect(state,native);
-  if(state.user?.role!=="STUDENT"||!pending||pending.stage!=="PROOF")return;
+  if(state.user?.role!=="STUDENT"||!pending||!["LAUNCHED","PROOF"].includes(pending.stage))return;
   if(state.route.name==="transferProof"&&state.route.params.id===pending.transferId)screen?.directReturned?.();
-  else if(!dirty&&!submittedForms)void navigate("transferProof",{id:pending.transferId,invoiceId:pending.invoiceId},{replace:true,force:true});
+  else if(pending.stage==="LAUNCHED"&&!dirty&&!submittedForms)void navigate("transferProof",{id:pending.transferId,invoiceId:pending.invoiceId},{replace:true,force:true});
 };
 // The native Custom SDK returns a UPI-app result, never an entitlement.
 window.PGOnePlanPaymentError = (message) => {
@@ -628,10 +628,11 @@ window.PGOnePlanPaymentError = (message) => {
 };
 window.SafeHouseResume = () => {
   applyMotionPreference();
-  if(state.user?.role==="STUDENT"&&pendingDirect(state,native)?.stage==="PROOF"){
+  if(state.user?.role==="STUDENT"&&pendingDirect(state,native)?.stage==="LAUNCHED"){
     if(state.route.name==="transferProof"&&dirty)return;
     window.PGOneDirectUpiReturned();return;
   }
+  if(state.route.name==="transferProof"&&pendingDirect(state,native)?.stage==="PROOF")return;
   if(state.route?.name==="rentVerification"){void screen?.onRentResult?.();return;}
   if(state.user?.role==="STUDENT"&&state.platform?.membershipId===rentCheckout.membershipId&&rentCheckout.orderId&&!["DISCOVERING","CHOOSING_APP"].includes(rentCheckout.status)){void navigate("rentVerification",{},{replace:true,force:true});return;}
   if(state.user?.role==="OWNER"&&native.call("getMerchantReturnPending")){window.PGOneMerchantReturned();return;}

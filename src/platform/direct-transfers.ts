@@ -65,7 +65,7 @@ export async function prepareTransfer(accountId:string,membershipId:string,invoi
   });
 }
 export async function submitProof(accountId:string,membershipId:string,transferId:string,input:{bankReference:string;evidenceId:string;key:string}){
-  const reference=input.bankReference.trim().toUpperCase();assert(/^[A-Z0-9-]{6,40}$/.test(reference),400,"INVALID_BANK_REFERENCE","Enter the UTR/transaction reference from your UPI app.");
+  const reference=input.bankReference.trim().toUpperCase();assert(/^[A-Z0-9-]{6,40}$/.test(reference)&&reference.replaceAll("-","").length>=6,400,"INVALID_BANK_REFERENCE","Enter the UTR/transaction reference from your UPI app.");
   return atomic(async tx=>{
     const {member}=await residentContext(tx,accountId,membershipId);
     const transfer=await tx.pgDirectTransfer.findFirst({where:{id:transferId,accountId,propertyId:member.propertyId}});
@@ -97,7 +97,7 @@ export async function reviewTransfer(accountId:string,propertyId:string,transfer
       await audit(tx,accountId,member.organisationId,"DIRECT_TRANSFER_PROOF_REJECTED",proof.id,{transferId});return updated;
     }
     assert(input.bankChecked===true,400,"BANK_CHECK_REQUIRED","Confirm the actual bank credit, payee, amount and meter bill before approving.");
-    const bankKey=createHash("sha256").update(`${transfer.payeeAddress.toLowerCase()}\n${proof.bankReference}`).digest("hex");
+    const bankKey=createHash("sha256").update(`${transfer.payeeAddress.toLowerCase()}\n${proof.bankReference.replaceAll("-","")}`).digest("hex");
     assert(!await tx.pgDirectTransfer.findUnique({where:{bankKey}}),409,"BANK_REFERENCE_USED","This bank reference already confirmed another payment to this payee.");
     const invoice=await tx.rentInvoice.findFirst({where:{id:transfer.invoiceId,propertyId,studentId:transfer.studentId}});
     assert(invoice,409,"INVOICE_CHANGED","The original invoice needs review.");

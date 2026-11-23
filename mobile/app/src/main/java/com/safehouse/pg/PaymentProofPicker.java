@@ -28,10 +28,10 @@ final class PaymentProofPicker extends WebChromeClient {
         if(request!=REQUEST)return false;
         ValueCallback<Uri[]> result=callback;callback=null;
         Uri uri=status==Activity.RESULT_OK&&data!=null?data.getData():null;
-        if(uri!=null){
+        try{if(uri!=null){
             String type=activity.getContentResolver().getType(uri);
             if(!"content".equals(uri.getScheme())||!("image/jpeg".equals(type)||"image/png".equals(type)||"image/webp".equals(type)))uri=null;
-        }
+        }}catch(Exception ignored){uri=null;}
         if(result!=null)result.onReceiveValue(uri==null?null:new Uri[]{uri});return true;
     }
     void close(){ if(callback!=null){callback.onReceiveValue(null);callback=null;} }

@@ -19,6 +19,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import org.junit.Test;
+import org.junit.After;
 import org.junit.runner.RunWith;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -38,6 +39,26 @@ public class MobileJourneyTest {
     private final Context target = instrumentation.getTargetContext();
     private Activity activity;
     private WebView web;
+    private final java.util.List<Instrumentation.ActivityMonitor> evidenceMonitors=new java.util.ArrayList<>();
+    @After public void cleanupEvidenceMonitors(){
+        for(Instrumentation.ActivityMonitor m:evidenceMonitors)instrumentation.removeMonitor(m);
+        if(activity!=null)instrumentation.runOnMainSync(()->activity.finish());
+    }
+    private Instrumentation.ActivityMonitor evidenceMonitor(String action,Instrumentation.ActivityResult result){
+        Instrumentation.ActivityMonitor m=instrumentation.addMonitor(new android.content.IntentFilter(action),result,true);evidenceMonitors.add(m);return m;
+    }
+    private void tapFileInput(String selector)throws Exception{
+        String quoted=org.json.JSONObject.quote(selector);
+        js("document.querySelector("+quoted+").scrollIntoView({block:'center'})");
+        Thread.sleep(250);
+        float cssX=Float.parseFloat(js("(()=>{const r=document.querySelector("+quoted+").getBoundingClientRect();return r.left+r.width/2})()"));
+        float cssY=Float.parseFloat(js("(()=>{const r=document.querySelector("+quoted+").getBoundingClientRect();return r.top+r.height/2})()"));
+        float viewport=Float.parseFloat(js("innerWidth"));int[] location=new int[2];instrumentation.runOnMainSync(()->web.getLocationOnScreen(location));
+        float scale=web.getWidth()/viewport;long time=android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down=android.view.MotionEvent.obtain(time,time,android.view.MotionEvent.ACTION_DOWN,location[0]+cssX*scale,location[1]+cssY*scale,0);
+        android.view.MotionEvent up=android.view.MotionEvent.obtain(time,time+80,android.view.MotionEvent.ACTION_UP,location[0]+cssX*scale,location[1]+cssY*scale,0);
+        instrumentation.sendPointerSync(down);instrumentation.sendPointerSync(up);down.recycle();up.recycle();
+    }
 
     private String read(InputStream input) throws Exception {
         try (InputStream stream = input; ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
@@ -314,8 +335,9 @@ public class MobileJourneyTest {
         go("payment","{invoiceId:'invoice1'}");
         android.net.Uri evidenceUri=android.net.Uri.parse("content://com.safehouse.pg.testing.test.evidence/photo");
         instrumentation.getContext().grantUriPermission(target.getPackageName(),evidenceUri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        Instrumentation.ActivityMonitor photoMonitor=instrumentation.addMonitor(new android.content.IntentFilter(Intent.ACTION_OPEN_DOCUMENT),new Instrumentation.ActivityResult(Activity.RESULT_OK,new Intent().setData(evidenceUri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)),true);
-        js("document.querySelector('[name=amount]').value='650.25';document.querySelector('[name=meter]').click()");
+        Instrumentation.ActivityMonitor photoMonitor=evidenceMonitor(Intent.ACTION_OPEN_DOCUMENT,new Instrumentation.ActivityResult(Activity.RESULT_OK,new Intent().setData(evidenceUri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)));
+        js("document.querySelector('[name=amount]').value='650.25'");
+        tapFileInput("[name=meter]");
         await("document.querySelector('[name=meter]').files.length===1");
         js("document.querySelector('[data-form=electricityBill]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
         await("window.__directFixtures.bill && document.querySelector('[name=charges] option[value=BOTH]')");
@@ -325,12 +347,13 @@ public class MobileJourneyTest {
         // Resume is independent of any success callback. Resident can always
         // return manually; app recovery opens the upload step, never Paid.
         setReceiverEnabled(true);
-        Instrumentation.ActivityMonitor upiMonitor=instrumentation.addMonitor(new android.content.IntentFilter(Intent.ACTION_CHOOSER),new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null),true);
+        Instrumentation.ActivityMonitor upiMonitor=evidenceMonitor(Intent.ACTION_CHOOSER,new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null));
         js("document.querySelector('[data-action=openTransferUpi]').click()");
         await("!document.querySelector('[data-proof-upload]').hidden");screenshot("61-direct-attach-proof");
         assertTrue("Direct UPI must launch through the native chooser",upiMonitor.getHits()>=1);
         instrumentation.removeMonitor(upiMonitor);setReceiverEnabled(false);
-        js("document.querySelector('[name=reference]').value='123456789012';document.querySelector('[name=proof]').click()");
+        js("document.querySelector('[name=reference]').value='123456789012'");
+        tapFileInput("[name=proof]");
         await("document.querySelector('[name=proof]').files.length===1");
         js("document.querySelector('[data-form=transferProof]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
         await("window.__directFixtures.transfers[0].status==='SUBMITTED'&&!document.querySelector('.page-progress')");screenshot("62-direct-owner-review-pending");
