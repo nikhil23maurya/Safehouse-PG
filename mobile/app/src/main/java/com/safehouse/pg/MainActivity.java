@@ -2,6 +2,7 @@ package com.safehouse.pg;
 
 import android.Manifest;
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
@@ -10,6 +11,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -45,6 +47,8 @@ import com.razorpay.PaymentResultWithDataListener;
 import org.json.JSONObject;
 import java.io.ByteArrayInputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashSet;
 
 public class MainActivity extends Activity implements PaymentResultWithDataListener {
     static final String PREFS = "safehouse_native";
@@ -439,17 +443,36 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
             }
         }
 
-        @JavascriptInterface public boolean openPaytm() {
-            Intent launch = getPackageManager().getLaunchIntentForPackage("net.one97.paytm");
-            if (launch == null) return false;
+        @JavascriptInterface public boolean openUpiApp() {
+            PackageManager packages = getPackageManager();
+            Intent discovery = new Intent(Intent.ACTION_VIEW, Uri.parse("upi://pay"));
+            ArrayList<Intent> launches = new ArrayList<>();
+            ArrayList<CharSequence> labels = new ArrayList<>();
+            HashSet<String> seen = new HashSet<>();
+            // Discover UPI-capable apps, then open their ordinary launcher activities.
+            for (ResolveInfo handler : packages.queryIntentActivities(discovery, PackageManager.MATCH_DEFAULT_ONLY)) {
+                String packageName = handler.activityInfo.packageName;
+                if (!seen.add(packageName)) continue;
+                Intent launch = packages.getLaunchIntentForPackage(packageName);
+                if (launch == null) continue;
+                launches.add(launch);
+                labels.add(handler.loadLabel(packages));
+            }
+            if (launches.isEmpty()) return false;
             runOnUiThread(() -> {
-                try {
-                    startActivity(launch);
-                } catch (ActivityNotFoundException | SecurityException unavailable) {
-                    Toast.makeText(MainActivity.this,
-                            "Paytm could not open. Paste the copied UPI ID in your UPI app.",
-                            Toast.LENGTH_LONG).show();
-                }
+                if (isFinishing() || isDestroyed()) return;
+                new AlertDialog.Builder(MainActivity.this)
+                        .setTitle("Choose UPI app")
+                        .setItems(labels.toArray(new CharSequence[0]), (dialog, choice) -> {
+                            try {
+                                startActivity(launches.get(choice));
+                            } catch (ActivityNotFoundException | SecurityException unavailable) {
+                                Toast.makeText(MainActivity.this, "Could not open the UPI app.",
+                                        Toast.LENGTH_SHORT).show();
+                            }
+                        })
+                        .setNegativeButton(android.R.string.cancel, null)
+                        .show();
             });
             return true;
         }

@@ -27,7 +27,7 @@ test("direct rent refreshes server amounts before copying and never opens a paym
   const screen=await directRentScreen({params:{invoiceId:"invoice"},api:async(_path,opts)=>{calls.push(opts?.method||"GET");return data;},
     native:{has:()=>true,call:(name,value)=>{calls.push([name,value]);return true;}},toast:()=>{}});
   assert.deepEqual(calls,["GET"]);
-  assert.match(screen.content,/Pay in Paytm or another UPI app/);
+  assert.match(screen.content,/Pay via UPI/);
   await screen.action("copyAmount");
   assert.deepEqual(calls,["GET","GET",["copyPaymentDetail","100.00"]]);
 });
