@@ -81,3 +81,19 @@ test("copying transfer details does not masquerade as a UPI return", async ({pag
  await expect(page.getByRole("button", {name:"Pay with UPI app", exact:true})).toBeVisible();
  await expect(page.getByLabel("Payment screenshot", {exact:true})).toBeHidden();
 });
+
+test("manual proof entry requires a bank check before opening UPI again", async ({page}) => {
+ const fixture = await setup(page);
+ await go(page,"payment",{invoiceId:"invoice1"});
+ await choose(page);
+ await page.getByRole("button",{name:"I have paid — attach proof",exact:true}).click();
+ await page.getByRole("button",{name:"View UPI options",exact:true}).click();
+ await page.getByRole("button",{name:"Pay with UPI app",exact:true}).click();
+ const dialog = page.getByRole("dialog");
+ await expect(dialog.getByRole("heading",{name:"Check your bank before retrying"})).toBeVisible();
+ expect(await page.evaluate(()=>window.__directIntent)).toBeUndefined();
+ await dialog.getByRole("button",{name:"Cancel",exact:true}).click();
+ await expect(page.getByLabel("Payment screenshot",{exact:true})).toBeVisible();
+ expect(fixture.creates).toBe(1);
+ expect(fixture.transfers[0].status).toBe("READY");
+});

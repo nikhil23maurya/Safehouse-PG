@@ -52,6 +52,7 @@ export async function transferProofScreen(ctx){
 
  function setProof() {
   saveDirect(ctx.snapshot,ctx.native,{transferId:t.id,invoiceId:t.invoiceId,stage:"PROOF"});
+  paymentAttempted = true;
   const title=document.querySelector("#main h1");
   if(title)title.textContent="Attach payment proof";
   document.querySelector("[data-payment-launch]")?.setAttribute("hidden","");
@@ -109,7 +110,6 @@ export async function transferProofScreen(ctx){
  directReturned(){
   if(t.status!=="READY"||!launched)return;
   launched=false;
-  paymentAttempted=true;
   setProof();
  },
  async action(name){
