@@ -70,10 +70,10 @@ export async function transferProofScreen(ctx){
   card(`<h2>Bill details</h2>${split(t,false)}`,"transfer-card rent-bill-details")+
   (issue?notice(issue):"")+
   (t.status==="READY"?`<div data-payment-launch ${returned?"hidden":""}>
-    ${intent?card(manualUpiInstructions(t,ctx.native.has("openPaytm")),"transfer-card rent-upi-card"):""}
+    ${intent?card(manualUpiInstructions(t,ctx.native.has("chooseUpiApp")),"transfer-card rent-upi-card"):""}
     <section class="card transfer-card rent-upload-action">
       <span class="transfer-icon">${icon("image")}</span>
-      <div><h2>Already paid?</h2><p>Upload your payment screenshot and UTR for owner review.</p></div>
+      <div><h2>Already paid?</h2><p>Screenshot and UTR</p></div>
       ${button("Upload payment proof",{action:"attachTransferProof",kind:"primary block",glyph:"arrow"})}
     </section>
   </div>`:"")+
@@ -124,9 +124,9 @@ export async function transferProofScreen(ctx){
    ctx.markSaved();
    return ctx.navigate("payment",{invoiceId:t.invoiceId},{replace:true,force:true});
   }
-  if (name === "copyPayee" || name === "copyAmount" || name === "openPaytm") {
+  if (name === "copyPayee" || name === "copyAmount" || name === "chooseUpiApp") {
    const fresh = await ctx.api(`${base}/transfers/${t.id}`);
-   if (name === "openPaytm" && (!element?.isConnected || element.closest("[hidden]"))) return;
+   if (name === "chooseUpiApp" && (!element?.isConnected || element.closest("[hidden]"))) return;
    if (!fresh.intent) throw new Error(fresh.issue || "Payment status changed. Refresh before paying.");
    return copyPaymentDetail(ctx, name, fresh.transfer);
   }

@@ -357,15 +357,10 @@ public class MobileJourneyTest {
         js("document.querySelector('[name=charges]').value='BOTH';document.querySelector('[data-form=chooseTransfer]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
         await("document.getElementById('app').dataset.screen==='transferProof'");screenshot("60-direct-combined-payment");
         assertEquals("Combined bank amount is rent plus independent electricity","915124",js("window.__directFixtures.transfers[0].amountPaise"));
-        // The emulator has no Paytm. Verify the shortcut still copies the ID.
+        // The fixture launcher is disabled. The shortcut still copies the ID.
         Instrumentation.ActivityMonitor upiMonitor=evidenceMonitor(Intent.ACTION_VIEW,new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null));
-        if (target.getPackageManager().getLaunchIntentForPackage("net.one97.paytm") == null) {
-            js("document.querySelector('[data-action=openPaytm]').click()");
-            await("document.getElementById('toasts').textContent.includes('Paytm could not open')");
-        } else {
-            js("document.querySelector('[data-action=copyPayee]').click()");
-            await("document.getElementById('toasts').textContent.includes('UPI ID copied')");
-        }
+        js("document.querySelector('[data-action=chooseUpiApp]').click()");
+        await("document.getElementById('toasts').textContent.includes('No UPI app is available')");
         java.util.concurrent.atomic.AtomicReference<String> copied = new java.util.concurrent.atomic.AtomicReference<>();
         instrumentation.runOnMainSync(() -> {
             android.content.ClipboardManager clipboard = activity.getSystemService(android.content.ClipboardManager.class);
@@ -373,6 +368,30 @@ public class MobileJourneyTest {
             if (clip != null && clip.getItemCount() > 0) copied.set(clip.getItemAt(0).getText().toString());
         });
         assertEquals("Native clipboard must receive the owner UPI ID", "owner-fixture@invalid", copied.get());
+        setReceiverEnabled(true);
+        try {
+            String receiverPackage = instrumentation.getContext().getPackageName();
+            long registrationDeadline = System.currentTimeMillis() + 5000;
+            while (target.getPackageManager().getLaunchIntentForPackage(receiverPackage) == null
+                    && System.currentTimeMillis() < registrationDeadline) Thread.sleep(150);
+            js("document.querySelector('[data-action=chooseUpiApp]').click()");
+            long chooserDeadline = System.currentTimeMillis() + 15000;
+            while (!nativeText("UPI Test Receiver") && System.currentTimeMillis() < chooserDeadline) Thread.sleep(150);
+            AccessibilityNodeInfo chooser = instrumentation.getUiAutomation().getRootInActiveWindow();
+            assertNotNull("UPI app chooser unavailable", chooser);
+            java.util.List<AccessibilityNodeInfo> choices = chooser.findAccessibilityNodeInfosByText("UPI Test Receiver");
+            assertFalse("Fixture app missing from chooser", choices.isEmpty());
+            AccessibilityNodeInfo choice = choices.get(0);
+            while (!choice.isClickable() && choice.getParent() != null) choice = choice.getParent();
+            assertTrue("UPI app choice could not be selected", choice.performAction(AccessibilityNodeInfo.ACTION_CLICK));
+            long handoffDeadline = System.currentTimeMillis() + 10000;
+            while (!nativeText("UPI app opened without payment data") && System.currentTimeMillis() < handoffDeadline) Thread.sleep(150);
+            assertTrue("Expected an ordinary app launch", nativeText("UPI app opened without payment data"));
+            instrumentation.getUiAutomation().performGlobalAction(android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK);
+            await("document.getElementById('app').dataset.screen==='transferProof'");
+        } finally {
+            setReceiverEnabled(false);
+        }
         js("document.querySelector('[data-action=attachTransferProof]').click()");
         await("!document.querySelector('[data-proof-upload]').hidden");screenshot("61-direct-attach-proof");
         assertEquals("Manual direct rent must never start a UPI intent",0,upiMonitor.getHits());

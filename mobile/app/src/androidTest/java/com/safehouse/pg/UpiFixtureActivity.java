@@ -1,6 +1,7 @@
 package com.safehouse.pg;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.os.Bundle;
 import android.widget.TextView;
 
@@ -12,7 +13,12 @@ public class UpiFixtureActivity extends Activity {
         text.setBackgroundColor(android.graphics.Color.WHITE);
         text.setTextColor(android.graphics.Color.BLACK);
         text.setTextSize(18); text.setPadding(32, 100, 32, 32);
-        text.setText("UPI handoff received (test only)\n\n" + getIntent().getDataString() + "\n\nNo payment is performed.");
+        Intent intent = getIntent();
+        if (Intent.ACTION_MAIN.equals(intent.getAction()) && intent.getData() == null && intent.getExtras() == null) {
+            text.setText("UPI app opened without payment data (test only)");
+        } else {
+            text.setText("UPI handoff received (test only)\n\n" + intent.getDataString() + "\n\nNo payment is performed.");
+        }
         setContentView(text);
     }
 }
