@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/branding/pgone-mark.svg" width="80" height="80" alt="PGOne logo"/></p>
+<p align="center"><img src="mobile/frontend/src/assets/brand/pgone-mark.png" width="80" height="80" alt="PGOne logo"/></p>
 
 # PGOne
 
@@ -35,13 +35,13 @@ The app supports role-specific authentication, property context and managed sess
 
 ```text
 mobile/frontend/src/                 Maintained mobile UI and business workflows
-mobile/app/src/main/                Android native shell and vector branding
+mobile/app/src/main/                Android native shell and launcher assets
 mobile/frontend/tests/              Unit/payment-state tests
 mobile/frontend/e2e/                Browser journeys and screenshot tests
 src/                                Backend API, authorization and payment verification
 prisma/                             Schema and database migrations
 .github/workflows/                  Android and backend contract CI
-docs/branding/                      Canonical PGOne mark and brand notes
+docs/branding/                      PGOne brand notes
 docs/mobile-rebuild/                Architecture, screen inventory and validation
 ```
 

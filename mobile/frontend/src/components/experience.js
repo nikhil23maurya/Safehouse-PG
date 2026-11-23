@@ -3,7 +3,6 @@ const reduce = () => document.body.classList.contains("reduced-motion") || match
 let installed = false;
 export function enhanceExperience(root) {
   if (!root) return;
-  root.querySelector(".app-shell")?.classList.toggle("shell-home", Boolean(root.querySelector(".owner-dashboard,.resident-dashboard")));
   root.querySelectorAll(".content > *, .login-inner > *, .onboarding-body > *, .entry-page > *").forEach((el, index) => {
     if (index > 12) return;
     // Moving a viewport-edge element can create a temporary scroll bar.
@@ -14,7 +13,7 @@ export function enhanceExperience(root) {
   installed = true;
   document.addEventListener("visibilitychange", () => root.classList.toggle("effects-paused", document.hidden));
   root.addEventListener("pointerdown", event => {
-    const button = event.target.closest(".button, .entry-option, .quick-action, .nav-item");
+    const button = event.target.closest(".button.primary, .entry-option, .quick-action");
     if (!button || button.disabled || reduce()) return;
     const box = button.getBoundingClientRect();
     button.style.setProperty("--touch-x", `${event.clientX-box.left}px`);

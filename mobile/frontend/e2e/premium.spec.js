@@ -85,7 +85,10 @@ test('button loading keeps geometry and uses three circular reduced-motion dots'
  await page.route('**/auth/login',async route=>{await hold;await route.fulfill({status:400,json:{error:{message:'Synthetic failure'}}});});
  await page.getByLabel('Email address').fill('owner@example.test');await page.getByLabel('Password',{exact:true}).fill('Synthetic password 123!');
  const button=page.getByRole('button',{name:'Sign in',exact:true}),before=await button.boundingBox();await button.click();
- const loading=page.locator('[aria-busy=true]');await expect(loading).toBeVisible();const after=await loading.boundingBox();expect(after.width).toBe(before.width);expect(after.height).toBe(before.height);
+ const loading=page.locator('[aria-busy=true]');
+ await expect(loading).toBeVisible();
+ await expect(loading.locator('.loading-dots i')).toHaveCount(3);
+ const after=await loading.boundingBox();expect(after.width).toBe(before.width);expect(after.height).toBe(before.height);
  const dots=await loading.locator('.loading-dots i').evaluateAll(nodes=>nodes.map(n=>{const s=getComputedStyle(n);return {width:s.width,height:s.height,round:s.borderRadius,animation:s.animationName};}));
  expect(dots).toHaveLength(3);for(const d of dots){expect(d.width).toBe(d.height);expect(d.round).toBe('50%');expect(d.animation).toBe('dot-pulse');}
  release();await expect(page.locator('[aria-busy=true]')).toHaveCount(0);await expect(button).toBeEnabled();

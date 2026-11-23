@@ -1,10 +1,10 @@
 /* PGOne Royal — one visual system across the maintained Android frontend. */
 :root {
   --primary:#174dff; --pressed:#123bc4; --navy:#0a1e50; --text:#16264b;
-  --muted:#647391; --background:#f4f7fe; --surface:#fff; --selected:#eaf0ff;
-  --border:#e0e7f5; --radius:22px; --nav-height:82px;
+  --muted:#586579; --background:#f6f7f9; --surface:#fff; --selected:#edf2fc;
+  --border:#e2e6ed; --radius:22px; --nav-height:82px;
   --royal-gradient:linear-gradient(125deg,#245dff 0%,#1745d9 48%,#082775 100%);
-  --surface-shadow:0 8px 28px #193d8310,0 1px 3px #193d8304;
+  --surface-shadow:0 5px 20px #18233308;
   --ease-out:cubic-bezier(.22,1,.36,1);
 }
 body {background:var(--background);color:var(--text);font-feature-settings:"cv02","cv03","cv04","cv11";}
@@ -14,19 +14,13 @@ h2 {font-weight:750;letter-spacing:-.035em;}
 .brand-wordmark {font-weight:800;letter-spacing:-.055em;}
 .brand {gap:7px;}
 .brand-mark {filter:drop-shadow(0 2px 2px #174dff0d);}
-.app-shell {background:radial-gradient(ellipse at 95% 0,#e6eeff80,transparent 45%),var(--background);padding-bottom:calc(106px + env(safe-area-inset-bottom));}
+.app-shell {background:var(--background);padding-bottom:calc(106px + env(safe-area-inset-bottom));}
 .app-header {min-height:70px;padding:10px 20px;gap:10px;background:#ffffffed;border-bottom:1px solid #dfe7f280;backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);}
 .header-title {font:750 16px Manrope,Inter,sans-serif;letter-spacing:-.4px;}
 .app-header .brand {font-size:25px;}
 .app-header .brand-mark {width:34px;height:34px;flex-basis:34px;}
-.app-header .icon-button {width:42px;min-height:42px;border-radius:14px;background:#eff3fc;color:var(--navy);}
-.app-header .profile-button {width:42px;min-height:42px;border-radius:15px;border:1px solid #cddaff;background:linear-gradient(145deg,#ecf2ff,#dce7ff);box-shadow:inset 0 1px #fff;}
-.shell-home .app-header {background:linear-gradient(115deg,#143eaa,#0c286f);border-color:#ffffff10;color:#fff;}
-.shell-home .app-header .brand-wordmark {color:#fff;}
-.shell-home .app-header .brand-dot {color:#b4d3ff;}
-.shell-home .app-header .brand-mark path:first-child {fill:#fff;}
-.shell-home .app-header .brand-mark path:last-child {fill:#b4d3ff;}
-.shell-home .app-header .icon-button,.shell-home .app-header .profile-button {background:#ffffff12;border:1px solid #ffffff20;color:#fff;}
+.app-header .icon-button {width:42px;min-height:42px;border-radius:14px;background:#f2f4f7;color:var(--navy);}
+.app-header .profile-button {width:42px;min-height:42px;border-radius:15px;border:1px solid #cddaff;background:#f0f3fa;}
 .content {padding:22px 18px 14px;max-width:760px;animation:none;}
 .page-heading {margin:0 0 22px;align-items:flex-start;gap:12px;}
 .page-heading h1 {font-size:28px;line-height:1.17;letter-spacing:-1.15px;}
@@ -36,7 +30,7 @@ h2 {font-weight:750;letter-spacing:-.035em;}
 .section-heading {margin-bottom:12px;}
 .section-heading h2 {font-size:17px;}
 .section-heading .text-button {font-size:12px;min-height:32px;}
-.card,.list,.invoice-card,.room-card,.dues-card {border:1px solid var(--border);background:linear-gradient(140deg,#fff,#fbfcff);box-shadow:var(--surface-shadow);border-radius:var(--radius);}
+.card,.list,.invoice-card,.room-card,.dues-card {border:1px solid var(--border);background:#fff;box-shadow:var(--surface-shadow);border-radius:var(--radius);}
 .card {padding:22px;}
 .card + .card {margin-top:14px;}
 .list {overflow:hidden;}
@@ -67,7 +61,7 @@ h2 {font-weight:750;letter-spacing:-.035em;}
 .nav-item > span {width:auto;height:24px;background:transparent;}
 .nav-item svg {width:21px;height:21px;stroke-width:1.7;}
 .nav-item small {font-size:10px;font-weight:600;letter-spacing:.05px;}
-.nav-item.active {background:var(--royal-gradient);color:#fff;box-shadow:0 4px 12px #174dff2b;}
+.nav-item.active {background:#edf2fc;color:#1844ad;box-shadow:none;}
 .nav-item.active > span {background:transparent;}
 .nav-item.active small {font-weight:700;}
 .period-control {border:1px solid #e1e8f5;background:#fff;border-radius:14px;min-height:46px;margin:14px 0;box-shadow:0 2px 8px #193d8304;}

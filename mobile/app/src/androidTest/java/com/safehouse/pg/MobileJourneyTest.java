@@ -46,6 +46,10 @@ public class MobileJourneyTest {
     }
     private Instrumentation.ActivityMonitor evidenceMonitor(String action,Instrumentation.ActivityResult result){
         android.content.IntentFilter filter=new android.content.IntentFilter(action);
+        if (Intent.ACTION_VIEW.equals(action)) {
+            filter.addDataScheme("upi");
+            filter.addDataAuthority("pay", null);
+        }
         if(Intent.ACTION_OPEN_DOCUMENT.equals(action)){
             filter.addCategory(Intent.CATEGORY_OPENABLE);
             try{filter.addDataType("image/*");}catch(android.content.IntentFilter.MalformedMimeTypeException error){throw new AssertionError(error);}
@@ -115,8 +119,8 @@ public class MobileJourneyTest {
         fail("Condition failed: " + expression + " state=" + js("JSON.stringify({text:document.body.innerText.slice(0,1600),fields:Array.from(document.querySelectorAll('input')).map(i=>({name:i.name,value:i.type==='password'?'redacted':i.value,valid:i.validity.valid,missing:i.validity.valueMissing,file:i.files?.[0]&&{size:i.files[0].size,type:i.files[0].type}})),uploads:window.__directFixtures?.uploads?.length})"));
     }
     private void go(String name, String params) throws Exception {
-        js("history.pushState({name:'" + name + "',params:" + params + ",depth:1},'','#" + name + "');dispatchEvent(new PopStateEvent('popstate',{state:history.state}));");
-        await("document.getElementById('app').dataset.screen==='" + name + "'&&!document.querySelector('.page-progress')");
+        js("history.pushState({...history.state,name:'" + name + "',params:" + params + ",depth:(history.state?.depth||0)+1},'','#" + name + "');dispatchEvent(new PopStateEvent('popstate',{state:history.state}));");
+        await("document.getElementById('app').dataset.screen==='" + name + "'&&!document.querySelector('.route-loading')");
         assertEquals("Horizontal overflow: " + name, "true", js("document.documentElement.scrollWidth<=innerWidth+1"));
     }
     private void screenshot(String name) throws Exception {
@@ -356,16 +360,16 @@ public class MobileJourneyTest {
         // Resume is independent of any success callback. Resident can always
         // return manually; app recovery opens the upload step, never Paid.
         setReceiverEnabled(true);
-        Instrumentation.ActivityMonitor upiMonitor=evidenceMonitor(Intent.ACTION_CHOOSER,new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null));
+        Instrumentation.ActivityMonitor upiMonitor=evidenceMonitor(Intent.ACTION_VIEW,new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null));
         js("document.querySelector('[data-action=openTransferUpi]').click()");
         await("!document.querySelector('[data-proof-upload]').hidden");screenshot("61-direct-attach-proof");
-        assertTrue("Direct UPI must launch through the native chooser",upiMonitor.getHits()>=1);
+        assertTrue("Direct UPI must launch through Android’s UPI resolver",upiMonitor.getHits()>=1);
         instrumentation.removeMonitor(upiMonitor);setReceiverEnabled(false);
         js("document.querySelector('[name=reference]').value='123456789012'");
         tapFileInput("[name=proof]");
         await("document.querySelector('[name=proof]').files.length===1");
         js("document.querySelector('[data-form=transferProof]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
-        await("window.__directFixtures.transfers[0].status==='SUBMITTED'&&!document.querySelector('.page-progress')");screenshot("62-direct-owner-review-pending");
+        await("document.querySelector('#main h1')?.textContent==='Proof submitted'");screenshot("62-direct-owner-review-pending");
         assertTrue("The native image picker must service both uploads",photoMonitor.getHits()>=2);
         assertEquals("A screenshot must never confirm a bank credit","false",js("Boolean(document.querySelector('[data-action=transferReceipt]'))"));
         instrumentation.removeMonitor(photoMonitor);
@@ -473,10 +477,10 @@ public class MobileJourneyTest {
         await("document.getElementById('app').dataset.screen==='subscription'"); screenshot("45-unpaid-activation");
         assertEquals("A PG must be created only once", "1", js("window.__platformFixtures.propertiesCreated"));
         assertEquals("Owner dashboard must not unlock without a verified payment", "false", js("window.__platformFixtures.handler('https://fixture.test/api/platform/session',{}).memberships[0].organisation.entitled"));
-        js("history.pushState({name:'ownerHome',params:{},depth:1},'','#ownerHome');dispatchEvent(new PopStateEvent('popstate',{state:history.state}));");
+        js("history.pushState({...history.state,name:'ownerHome',params:{},depth:(history.state?.depth||0)+1},'','#ownerHome');dispatchEvent(new PopStateEvent('popstate',{state:history.state}));");
         await("document.getElementById('app').dataset.screen==='subscription'");
         screenshot("45b-unpaid-dashboard-blocked");
-        js("history.pushState({name:'merchant',params:{},depth:1},'','#merchant');dispatchEvent(new PopStateEvent('popstate',{state:history.state}));");
+        js("history.pushState({...history.state,name:'merchant',params:{},depth:(history.state?.depth||0)+1},'','#merchant');dispatchEvent(new PopStateEvent('popstate',{state:history.state}));");
         await("document.getElementById('app').dataset.screen==='subscription'");
         go("workspaces", "{}"); screenshot("46-workspaces");
         go("subscription", "{}"); screenshot("47-plan");
@@ -489,8 +493,8 @@ public class MobileJourneyTest {
         go("merchant", "{}"); screenshot("48-merchant");
         assertEquals("No premature bank/KYC collection", "0", js("document.querySelectorAll('input').length"));
         go("invitations", "{}"); screenshot("49-invitations");
-        js("history.pushState({safehouse:true,name:'joinWorkspace',params:{},depth:1},'','#joinWorkspace');dispatchEvent(new PopStateEvent('popstate',{state:history.state}));");
-        await("document.getElementById('app').dataset.screen==='workspaces'&&!document.querySelector('.page-progress')");
+        js("history.pushState({...history.state,name:'joinWorkspace',params:{},depth:(history.state?.depth||0)+1},'','#joinWorkspace');dispatchEvent(new PopStateEvent('popstate',{state:history.state}));");
+        await("document.getElementById('app').dataset.screen==='workspaces'&&!document.querySelector('.route-loading')");
         assertEquals("Owners must not receive resident joining actions","false",js("[...document.querySelectorAll('button')].some(e=>/Join with a PG code|I'm a Resident|Add resident/.test(e.textContent))"));
         screenshot("50-owner-role-guard");
         go("residentRequests","{}"); screenshot("51-resident-requests");

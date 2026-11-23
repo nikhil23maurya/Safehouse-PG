@@ -174,10 +174,10 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
                     }
                 }
                 String name = path.substring("/assets/".length());
-                if (!("index.html".equals(name) || "app.js".equals(name) || "app.css".equals(name) || "InterVariable.woff2".equals(name) || "Inter-OFL.txt".equals(name) || "ManropeVariable.ttf".equals(name) || "Manrope-OFL.txt".equals(name) || name.matches("illustration-(residence|room|records|royal-residence)\\.webp"))) return missingAsset();
+                if (!("index.html".equals(name) || "app.js".equals(name) || "app.css".equals(name) || "InterVariable.woff2".equals(name) || "Inter-OFL.txt".equals(name) || "ManropeVariable.ttf".equals(name) || "Manrope-OFL.txt".equals(name) || "pgone-mark.png".equals(name) || "pgone-logo.png".equals(name) || name.matches("illustration-(residence|room|records|royal-residence)\\.webp"))) return missingAsset();
                 try {
-                    String mime = name.endsWith(".webp") ? "image/webp" : name.endsWith(".js") ? "application/javascript" : name.endsWith(".css") ? "text/css" : name.endsWith(".ttf") ? "font/ttf" : name.endsWith(".woff2") ? "font/woff2" : name.endsWith(".txt") ? "text/plain" : "text/html";
-                    return new WebResourceResponse(mime, (name.endsWith(".woff2") || name.endsWith(".ttf") || name.endsWith(".webp")) ? null : "UTF-8", 200, "OK", java.util.Collections.singletonMap("Cache-Control", "no-cache"), getAssets().open(name));
+                    String mime = name.endsWith(".png") ? "image/png" : name.endsWith(".webp") ? "image/webp" : name.endsWith(".js") ? "application/javascript" : name.endsWith(".css") ? "text/css" : name.endsWith(".ttf") ? "font/ttf" : name.endsWith(".woff2") ? "font/woff2" : name.endsWith(".txt") ? "text/plain" : "text/html";
+                    return new WebResourceResponse(mime, (name.endsWith(".woff2") || name.endsWith(".ttf") || mime.startsWith("image/")) ? null : "UTF-8", 200, "OK", java.util.Collections.singletonMap("Cache-Control", "no-cache"), getAssets().open(name));
                 } catch (Exception ignored) { return missingAsset(); }
             }
 
@@ -440,14 +440,28 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
             new Thread(()->{try{QrDownloads.save(MainActivity.this,DirectRentQr.png(uri));runOnUiThread(()->Toast.makeText(MainActivity.this,"QR saved to Pictures / PGOne",Toast.LENGTH_LONG).show());}
               catch(Exception e){runOnUiThread(()->Toast.makeText(MainActivity.this,"QR could not be saved",Toast.LENGTH_LONG).show());}}).start();
         }
-        @JavascriptInterface public void openDirectOwnerUpi(String uri){runOnUiThread(()->{
-            try{
-                Intent intent=new Intent(Intent.ACTION_VIEW,DirectRentQr.validate(uri));
-                if(getPackageManager().queryIntentActivities(intent,PackageManager.MATCH_DEFAULT_ONLY).isEmpty())throw new ActivityNotFoundException();
-                startActivityForResult(Intent.createChooser(intent,"Pay your PG owner"),DIRECT_UPI_REQUEST);
-                callJs("window.PGOneDirectUpiResult && window.PGOneDirectUpiResult(true,'');");
-            }catch(Exception e){callJs("window.PGOneDirectUpiResult && window.PGOneDirectUpiResult(false,"+q("No compatible UPI app could open. You can use the optional QR or your owner's UPI address.")+");");}
-        });}
+        @JavascriptInterface public void openDirectOwnerUpi(String uri) {
+            runOnUiThread(() -> {
+                final Intent payment;
+                try {
+                    payment = new Intent(Intent.ACTION_VIEW, DirectRentQr.validate(uri));
+                } catch (RuntimeException invalid) {
+                    reportDirectUpiLaunch(false, "This payment link is unavailable. Refresh the payment details before trying again.");
+                    return;
+                }
+                try {
+                    // Android can launch handlers that a preflight package query hides.
+                    startActivityForResult(payment, DIRECT_UPI_REQUEST);
+                    reportDirectUpiLaunch(true, "");
+                } catch (ActivityNotFoundException | SecurityException unavailable) {
+                    reportDirectUpiLaunch(false, "No UPI app opened. Use the QR from another phone or copy the verified payment details.");
+                }
+            });
+        }
+
+        private void reportDirectUpiLaunch(boolean opened, String message) {
+            callJs("window.PGOneDirectUpiResult && window.PGOneDirectUpiResult(" + opened + "," + q(message) + ");");
+        }
 
         @JavascriptInterface public void openExternal(String url) { runOnUiThread(() -> MainActivity.this.openExternal(url)); }
 

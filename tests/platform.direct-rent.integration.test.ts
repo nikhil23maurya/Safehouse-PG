@@ -6,6 +6,26 @@ const {registerEmail}=await import("../src/platform/email-auth.js");
 const {saveProfile,createProperty}=await import("../src/platform/service.js");
 const {createDirectClaim,confirmDirectClaim,directIntent,directRentStatus}=await import("../src/platform/direct-rent.js");
 after(async()=>{await prisma.$disconnect();});
+test("direct UPI intents encode URI spaces and preserve the exact bound transfer fields", () => {
+  const payment = {
+    payeeAddress: "owner-test@upi",
+    payeeName: "Asha & Rént",
+    amountPaise: 915124,
+    reference: "PGT1234_ABCD-1234567890",
+  };
+  const encoded = directIntent(payment);
+  assert.match(encoded, /pn=Asha%20%26%20R%C3%A9nt/);
+  assert.equal(encoded.includes("+"), false);
+  const uri = new URL(encoded);
+  assert.equal(uri.protocol, "upi:");
+  assert.equal(uri.hostname, "pay");
+  assert.equal(uri.searchParams.get("pa"), payment.payeeAddress);
+  assert.equal(uri.searchParams.get("pn"), payment.payeeName);
+  assert.equal(uri.searchParams.get("am"), "9151.24");
+  assert.equal(uri.searchParams.get("cu"), "INR");
+  assert.equal(uri.searchParams.get("tr"), payment.reference);
+});
+
 test("direct owner transfer references never credit rent; one existing manual bank receipt confirms once",async()=>{
   const owner=await registerEmail(`${crypto.randomUUID()}@example.test`,"private test password 123");
   await saveProfile(owner.id,{fullName:"Direct owner",intent:"OWNER"});

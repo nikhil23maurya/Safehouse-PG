@@ -766,29 +766,6 @@ body.dialog-open {
 .sk-line.short {
   width: 50%;
 }
-.page-progress {
-  height: 2px;
-  width: 100%;
-  position: fixed;
-  z-index: 35;
-  top: 0;
-  left: 0;
-  background: var(--selected);
-  overflow: hidden;
-}
-.page-progress::after {
-  content: "";
-  display: block;
-  height: 100%;
-  background: var(--primary);
-  width: 35%;
-  animation: progress 1s ease-in-out infinite alternate;
-}
-@keyframes progress {
-  to {
-    transform: translateX(185%);
-  }
-}
 @media (min-width: 700px) {
   .content {
     padding-top: 32px;

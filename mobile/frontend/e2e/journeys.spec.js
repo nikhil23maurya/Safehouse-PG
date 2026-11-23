@@ -133,7 +133,7 @@ test("resident role guard and required password change", async ({ page }) => {
   await page.getByRole("button", { name: "Update password" }).click();
   await expect(page).toHaveTitle(/^Home/);
   await page.evaluate(() => {
-    const record = { name: "ownerHome", params: {}, depth: 1 };
+    const record = { ...history.state, name: "ownerHome", params: {}, depth: (history.state?.depth || 0) + 1 };
     history.pushState(record, "", "#ownerHome");
     dispatchEvent(new PopStateEvent("popstate", { state: record }));
   });

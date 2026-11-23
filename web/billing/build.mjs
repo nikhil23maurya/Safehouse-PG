@@ -45,6 +45,10 @@ await copyFile(
   new URL("assets/onboarding/payments.webp", source),
   new URL("onboarding-payments.webp", out),
 );
+await copyFile(
+  new URL("assets/brand/pgone-mark.png", source),
+  new URL("pgone-mark.png", out),
+);
 console.log(
   "Built separate PGOne web billing surface; no Android bundle or deployment changed.",
 );

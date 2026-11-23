@@ -15,6 +15,7 @@ const files = new Set([
   "Inter-OFL.txt",
   "Manrope-OFL.txt",
   "onboarding-payments.webp",
+  "pgone-mark.png",
 ]);
 billingWebRouter.get(["/", "/:filename"], async (req, res) => {
   if (!req.params.filename && req.originalUrl.split("?")[0] === req.baseUrl) {
