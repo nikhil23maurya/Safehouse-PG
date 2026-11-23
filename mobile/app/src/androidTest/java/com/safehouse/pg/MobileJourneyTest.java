@@ -357,10 +357,15 @@ public class MobileJourneyTest {
         js("document.querySelector('[name=charges]').value='BOTH';document.querySelector('[data-form=chooseTransfer]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
         await("document.getElementById('app').dataset.screen==='transferProof'");screenshot("60-direct-combined-payment");
         assertEquals("Combined bank amount is rent plus independent electricity","915124",js("window.__directFixtures.transfers[0].amountPaise"));
-        // Paytm is opened by the resident. PGOne only copies the details and handles proof.
+        // The emulator has no Paytm. Verify the shortcut still copies the ID.
         Instrumentation.ActivityMonitor upiMonitor=evidenceMonitor(Intent.ACTION_VIEW,new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null));
-        js("document.querySelector('[data-action=copyPayee]').click()");
-        await("document.getElementById('toasts').textContent.includes('UPI ID copied')");
+        if (target.getPackageManager().getLaunchIntentForPackage("net.one97.paytm") == null) {
+            js("document.querySelector('[data-action=openPaytm]').click()");
+            await("document.getElementById('toasts').textContent.includes('Paytm could not open')");
+        } else {
+            js("document.querySelector('[data-action=copyPayee]').click()");
+            await("document.getElementById('toasts').textContent.includes('UPI ID copied')");
+        }
         java.util.concurrent.atomic.AtomicReference<String> copied = new java.util.concurrent.atomic.AtomicReference<>();
         instrumentation.runOnMainSync(() -> {
             android.content.ClipboardManager clipboard = activity.getSystemService(android.content.ClipboardManager.class);

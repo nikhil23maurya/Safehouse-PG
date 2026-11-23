@@ -8,6 +8,10 @@ async function setup(page,role="STUDENT",fixture=createDirectPaymentFixtures()){
  await page.addInitScript(role=>{
   const initial={tokens:{kind:"PLATFORM",accessToken:`fixture_${role}_access`,refreshToken:`fixture_${role}_refresh_token`},userId:role==="OWNER"?"owner1":"user1",activePropertyId:"property1"};
   window.SafeHouseNative={getPackageId:()=>"com.safehouse.pg.testing",getSession:()=>JSON.stringify(initial),saveSession:()=>true,ready:()=>{},getDirectTransferState:()=>sessionStorage.getItem("direct-payment-state")||"",saveDirectTransferState:v=>{sessionStorage.setItem("direct-payment-state",v);return true;},copyPaymentDetail:value=>{window.__copiedPaymentDetail=value;return true;},openDirectOwnerUpi:uri=>{window.__directIntent=uri;}};
+  window.SafeHouseNative.openPaytm=(...args)=>{
+   window.__paytmLaunch={args,clipboard:window.__copiedPaymentDetail};
+   return true;
+  };
  },role);
  await page.route("https://safehouse-api.onrender.com/api/**",async route=>{
   const req=route.request(),data=fixture.handler(req.url(),req.method(),req.postDataJSON()||{});
@@ -78,26 +82,28 @@ test("returning from a transfer stays on the prior screen and its invoice", asyn
  expect(fixture.transfers[0].status).toBe("READY");
 });
 
-test("resume after copying keeps the instructions and the unpaid request", async ({page}) => {
+test("Paytm opens after copying only the UPI ID and the request stays unpaid", async ({page}) => {
  const fixture=await setup(page);
  await go(page,"payment",{invoiceId:"invoice1"});
  await choose(page);
- await page.getByRole("button",{name:"Copy UPI ID",exact:true}).click();
- await expect.poll(()=>page.evaluate(()=>window.__copiedPaymentDetail)).toBe("owner-fixture@invalid");
+ await page.getByRole("button",{name:"Copy UPI ID & open Paytm",exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__paytmLaunch)).toEqual({args:[],clipboard:"owner-fixture@invalid"});
+ expect(await page.evaluate(()=>window.__directIntent)).toBeUndefined();
  await page.evaluate(()=>window.SafeHouseResume());
  await expect(page.getByRole("heading",{name:"Pay via UPI"})).toBeVisible();
  await expect(page.getByLabel("Payment screenshot",{exact:true})).toBeHidden();
  expect(fixture.transfers[0].status).toBe("READY");
 });
 
-test("a changed owner or bill blocks copying the stale payment details", async ({page}) => {
+test("a changed owner or bill blocks copying and opening Paytm", async ({page}) => {
  const fixture=await setup(page);
  await go(page,"payment",{invoiceId:"invoice1"});
  await choose(page);
  fixture.paymentIssue="The bill or owner's UPI details changed.";
- await page.getByRole("button",{name:"Copy UPI ID",exact:true}).click();
+ await page.getByRole("button",{name:"Copy UPI ID & open Paytm",exact:true}).click();
  await expect(page.locator("#toasts")).toContainText(fixture.paymentIssue);
  expect(await page.evaluate(()=>window.__copiedPaymentDetail)).toBeUndefined();
+ expect(await page.evaluate(()=>window.__paytmLaunch)).toBeUndefined();
  expect(await page.evaluate(()=>window.__directIntent)).toBeUndefined();
  expect(fixture.creates).toBe(1);
 });
