@@ -365,7 +365,7 @@ public class MobileJourneyTest {
         assertTrue("The native image picker must service both uploads",photoMonitor.getHits()>=2);
         assertEquals("A screenshot must never confirm a bank credit","false",js("Boolean(document.querySelector('[data-action=transferReceipt]'))"));
         instrumentation.removeMonitor(photoMonitor);
-        js("window.SafeHouseNative.saveDirectTransferState('[]');window.__directFixtureEnabled=false");
+        js("window.SafeHouseNative.saveDirectTransferState('[]')");
         go("invoices", "{}"); screenshot("21-invoices");
         go("history", "{}"); screenshot("22-history");
         // New owner-merchant flow uses a synthetic native gateway. It never
@@ -382,7 +382,7 @@ public class MobileJourneyTest {
                 java.lang.reflect.Field field=MainActivity.class.getDeclaredField("rentCheckout");field.setAccessible(true);field.set(activity,rent);
             }catch(Exception error){throw new RuntimeException(error);}
         });
-        js("window.__ownerRentFixtureEnabled=true;window.__ownerRentHold=true");
+        js("window.__directFixtureEnabled=false;window.__ownerRentFixtureEnabled=true;window.__ownerRentHold=true");
         go("payment", "{invoiceId:'invoice1'}"); screenshot("55-resident-owner-rent");
         js("document.querySelector('[name=contact]').value='9999999999';document.querySelector('[data-form=payOwnerRent]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
         await("document.getElementById('app').dataset.screen==='rentVerification'&&Boolean(window.__releaseOwnerRentCheck)"); screenshot("56-rent-verifying");
