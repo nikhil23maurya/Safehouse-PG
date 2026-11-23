@@ -345,6 +345,9 @@ public class MobileJourneyTest {
         tapFileInput("[name=meter]");
         await("document.querySelector('[name=meter]').files.length===1");
         assertEquals("The picker must preserve the resident-entered amount","\"650.25\"",js("document.querySelector('[name=amount]').value"));
+        js("window.__selectedImageRead=null;document.querySelector('[name=meter]').files[0].arrayBuffer().then(b=>window.__selectedImageRead=Array.from(new Uint8Array(b).slice(0,8)).join(','),e=>window.__selectedImageRead='ERROR:'+e.name)");
+        await("window.__selectedImageRead!==null");
+        assertEquals("The selected image must remain readable by the browser File API","\"137,80,78,71,13,10,26,10\"",js("window.__selectedImageRead"));
         js("document.querySelector('[data-form=electricityBill]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
         await("window.__directFixtures.bill && document.querySelector('[name=charges] option[value=BOTH]')");
         js("document.querySelector('[name=charges]').value='BOTH';document.querySelector('[data-form=chooseTransfer]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
