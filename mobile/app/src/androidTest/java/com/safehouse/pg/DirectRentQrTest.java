@@ -20,4 +20,11 @@ public class DirectRentQrTest {
    try{DirectRentQr.validate(uri);fail("Unsafe intent was accepted");}catch(IllegalArgumentException expected){}
   }
  }
+ @Test public void combinedTransferAndLegacyReferencesUseTheSameStrictUpiContract() {
+  for(String prefix:new String[]{"PGO","PGT"}) {
+   String uri="upi://pay?pa=owner%40example&pn=Owner&am=9151.24&cu=INR&tr="+prefix+"1234567890123456";
+   assertEquals(uri,DirectRentQr.validate(uri).toString());
+  }
+  try{DirectRentQr.validate("upi://pay?pa=owner%40example&pn=Owner&am=9151.24&cu=INR&tr=PGX1234567890123456");fail("Unbound reference accepted");}catch(IllegalArgumentException expected){}
+ }
 }

@@ -45,7 +45,12 @@ public class MobileJourneyTest {
         if(activity!=null)instrumentation.runOnMainSync(()->activity.finish());
     }
     private Instrumentation.ActivityMonitor evidenceMonitor(String action,Instrumentation.ActivityResult result){
-        Instrumentation.ActivityMonitor m=instrumentation.addMonitor(new android.content.IntentFilter(action),result,true);evidenceMonitors.add(m);return m;
+        android.content.IntentFilter filter=new android.content.IntentFilter(action);
+        if(Intent.ACTION_OPEN_DOCUMENT.equals(action)){
+            filter.addCategory(Intent.CATEGORY_OPENABLE);
+            try{filter.addDataType("image/*");}catch(android.content.IntentFilter.MalformedMimeTypeException error){throw new AssertionError(error);}
+        }
+        Instrumentation.ActivityMonitor m=instrumentation.addMonitor(filter,result,true);evidenceMonitors.add(m);return m;
     }
     private void tapFileInput(String selector)throws Exception{
         String quoted=org.json.JSONObject.quote(selector);

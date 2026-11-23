@@ -20,7 +20,7 @@ final class DirectRentQr {
         int paise = new java.math.BigDecimal(amount).movePointRight(2).intValueExact();
         ProviderQr.validatePayment(encoded, paise);
         if (!"INR".equals(uri.getQueryParameter("cu")) || uri.getQueryParameter("tr") == null ||
-                !uri.getQueryParameter("tr").matches("PGO[A-Za-z0-9_-]{16,32}")) throw new IllegalArgumentException("Missing rent reference");
+                !uri.getQueryParameter("tr").matches("PG[OT][A-Za-z0-9_-]{16,32}")) throw new IllegalArgumentException("Missing rent reference");
         return uri;
     }
     static byte[] png(String encoded) throws Exception {
