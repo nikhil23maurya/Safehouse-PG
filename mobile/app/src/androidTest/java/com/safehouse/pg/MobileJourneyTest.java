@@ -46,6 +46,10 @@ public class MobileJourneyTest {
     }
     private Instrumentation.ActivityMonitor evidenceMonitor(String action,Instrumentation.ActivityResult result){
         android.content.IntentFilter filter=new android.content.IntentFilter(action);
+        if (Intent.ACTION_VIEW.equals(action)) {
+            filter.addDataScheme("upi");
+            filter.addDataAuthority("pay", null);
+        }
         if(Intent.ACTION_OPEN_DOCUMENT.equals(action)){
             filter.addCategory(Intent.CATEGORY_OPENABLE);
             try{filter.addDataType("image/*");}catch(android.content.IntentFilter.MalformedMimeTypeException error){throw new AssertionError(error);}
