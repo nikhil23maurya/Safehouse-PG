@@ -9,8 +9,8 @@ import {pendingDirect,saveDirect} from "../payments/direct-return.js";
 
 const base="/api/platform/direct-payments";
 const image=(id,label)=>id?`<figure class="evidence-photo"><figcaption>${esc(label)}</figcaption><img data-evidence-id="${esc(id)}" alt="${esc(label)}" hidden></figure>`:"";
-const split=t=>`<dl class="transfer-breakdown">${t.rentPaise?`<div><dt>Rent / invoice charges</dt><dd>${money(t.rentPaise)}</dd></div>`:""}${t.electricityPaise?`<div><dt>Electricity</dt><dd>${money(t.electricityPaise)}</dd></div>`:""}<div class="transfer-total"><dt>Total</dt><dd>${money(t.amountPaise)}</dd></div></dl>`;
-const labels={READY:"Not submitted",SUBMITTED:"Owner confirmation pending",REJECTED:"Correction requested",CONFIRMED:"Owner confirmed",CANCELLED:"Cancelled — no debit"};
+const split=(t,showTotal=true)=>`<dl class="transfer-breakdown">${t.rentPaise?`<div><dt>Rent / invoice charges</dt><dd>${money(t.rentPaise)}</dd></div>`:""}${t.electricityPaise?`<div><dt>Electricity</dt><dd>${money(t.electricityPaise)}</dd></div>`:""}${showTotal?`<div class="transfer-total"><dt>Total</dt><dd>${money(t.amountPaise)}</dd></div>`:""}</dl>`;
+const labels={READY:"Proof not uploaded",SUBMITTED:"Owner confirmation pending",REJECTED:"Correction requested",CONFIRMED:"Owner confirmed",CANCELLED:"Cancelled — no debit"};
 const proofStatus = t => badge(labels[t.status], t.status === "CONFIRMED" ? "green" : t.status === "READY" ? "" : "amber");
 const imageTypes = 'accept="image/jpeg,image/png,image/webp"';
 const payee = t => `<div class="transfer-payee"><span class="transfer-icon">${icon("wallet")}</span><div><small>Pay directly to</small><strong>${esc(t.payeeName)}</strong><span class="payee-address">${esc(t.payeeAddress || t.upiAddress)}</span></div></div>`;
@@ -57,15 +57,26 @@ export async function transferProofScreen(ctx){
   document.querySelector("[data-proof-title]")?.focus();
  }
 
- return {title:"Payment proof",back:true,nav:false,guardForm:true,contentClass:"direct-payment",
- content:heading("",t.status==="CONFIRMED"?"Payment confirmed":t.status==="SUBMITTED"?"Proof submitted":returned||t.status==="REJECTED"?"Attach payment proof":"Pay your PG owner",month(invoice.year,invoice.month))+
-  card(`${proofStatus(t)}${split(t)}${payee(t)}`,"transfer-card transfer-receipt")+
+ const pageTitle = t.status==="CONFIRMED"?"Payment confirmed":t.status==="SUBMITTED"?"Proof submitted":returned||t.status==="REJECTED"?"Attach payment proof":"Rent payment";
+ const amountLabel = t.status==="READY"&&intent&&!returned?"Amount due":"Payment amount";
+ return {title:"Rent payment",back:true,nav:false,guardForm:true,contentClass:"direct-payment rent-payment-review",
+ content:`<section class="rent-payment-hero">
+    <img src="illustration-royal-residence.webp" alt="">
+    <h1>${pageTitle}</h1>
+    <span class="rent-amount-label">${amountLabel}</span>
+    <strong class="rent-amount">${money(t.amountPaise)}</strong>
+    <div class="rent-payment-meta"><span>${icon("calendar")} ${month(invoice.year,invoice.month)}</span>${proofStatus(t)}</div>
+  </section>`+
+  card(`<h2>Bill details</h2>${split(t,false)}`,"transfer-card rent-bill-details")+
   (issue?notice(issue):"")+
-  (t.status==="READY"?`<section class="card transfer-card" data-payment-launch ${returned?"hidden":""}>
-    ${intent ? manualUpiInstructions() : ""}
-    <p class="transfer-note">If an earlier payment was debited or is pending, don’t pay again. After a successful payment, save the screenshot and UTR.</p>
-    ${button("I have paid — attach proof",{action:"attachTransferProof",kind:"secondary block",glyph:"arrow"})}
-  </section>`:"")+
+  (t.status==="READY"?`<div data-payment-launch ${returned?"hidden":""}>
+    ${intent?card(manualUpiInstructions(t),"transfer-card rent-upi-card"):""}
+    <section class="card transfer-card rent-upload-action">
+      <span class="transfer-icon">${icon("image")}</span>
+      <div><h2>Already paid?</h2><p>Upload your payment screenshot and UTR for owner review.</p></div>
+      ${button("Upload payment proof",{action:"attachTransferProof",kind:"primary block",glyph:"arrow"})}
+    </section>
+  </div>`:"")+
   (["READY","REJECTED"].includes(t.status)?`<section class="card transfer-card proof-card" data-proof-upload ${t.status==="READY"&&!returned?"hidden":""}>
     <span class="transfer-icon">${icon("image")}</span><h2 data-proof-title tabindex="-1">Attach your payment proof</h2>
     ${proof?.reason?notice(proof.reason):""}
@@ -80,9 +91,14 @@ export async function transferProofScreen(ctx){
   (t.status==="SUBMITTED"?notice("Your owner will check the bank credit before confirming payment."):"")+
   (proof?card(`<h2>Submitted evidence</h2><p class="transfer-note">Bank reference: ${esc(proof.bankReference)}</p>${image(proof.evidenceId,"Payment screenshot")}`,"transfer-card"):"")+
   (t.status==="CONFIRMED"?button("Download receipt",{action:"transferReceipt",kind:"primary block",glyph:"download"}):"")+
-  (t.status==="READY"?`<details class="disclosure transfer-card"><summary>Payment cancelled or no debit?</summary><p>Only clear this request if you checked your bank and no money was debited.</p>${button("No debit — change payment selection",{action:"cancelTransfer",kind:"secondary block"})}</details>`:"")+
-  button("Refresh payment status",{action:"refreshTransfer",kind:"text-button block"})+
-  button("Rent & electricity",{action:"returnToCharges",kind:"secondary block"}),
+  `<details class="disclosure rent-payment-help"><summary>${icon("shield")} Payment help</summary>
+    <p>If money was debited or the transaction is pending, check its status in your UPI app before taking any further action.</p>
+    ${t.status==="READY"?button("No debit — change payment selection",{action:"cancelTransfer",kind:"secondary block"}):""}
+  </details>
+  <div class="rent-payment-footer">
+    ${button("Refresh payment status",{action:"refreshTransfer",kind:"text-button",glyph:"refresh"})}
+    ${button("Rent & electricity",{action:"returnToCharges",kind:"text-button"})}
+  </div>`,
  mount(){
   void images.mount();
   if(returned&&t.status==="READY")saveDirect(ctx.snapshot,ctx.native,{transferId:t.id,invoiceId:t.invoiceId,stage:"PROOF"});

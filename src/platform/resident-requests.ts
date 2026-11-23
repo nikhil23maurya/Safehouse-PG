@@ -44,13 +44,16 @@ export async function propertyResidentRequests(accountId:string,propertyId:strin
  if(id)assert(rows.length,404,"REQUEST_NOT_FOUND","This request does not belong to this property.");
  return {requests:rows.slice(0,50).map(summary),nextCursor:rows.length>50?rows[49]!.id:null};
 }
-async function verifyOwner(accountId:string,propertyId:string,password:string){
+async function verifyOwner(accountId:string,propertyId:string,password?:string){
  const setup=await owned(accountId,propertyId);
  assert(await entitlement(setup.organisationId),402,"SUBSCRIPTION_REQUIRED","Activate your PGOne plan before approving residents.");
- const account=await prisma.pgAccount.findUniqueOrThrow({where:{id:accountId}});
- assert(await passwordMatches(password,account.passwordHash),403,"PASSWORD_CONFIRMATION_FAILED","Your password did not match.");return setup;
+ if (password !== undefined) {
+  const account=await prisma.pgAccount.findUniqueOrThrow({where:{id:accountId}});
+  assert(await passwordMatches(password,account.passwordHash),403,"PASSWORD_CONFIRMATION_FAILED","Your password did not match.");
+ }
+ return setup;
 }
-export async function decideResidentRequest(accountId:string,propertyId:string,id:string,decision:"ACCEPTED"|"REJECTED",password:string){
+export async function decideResidentRequest(accountId:string,propertyId:string,id:string,decision:"ACCEPTED"|"REJECTED",password?:string){
  const setup=await verifyOwner(accountId,propertyId,password);
  return atomic(async tx=>{
   const request=await tx.pgResidentRequest.findFirst({where:{id,propertyId,organisationId:setup.organisationId}});
@@ -61,9 +64,11 @@ export async function decideResidentRequest(accountId:string,propertyId:string,i
   await audit(tx,accountId,setup.organisationId,`RESIDENT_REQUEST_${decision}`,id,{propertyId});return {request:summary(updated)};
  });
 }
-export type ResidentRentSetup={roomId:string;bedLabel?:string;joiningDate:string;monthlyRentPaise:number;securityDepositPaise:number;rentDueDay:number;mobile:string;password:string;identityChecked:true;existingStudentId?:string};
+export type ResidentRentSetup={roomId:string;bedLabel?:string;joiningDate:string;monthlyRentPaise:number;securityDepositPaise:number;rentDueDay:number;mobile:string;password?:string;identityChecked:true;existingStudentId?:string};
 export async function setupRequestedResident(accountId:string,propertyId:string,id:string,input:ResidentRentSetup){
  const setup=await verifyOwner(accountId,propertyId,input.password);
+ if (input.existingStudentId)
+  assert(input.password,403,"PASSWORD_CONFIRMATION_REQUIRED","Confirm your password to link an existing resident and their history.");
  const {identityChecked}=input;
  assert(identityChecked,400,"IDENTITY_CONFIRMATION_REQUIRED","Verify the resident's identity first.");
  const joining=parseDateOnly(input.joiningDate);

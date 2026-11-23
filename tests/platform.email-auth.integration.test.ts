@@ -26,6 +26,12 @@ test("email registration normalizes identity, hashes passwords and prevents dupl
   assert.equal((await loginEmail(address.toUpperCase(),password)).id,account.id);
   await assert.rejects(()=>loginEmail(address,"wrong"),{code:"INVALID_CREDENTIALS"});
 });
+test("new accounts accept ten-character passwords and reject shorter passwords",async()=>{
+  const address=email();
+  await assert.rejects(()=>registerEmail(address,"NineChars"),{name:"ZodError"});
+  const account=await registerEmail(address,"TenLetters");
+  assert.equal((await loginEmail(address,"TenLetters")).id,account.id);
+});
 test("refresh rotates exactly once, replay revokes the family and password change revokes other logins",async()=>{
   const account=await registerEmail(email(),password);
   const first=await issueSession(account);const second=await issueSession(account);

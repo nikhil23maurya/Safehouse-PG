@@ -214,8 +214,10 @@ export function createFixtures() {
     if(path.includes('/resident-requests')){
       const request={id:'request1',propertyId:'property1',propertyName:'Maple House',fullName:'Nisha Rao',email:'nisha@example.test',mobile:'+919876543219',status:control.requestStatus,createdAt:new Date().toISOString(),studentId:'resident1',membershipId:'resident-membership'};
       if(method==='GET')return ok({requests:[request]});
-      if(body.password!=='FixturePass123!')return error(403,'PASSWORD_CONFIRMATION_FAILED','Your password did not match.');
-      if(path.endsWith('/decision')){control.requestStatus=body.decision;return ok({request:{...request,status:control.requestStatus}});}
+      if(body.password!==undefined&&body.password!=='FixturePass123!')return error(403,'PASSWORD_CONFIRMATION_FAILED','Your password did not match.');
+      if(path.endsWith('/decision')){
+       if(body.decision==='ACCEPTED'&&body.password===undefined&&body.identityChecked!==true)return error(400,'IDENTITY_CONFIRMATION_REQUIRED','Verify the resident first.');
+       control.requestStatus=body.decision;return ok({request:{...request,status:control.requestStatus}});}
       if(path.endsWith('/rent')){
         if(control.capacityRejected)return error(409,'ROOM_FULL','This room has no vacant beds.');
         control.requestStatus='ACTIVE';return ok({ok:true,studentId:'resident1',membershipId:'resident-membership'});

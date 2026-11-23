@@ -23,14 +23,14 @@ async function bill(page){await page.getByLabel("Electricity amount (₹)").fill
 async function choose(page,choice="RENT"){await page.getByLabel("Choose what to pay").selectOption(choice);await page.getByRole("button",{name:"Continue to payment",exact:true}).click();await expect(page).toHaveURL(/#transferProof$/);}
 async function screenshot(page,name){await fs.mkdir("visual-evidence/direct-payments",{recursive:true});await page.screenshot({path:`visual-evidence/direct-payments/${name}.png`,fullPage:true});}
 test("copies the exact combined payment details and restores manual proof without launching UPI",async({page})=>{
- const f=await setup(page);await go(page,"payment",{invoiceId:"invoice1"});await bill(page);await choose(page,"BOTH");await expect(page.getByText("₹9,151.24",{exact:true})).toBeVisible();await noOverflow(page);await screenshot(page,"combined-payment");
- await expect(page.getByRole("heading",{name:"Pay in Paytm or another UPI app"})).toBeVisible();
+ const f=await setup(page);await go(page,"payment",{invoiceId:"invoice1"});await bill(page);await choose(page,"BOTH");await expect(page.getByText("₹9,151.24",{exact:true})).toBeVisible();await noOverflow(page);await expect(page.getByRole("heading",{name:"Bill details",exact:true})).toBeVisible();await expect(page.getByText("owner-fixture@invalid",{exact:true})).toHaveCount(1);await screenshot(page,"combined-payment");
+ await expect(page.getByRole("heading",{name:"Pay via UPI"})).toBeVisible();
  await page.getByRole("button",{name:"Copy UPI ID",exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>window.__copiedPaymentDetail)).toBe("owner-fixture@invalid");
  await page.getByRole("button",{name:"Copy amount",exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>window.__copiedPaymentDetail)).toBe("9151.24");
  expect(await page.evaluate(()=>window.__directIntent)).toBeUndefined();
- await page.getByRole("button",{name:"I have paid — attach proof",exact:true}).click();
+ await page.getByRole("button",{name:"Upload payment proof",exact:true}).click();
  await expect(page.getByRole("heading",{level:1,name:"Attach payment proof",exact:true})).toBeVisible();
  expect(f.creates).toBe(1);await screenshot(page,"return-attach-proof");
  await page.reload();await expect(page).toHaveURL(/#transferProof$/);await expect(page.getByLabel("UTR / transaction reference")).toBeVisible();expect(f.creates).toBe(1);
@@ -49,7 +49,7 @@ test("owner sees direct UPI setup without merchant onboarding and confirms only 
 });
 test("invalid screenshot does not submit an empty proof",async({page})=>{
  const f=await setup(page);await go(page,"payment",{invoiceId:"invoice1"});await choose(page);
- await page.getByRole("button",{name:"I have paid — attach proof",exact:true}).click();
+ await page.getByRole("button",{name:"Upload payment proof",exact:true}).click();
  await page.getByLabel("UTR / transaction reference").fill("123456789012");
  await page.getByLabel("Payment screenshot",{exact:true}).setInputFiles({name:"bad.svg",mimeType:"image/svg+xml",buffer:Buffer.from("<svg/>")});
  await page.getByRole("button",{name:"Submit payment proof",exact:true}).click();
@@ -63,7 +63,7 @@ test("returning from a transfer stays on the prior screen and its invoice", asyn
  await go(page, "invoices");
  await go(page, "payment", {invoiceId:"invoice1"});
  await choose(page);
- await page.getByRole("button", {name:"I have paid — attach proof", exact:true}).click();
+ await page.getByRole("button", {name:"Upload payment proof", exact:true}).click();
  await page.getByRole("button", {name:"Go back", exact:true}).click();
  await expect(page).toHaveURL(/#payment$/);
  await page.evaluate(()=>window.SafeHouseResume());
@@ -85,7 +85,7 @@ test("resume after copying keeps the instructions and the unpaid request", async
  await page.getByRole("button",{name:"Copy UPI ID",exact:true}).click();
  await expect.poll(()=>page.evaluate(()=>window.__copiedPaymentDetail)).toBe("owner-fixture@invalid");
  await page.evaluate(()=>window.SafeHouseResume());
- await expect(page.getByRole("heading",{name:"Pay in Paytm or another UPI app"})).toBeVisible();
+ await expect(page.getByRole("heading",{name:"Pay via UPI"})).toBeVisible();
  await expect(page.getByLabel("Payment screenshot",{exact:true})).toBeHidden();
  expect(fixture.transfers[0].status).toBe("READY");
 });

@@ -6,16 +6,16 @@ test("request review, capacity error, rent setup and logical back preserve the s
  const f=await setup(page);await login(page);await page.locator('.quick-actions [data-route=residentRequests]').click();
  await expect(page.getByRole('heading',{name:'Resident requests'})).toBeVisible();await page.getByRole('button',{name:/Nisha Rao/}).click();
  await expect(page.getByRole('heading',{name:'Nisha Rao'})).toBeVisible();await page.getByRole('button',{name:'Go back'}).click();await expect(page).toHaveURL(/#residentRequests$/);
- await page.getByRole('button',{name:/Nisha Rao/}).click();await page.getByLabel('Confirm your PGOne password').fill('FixturePass123!');await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Accept request'}).click();
- await expect(page).toHaveURL(/#residentRentSetup$/);await page.getByLabel('Room',{exact:true}).selectOption('room1');await page.getByLabel('Monthly rent',{exact:true}).fill('8500.99');await page.getByLabel('Confirm your PGOne password').fill('FixturePass123!');await page.getByRole('checkbox').check();
+ await page.getByRole('button',{name:/Nisha Rao/}).click();await expect(page.getByLabel('Confirm your PGOne password')).toHaveCount(0);await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Accept request'}).click();
+ await expect(page).toHaveURL(/#residentRentSetup$/);await page.getByLabel('Room',{exact:true}).selectOption('room1');await page.getByLabel('Monthly rent',{exact:true}).fill('8500.99');await expect(page.getByLabel('Confirm your PGOne password')).toHaveCount(0);await page.getByRole('checkbox').check();
  f.control.capacityRejected=true;await page.getByRole('button',{name:'Save and activate resident'}).click();await expect(page.locator('.form-error')).toContainText('no vacant beds');await expect(page.getByLabel('Monthly rent',{exact:true})).toHaveValue('8500.99');
  await fs.mkdir('visual-evidence/owner-ux',{recursive:true});await noOverflow(page);await page.screenshot({path:'visual-evidence/owner-ux/rent-setup-error.png',fullPage:true});
  f.control.capacityRejected=false;await page.getByRole('button',{name:'Save and activate resident'}).click();await expect(page).toHaveURL(/#resident$/);
- const writes=f.control.requests.filter(r=>r.path.endsWith('/resident-requests/request1/rent'));expect(writes.at(-1).body).toMatchObject({monthlyRentPaise:850099,rentDueDay:5,identityChecked:true,roomId:'room1'});
+ const writes=f.control.requests.filter(r=>r.path.endsWith('/resident-requests/request1/rent'));expect(writes.at(-1).body).toMatchObject({monthlyRentPaise:850099,rentDueDay:5,identityChecked:true,roomId:'room1'});expect(writes.at(-1).body.password).toBeUndefined();
  expect(f.control.requests.filter(r=>r.path==='/api/owner/students'&&r.method==='POST')).toHaveLength(0);expect(f.errors).toEqual([]);
 });
 test("reject request closes access and does not expose rent activation",async({page})=>{
- const f=await setup(page);await login(page);await go(page,'residentRequest',{id:'request1'});await page.getByLabel('Confirm your PGOne password').fill('FixturePass123!');await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Reject request'}).click();await page.getByRole('dialog').getByRole('button',{name:'Reject request'}).click();
+ const f=await setup(page);await login(page);await go(page,'residentRequest',{id:'request1'});await expect(page.getByLabel('Confirm your PGOne password')).toHaveCount(0);await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Reject request'}).click();await page.getByRole('dialog').getByRole('button',{name:'Reject request'}).click();
  await expect(page.getByText('Rejected',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Set up room and rent'})).toHaveCount(0);expect(f.control.requestStatus).toBe('REJECTED');
 });
 test("all three loading bubbles keep moving with a subtle reduced-motion alternative",async({page})=>{

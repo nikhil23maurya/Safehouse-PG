@@ -10,7 +10,8 @@ import { issueSession } from "./sessions.js";
 import { hash, randomCode } from "./tokens.js";
 
 export const emailInput = z.string().trim().toLowerCase().max(254).pipe(z.email());
-export const passwordInput = z.string().min(12, "Use at least 12 characters.").max(128);
+export const minPasswordLength = 10;
+export const passwordInput = z.string().min(minPasswordLength, `Use at least ${minPasswordLength} characters.`).max(128);
 const credentials = z.object({email:emailInput,password:z.string().min(1).max(128)}).strict();
 const tokenInput = z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 export const mailReady = () => Boolean(process.env.PGONE_MAIL_API_KEY && process.env.PGONE_MAIL_FROM &&
