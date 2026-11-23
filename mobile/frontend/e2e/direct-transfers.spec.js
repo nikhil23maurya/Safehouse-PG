@@ -8,7 +8,7 @@ async function setup(page,role="STUDENT",fixture=createDirectPaymentFixtures()){
  await page.addInitScript(role=>{
   const initial={tokens:{kind:"PLATFORM",accessToken:`fixture_${role}_access`,refreshToken:`fixture_${role}_refresh_token`},userId:role==="OWNER"?"owner1":"user1",activePropertyId:"property1"};
   window.SafeHouseNative={getPackageId:()=>"com.safehouse.pg.testing",getSession:()=>JSON.stringify(initial),saveSession:()=>true,ready:()=>{},getDirectTransferState:()=>sessionStorage.getItem("direct-payment-state")||"",saveDirectTransferState:v=>{sessionStorage.setItem("direct-payment-state",v);return true;},copyPaymentDetail:value=>{window.__copiedPaymentDetail=value;return true;},openDirectOwnerUpi:uri=>{window.__directIntent=uri;}};
-  window.SafeHouseNative.openUpiApp=(...args)=>{
+  window.SafeHouseNative.chooseUpiApp=(...args)=>{
    window.__upiAppChoice={args,clipboard:window.__copiedPaymentDetail};
    return true;
   };

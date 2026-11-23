@@ -359,7 +359,7 @@ public class MobileJourneyTest {
         assertEquals("Combined bank amount is rent plus independent electricity","915124",js("window.__directFixtures.transfers[0].amountPaise"));
         // The fixture launcher is disabled. The shortcut still copies the ID.
         Instrumentation.ActivityMonitor upiMonitor=evidenceMonitor(Intent.ACTION_VIEW,new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null));
-        js("document.querySelector('[data-action=openUpiApp]').click()");
+        js("document.querySelector('[data-action=chooseUpiApp]').click()");
         await("document.getElementById('toasts').textContent.includes('No UPI app is available')");
         java.util.concurrent.atomic.AtomicReference<String> copied = new java.util.concurrent.atomic.AtomicReference<>();
         instrumentation.runOnMainSync(() -> {
@@ -374,7 +374,7 @@ public class MobileJourneyTest {
             long registrationDeadline = System.currentTimeMillis() + 5000;
             while (target.getPackageManager().getLaunchIntentForPackage(receiverPackage) == null
                     && System.currentTimeMillis() < registrationDeadline) Thread.sleep(150);
-            js("document.querySelector('[data-action=openUpiApp]').click()");
+            js("document.querySelector('[data-action=chooseUpiApp]').click()");
             long chooserDeadline = System.currentTimeMillis() + 15000;
             while (!nativeText("UPI Test Receiver") && System.currentTimeMillis() < chooserDeadline) Thread.sleep(150);
             AccessibilityNodeInfo chooser = instrumentation.getUiAutomation().getRootInActiveWindow();

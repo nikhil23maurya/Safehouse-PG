@@ -9,7 +9,7 @@ test("legacy rent still copies the UPI ID when no UPI app is available",async({p
     getPackageId:()=>"com.safehouse.pg.testing",ready:()=>{},saveSession:()=>true,
     getSession:()=>JSON.stringify({tokens:{kind:"PLATFORM",accessToken:"fixture_STUDENT_access",refreshToken:"fixture_STUDENT_refresh_token"},userId:"user1",activePropertyId:"property1"}),
     copyPaymentDetail:value=>{window.__copiedPaymentDetail=value;return true;},
-    openUpiApp:()=>false,
+    chooseUpiApp:()=>false,
     openDirectOwnerUpi:()=>{window.__directLaunches++;},
   };});
   await page.route("https://safehouse-api.onrender.com/api/**",async route=>{

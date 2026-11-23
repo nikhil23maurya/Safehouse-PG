@@ -4,7 +4,7 @@ import {icon} from "../components/icons.js";
 export function manualUpiInstructions(payment, canOpenUpiApp) {
   const copyId = button("Copy UPI ID",{action:"copyPayee",kind:"secondary"});
   const chooseApp = canOpenUpiApp
-    ? button("Copy UPI ID & open app",{action:"openUpiApp",kind:"primary block",glyph:"external"})
+    ? button("Copy UPI ID & open app",{action:"chooseUpiApp",kind:"primary block",glyph:"external"})
     : "";
   const instruction = "Paste the UPI ID, verify the recipient and enter the amount shown.";
   if (payment) return `<div class="rent-upi-heading">
@@ -28,7 +28,7 @@ export function manualUpiInstructions(payment, canOpenUpiApp) {
 }
 
 export async function copyPaymentDetail(ctx, action, payment) {
-  const openApp = action === "openUpiApp";
+  const openApp = action === "chooseUpiApp";
   const isPayee = openApp || action === "copyPayee";
   const label = isPayee ? "UPI ID" : "Amount";
   const value = isPayee ? payment.payeeAddress : (payment.amountPaise / 100).toFixed(2);
@@ -41,7 +41,7 @@ export async function copyPaymentDetail(ctx, action, payment) {
   } catch {
     throw new Error(`${label} could not be copied. Enter it directly in your UPI app.`);
   }
-  if (openApp && !ctx.native.call("openUpiApp")) {
+  if (openApp && !ctx.native.call("chooseUpiApp")) {
     ctx.toast("UPI ID copied. No UPI app is available.");
     return;
   }

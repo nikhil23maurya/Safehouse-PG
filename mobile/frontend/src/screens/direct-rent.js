@@ -16,7 +16,7 @@ export async function directRentScreen(ctx) {
       card(`<h2>${money(data.remainingPaise)}</h2>${claim?`<p class="payee">${esc(claim.payeeName)}</p><p class="payee-address">${esc(claim.payeeAddress)}</p>${badge(confirmed?"OWNER CONFIRMED":"AWAITING OWNER CONFIRMATION")}`:""}`,"payment-summary")+
       (data.issue?notice(data.issue):!data.ownerConfigured&&!data.settled?notice("Your owner has not set up rent collection yet. Ask your owner to add their rent-receiving UPI address."):"")+
       (data.settled?notice(confirmed?"Your owner confirmed this rent payment.":"This invoice has no outstanding balance."):`<p class="payment-safety">If a previous payment was debited or is pending, check your bank before retrying.</p>`)+
-      (data.payable&&claim?card(manualUpiInstructions(null,ctx.native.has("openUpiApp")),"transfer-card"):"")+
+      (data.payable&&claim?card(manualUpiInstructions(null,ctx.native.has("chooseUpiApp")),"transfer-card"):"")+
       (data.canPrepare?button("Get UPI details",{action:"prepareDirect",kind:"primary block"}):"")+
       (claim&&!confirmed?`<details class="disclosure" data-bank-reference ${claim.bankReference?"open":""}><summary>Already paid? Submit bank reference</summary><p>PGOne reference: ${esc(claim.reference)}</p><form data-form="directReference" novalidate><div class="form-error" role="alert"></div>${field("reference","Bank transaction reference",{required:true,value:claim.bankReference||"",help:"Copy the bank UTR after payment. Never enter a UPI PIN.",attrs:'minlength="6" maxlength="40" autocomplete="off"'})}${button("Submit for owner review",{type:"submit",kind:"secondary block"})}</form></details>`:"")+
       button("Refresh payment status",{action:"refreshDirect",kind:"text-button block"})+
@@ -28,9 +28,9 @@ export async function directRentScreen(ctx) {
         if (!fresh.payable) throw new Error(fresh.issue || "This request is unavailable. Refresh its status.");
         return ctx.reload();
       }
-      if (name === "copyPayee" || name === "copyAmount" || name === "openUpiApp") {
+      if (name === "copyPayee" || name === "copyAmount" || name === "chooseUpiApp") {
         const fresh = await ctx.api(path);
-        if (name === "openUpiApp" && !element?.isConnected) return;
+        if (name === "chooseUpiApp" && !element?.isConnected) return;
         if (!fresh.payable || !fresh.claim) throw new Error(fresh.issue || "Payment status changed. Refresh before paying.");
         return copyPaymentDetail(ctx, name, fresh.claim);
       }

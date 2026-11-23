@@ -443,7 +443,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
             }
         }
 
-        @JavascriptInterface public boolean openUpiApp() {
+        @JavascriptInterface public boolean chooseUpiApp() {
             PackageManager packages = getPackageManager();
             Intent discovery = new Intent(Intent.ACTION_VIEW, Uri.parse("upi://pay"));
             ArrayList<Intent> launches = new ArrayList<>();
