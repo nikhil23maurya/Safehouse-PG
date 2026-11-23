@@ -134,7 +134,7 @@ public class PlanCheckoutTest {
         assertNull(PlanUpiCheckout.paymentContact("123"));assertNull(PlanUpiCheckout.paymentContact(""));
     }
     @Test public void correctedPayloadPassesTheOfficialSdkFieldValidator() throws Exception {
-        MainActivity activity=start();CountDownLatch done=new CountDownLatch(2);final String[] error={null};
+        MainActivity activity=start();CountDownLatch done=new CountDownLatch(3);final String[] error={null};
         instrumentation.runOnMainSync(()->{
             try {
                 for(int amount:new int[]{100,15900,24900}){

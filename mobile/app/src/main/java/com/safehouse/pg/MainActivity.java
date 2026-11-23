@@ -364,6 +364,7 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
 
     public final class NativeBridge {
         @JavascriptInterface public String getPackageId() { return getPackageName(); }
+        @JavascriptInterface public String getPlanSupportedAmounts(){return "[100,15900,24900]";}
         @JavascriptInterface public String getBillingDistribution() { return BuildConfig.BILLING_DISTRIBUTION; }
         @JavascriptInterface public void openLegalLink(String url) { runOnUiThread(() -> {
             try { Uri target = Uri.parse(url); if ("https".equals(target.getScheme()) && target.getHost() != null && target.getUserInfo() == null) startActivity(new Intent(Intent.ACTION_VIEW, target)); } catch (Exception ignored) { Toast.makeText(MainActivity.this, "This link is unavailable", Toast.LENGTH_SHORT).show(); }

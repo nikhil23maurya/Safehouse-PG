@@ -67,6 +67,13 @@ async function manualOwner() {
   const property=await createProperty(account.id,{name:"Manual Billing House",city:"Pune",key:suffix});
   return {account,organisationId:property.organisationId};
 }
+test("current INR159 checkout is advertised only to native versions that can submit its exact amount",async()=>{
+ const path=`${base}/api/platform/config?package=com.safehouse.pg.testing`;
+ const old:any=await (await fetch(path)).json();assert.equal(old.plan.amountPaise,15900);assert.equal(old.androidBilling,"UPGRADE_REQUIRED");
+ const supported=encodeURIComponent(JSON.stringify([100,15900,24900]));
+ const current:any=await (await fetch(`${path}&nativePlanAmounts=${supported}`)).json();assert.equal(current.androidBilling,"CUSTOM_UPI_INTENT");
+ const malformed:any=await (await fetch(`${path}&nativePlanAmounts=invalid`)).json();assert.equal(malformed.androidBilling,"UPGRADE_REQUIRED");
+});
 
 test("production blocks order creation and capture reconciliation using non-live credentials",async()=>{
   const {account,organisationId}=await manualOwner(),mock=manualProvider();

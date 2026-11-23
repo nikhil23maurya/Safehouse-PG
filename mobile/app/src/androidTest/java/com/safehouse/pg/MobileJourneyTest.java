@@ -112,7 +112,7 @@ public class MobileJourneyTest {
     private void await(String expression) throws Exception {
         long deadline = System.currentTimeMillis() + 25000;
         do { if ("true".equals(js("Boolean(" + expression + ")"))) return; Thread.sleep(150); } while (System.currentTimeMillis() < deadline);
-        fail("Condition failed: " + expression + " state=" + js("document.body.innerText.slice(0,1200)"));
+        fail("Condition failed: " + expression + " state=" + js("JSON.stringify({text:document.body.innerText.slice(0,1600),fields:Array.from(document.querySelectorAll('input')).map(i=>({name:i.name,value:i.type==='password'?'redacted':i.value,valid:i.validity.valid,missing:i.validity.valueMissing,file:i.files?.[0]&&{size:i.files[0].size,type:i.files[0].type}})),uploads:window.__directFixtures?.uploads?.length})"));
     }
     private void go(String name, String params) throws Exception {
         js("history.pushState({name:'" + name + "',params:" + params + ",depth:1},'','#" + name + "');dispatchEvent(new PopStateEvent('popstate',{state:history.state}));");
@@ -341,9 +341,10 @@ public class MobileJourneyTest {
         android.net.Uri evidenceUri=android.net.Uri.parse("content://com.safehouse.pg.testing.test.evidence/photo");
         instrumentation.getContext().grantUriPermission(target.getPackageName(),evidenceUri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
         Instrumentation.ActivityMonitor photoMonitor=evidenceMonitor(Intent.ACTION_OPEN_DOCUMENT,new Instrumentation.ActivityResult(Activity.RESULT_OK,new Intent().setData(evidenceUri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)));
-        js("document.querySelector('[name=amount]').value='650.25'");
+        js("const meterAmount=document.querySelector('[name=amount]');meterAmount.value='650.25';meterAmount.dispatchEvent(new Event('input',{bubbles:true}))");
         tapFileInput("[name=meter]");
         await("document.querySelector('[name=meter]').files.length===1");
+        assertEquals("The picker must preserve the resident-entered amount","\"650.25\"",js("document.querySelector('[name=amount]').value"));
         js("document.querySelector('[data-form=electricityBill]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
         await("window.__directFixtures.bill && document.querySelector('[name=charges] option[value=BOTH]')");
         js("document.querySelector('[name=charges]').value='BOTH';document.querySelector('[data-form=chooseTransfer]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
