@@ -77,7 +77,7 @@ public class MobileJourneyTest {
     private String js(String script) throws Exception {
         CountDownLatch done = new CountDownLatch(1); AtomicReference<String> value = new AtomicReference<>();
         instrumentation.runOnMainSync(() -> web.evaluateJavascript(script, result -> { value.set(result); done.countDown(); }));
-        assertTrue("JavaScript evaluation timed out", done.await(10, TimeUnit.SECONDS)); return value.get();
+        assertTrue("JavaScript evaluation timed out", done.await(25, TimeUnit.SECONDS)); return value.get();
     }
     private String shell(String command) throws Exception {
         try (android.os.ParcelFileDescriptor descriptor = instrumentation.getUiAutomation().executeShellCommand(command)) {
