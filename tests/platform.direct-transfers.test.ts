@@ -1,5 +1,7 @@
 import test,{after} from "node:test";
 import assert from "node:assert/strict";
+import express from "express";
+import {ZodError} from "zod";
 process.env.PGONE_PLATFORM_ENABLED="true";
 assert.equal(process.env.NODE_ENV,"test");
 const database=new URL(process.env.DATABASE_URL!);assert.equal(database.hostname,"127.0.0.1");assert.equal(database.pathname,"/pgone_test");
@@ -108,4 +110,25 @@ test("private image validation limits bytes/dimensions and strips metadata; uplo
  assert.throws(()=>evidenceImage("a".repeat(800000)),{code:"INVALID_IMAGE"});
  const f=await fixture();assert.equal((await storeEvidence(f.resident.id,f.member.id,"METER",jpeg())).id,f.meter.id);
  assert.equal(evidenceImage(jpeg()).width,1);assert.ok((await ownerTransfers(f.owner.id,f.pg.propertyId)).transfers);
+});
+test("actual authenticated HTTP routes keep proof private and issue a split receipt only after owner confirmation",async()=>{
+ const f=await fixture(),g=await fixture();await prisma.pgOrganisation.update({where:{id:f.pg.organisationId},data:{legacyAccess:true}});
+ const {membershipTokens}=await import("../src/platform/service.js");const {directTransferRouter}=await import("../src/platform/direct-transfer-router.js");
+ const resident=await membershipTokens(f.resident.id,f.member.id),owner=await membershipTokens(f.owner.id,f.own.id),other=await membershipTokens(g.resident.id,g.member.id);
+ const app=express();app.use(express.json({limit:"1mb"}));app.use("/api/platform/direct-payments",directTransferRouter);
+ app.use((e:any,_req:any,res:any,_next:any)=>res.status(e instanceof ZodError?400:e.statusCode||500).json({error:{code:e.code,message:e.message}}));
+ const server=app.listen(0,"127.0.0.1");await new Promise<void>(r=>server.on("listening",r));const origin=`http://127.0.0.1:${(server.address() as any).port}/api/platform/direct-payments`;
+ const req=(path:string,token?:string,body?:object)=>fetch(origin+path,{method:body?"POST":"GET",headers:{"content-type":"application/json",...(token?{authorization:`Bearer ${token}`}:{})},...(body?{body:JSON.stringify(body)}:{})});
+ try{
+  assert.equal((await req(`/evidence/${f.meter.id}`)).status,401);assert.equal((await req(`/evidence/${f.meter.id}`,other.accessToken)).status,404);
+  const bill=await req(`/invoices/${f.invoice.id}/electricity`,resident.accessToken,{amountPaise:65025,meterEvidenceId:f.meter.id});assert.equal(bill.status,200);
+  const spoof=await req(`/invoices/${f.invoice.id}/transfers`,resident.accessToken,{rent:true,electricity:true,key:crypto.randomUUID(),amountPaise:1,payeeAddress:"attacker@invalid"});assert.equal(spoof.status,400);
+  const prepare=await req(`/invoices/${f.invoice.id}/transfers`,resident.accessToken,{rent:true,electricity:true,key:crypto.randomUUID()});assert.equal(prepare.status,200);const {transferId}=await prepare.json() as any;
+  assert.equal((await req(`/transfers/${transferId}/receipt.pdf`,resident.accessToken)).status,409);
+  const submitted=await req(`/transfers/${transferId}/proof`,resident.accessToken,{bankReference:"123456789012",evidenceId:f.proof.id,key:crypto.randomUUID()});assert.equal(submitted.status,200);const {proof}=await submitted.json() as any;
+  const photo=await req(`/evidence/${f.proof.id}`,owner.accessToken);assert.equal(photo.status,200);assert.equal(photo.headers.get("content-type"),"image/jpeg");assert.match(photo.headers.get("cache-control")!,/no-store/);
+  assert.equal((await req(`/transfers/${transferId}/review`,resident.accessToken,{proofId:proof.id,approve:true,bankChecked:true})).status,403);
+  assert.equal((await req(`/transfers/${transferId}/review`,owner.accessToken,{proofId:proof.id,approve:true,bankChecked:true})).status,200);
+  const receipt=await req(`/transfers/${transferId}/receipt.pdf`,resident.accessToken);assert.equal(receipt.status,200);assert.equal(receipt.headers.get("content-type"),"application/pdf");assert.ok(Buffer.from(await receipt.arrayBuffer()).subarray(0,5).equals(Buffer.from("%PDF-")));
+ }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
 });
