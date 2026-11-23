@@ -60,18 +60,18 @@ export async function login(page, role = "OWNER") {
 export async function go(page, name, params = {}) {
   await page.evaluate(
     ({ name, params }) => {
-      const record = { safehouse: true, name, params, depth: 1 };
+      const record = { ...history.state, name, params, depth: (history.state?.depth || 0) + 1 };
       history.pushState(record, "", `#${name}`);
       window.dispatchEvent(new PopStateEvent("popstate", { state: record }));
     },
     { name, params },
   );
-  await expect(page.locator(".page-progress")).toHaveCount(0);
+  await expect(page.locator(".route-loading")).toHaveCount(0);
   await expect(page).toHaveURL(new RegExp(`#${name}$`));
   await expect(page.locator("#app")).toHaveAttribute("data-screen", name);
   await page.waitForFunction(
     () =>
-      !document.querySelector(".page-progress") &&
+      !document.querySelector(".route-loading") &&
       !!document.querySelector("h1"),
   );
 }

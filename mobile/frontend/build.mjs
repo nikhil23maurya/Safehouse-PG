@@ -8,6 +8,8 @@ import path from "node:path";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const out = path.resolve(here, "../app/src/main/assets");
 await mkdir(out, { recursive: true });
+for (const name of ["pgone-mark.png", "pgone-logo.png"])
+  await copyFile(path.join(here, "src/assets/brand", name), path.join(out, name));
 await copyFile(path.join(here, "src/assets/fonts/InterVariable.woff2"), path.join(out, "InterVariable.woff2"));
 await copyFile(path.join(here, "src/assets/fonts/OFL.txt"), path.join(out, "Inter-OFL.txt"));
 await copyFile(path.join(here, "src/assets/fonts/ManropeVariable.ttf"), path.join(out, "ManropeVariable.ttf"));
@@ -37,6 +39,6 @@ const css = await Promise.all(
 await writeFile(path.join(out, "app.css"), css.join("\n"));
 await writeFile(
   path.join(out, "index.html"),
-  (await readFile(path.join(here, "index.html"), "utf8")).replace("{{PGONE_BOOT_BRAND}}",brand()+dots("Opening PGOne")),
+  (await readFile(path.join(here, "index.html"), "utf8")).replace("{{PGONE_BOOT_BRAND}}",brand({stacked:true})+dots("Opening PGOne", "loading-dots-large")),
 );
 console.log("Built maintained PGOne frontend → Android assets");

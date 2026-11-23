@@ -917,9 +917,6 @@
   .login-inner,
   .toast,
   .dialog,
-  .page-progress::after {
-    animation: none;
-  }
   button {
     transition: none;
   }
@@ -934,7 +931,6 @@
 .reduced-motion .login-inner,
 .reduced-motion .toast,
 .reduced-motion .dialog,
-.reduced-motion .page-progress::after,
 .reduced-motion .sk,
 .reduced-motion .spinner,
 .reduced-motion .boot svg,

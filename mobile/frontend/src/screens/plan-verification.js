@@ -5,7 +5,7 @@ import {brand} from "../components/brand.js";
 import {dots,successMark} from "../components/motion.js";
 import {button,esc,date,card} from "../components/ui.js";
 
-export const verificationMarkup=()=>`<main class="verification-page"><header>${button("Go back",{action:"back",kind:"royal-back",glyph:"back"})}${brand()}</header><div class="verification-center">${dots("Verifying payment")}<h1>Verifying your payment</h1><p>We're confirming your payment securely.<br>Please don't pay again.</p><div data-verification-result aria-live="polite"></div></div></main>`;
+export const verificationMarkup=()=>`<main class="verification-page"><header>${button("Go back",{action:"back",kind:"royal-back",glyph:"back"})}${brand()}</header><div class="verification-center">${dots("Verifying payment", "loading-dots-large")}<h1>Verifying your payment</h1><p>We're confirming your payment securely.<br>Please don't pay again.</p><div data-verification-result aria-live="polite"></div></div></main>`;
 export function planVerificationScreen(ctx){
  const org=organisation(ctx.snapshot),order=planCheckout.orderId;
  let disposed=false,checking=false;

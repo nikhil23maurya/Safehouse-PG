@@ -19,7 +19,7 @@ async function createOwnerProperty(page){
   await page.getByRole("button",{name:"Create my PG"}).click();
   await expect(page).toHaveURL(/#subscription$/);
 }
-async function forceRoute(page,name){await page.evaluate(name=>{const state={safehouse:true,name,params:{},depth:1};history.pushState(state,"",`#${name}`);dispatchEvent(new PopStateEvent("popstate",{state}));},name);}
+async function forceRoute(page,name){await page.evaluate(name=>{const state={...history.state,name,params:{},depth:(history.state?.depth||0)+1};history.pushState(state,"",`#${name}`);dispatchEvent(new PopStateEvent("popstate",{state}));},name);}
 test("email screens contain the intended fields and retire phone routes",async({page})=>{
   await platform(page);
   await expect(page.locator('[data-form=login] input')).toHaveCount(2);

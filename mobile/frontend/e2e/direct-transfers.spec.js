@@ -45,3 +45,39 @@ test("failed app launch preserves copy fallback; photo errors do not submit an e
  await page.getByRole("button",{name:"Pay with UPI app",exact:true}).click();await expect(page.getByText("UPI app did not open",{exact:true})).toBeVisible();await expect(page.getByRole("button",{name:"Copy UPI ID",exact:true})).toBeVisible();await page.getByRole("button",{name:"I have paid — attach proof",exact:true}).click();await page.getByLabel("UTR / transaction reference").fill("123456789012");await page.getByLabel("Payment screenshot",{exact:true}).setInputFiles({name:"bad.svg",mimeType:"image/svg+xml",buffer:Buffer.from("<svg/>")});await page.getByRole("button",{name:"Submit payment proof",exact:true}).click();await expect(page.getByText("Choose a JPEG, PNG or WebP photo under 12 MB.",{exact:true})).toBeVisible();expect(f.transfers[0].status).toBe("READY");
 });
 for(const width of [360,393,412])test(`direct bill selection is usable at ${width}px`,async({page})=>{await page.setViewportSize({width,height:800});await setup(page);await go(page,"payment",{invoiceId:"invoice1"});await bill(page);await noOverflow(page);await screenshot(page,`bill-selection-${width}`);});
+
+test("returning from a transfer stays on the prior screen and its invoice", async ({page}) => {
+ const fixture = await setup(page);
+ await go(page, "invoices");
+ await go(page, "payment", {invoiceId:"invoice1"});
+ await choose(page);
+ await page.getByRole("button", {name:"Pay with UPI app", exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>Boolean(window.__directIntent))).toBe(true);
+ await page.getByRole("button", {name:"Go back", exact:true}).click();
+ await expect(page).toHaveURL(/#payment$/);
+ await page.evaluate(()=>window.PGOneDirectUpiReturned());
+ await expect(page).toHaveURL(/#payment$/);
+ await page.getByRole("button", {name:"Continue payment", exact:true}).click();
+ await expect(page.getByLabel("Payment screenshot", {exact:true})).toBeVisible();
+ await page.getByRole("button", {name:"Rent & electricity", exact:true}).click();
+ await expect(page).toHaveURL(/#payment$/);
+ await page.evaluate(()=>window.SafeHouseBack());
+ await expect(page).toHaveURL(/#invoices$/);
+ expect(fixture.creates).toBe(1);
+ expect(fixture.transfers[0].status).toBe("READY");
+});
+
+test("copying transfer details does not masquerade as a UPI return", async ({page}) => {
+ await setup(page);
+ await go(page, "payment", {invoiceId:"invoice1"});
+ await choose(page);
+ await page.evaluate(()=>{
+   window.SafeHouseNative.copyText=value=>{window.__copied=value;};
+ });
+ await page.getByText("Other ways to pay", {exact:true}).click();
+ await page.getByRole("button", {name:"Copy UPI ID", exact:true}).click();
+ await expect.poll(()=>page.evaluate(()=>window.__copied)).toBe("owner-fixture@invalid");
+ await page.evaluate(()=>window.SafeHouseResume());
+ await expect(page.getByRole("button", {name:"Pay with UPI app", exact:true})).toBeVisible();
+ await expect(page.getByLabel("Payment screenshot", {exact:true})).toBeHidden();
+});

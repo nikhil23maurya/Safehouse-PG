@@ -13,7 +13,7 @@
 ## Structure
 
 - `mobile/frontend/src/` — maintained, readable HTML/CSS/JavaScript application and components.
-- `mobile/frontend/src/components/icons.js` — canonical PGOne web-component logo, identical geometry to `docs/branding/pgone-mark.svg`.
+- `mobile/frontend/src/assets/brand/` — PGOne logo and compact mark from the approved artwork.
 - `mobile/app/src/main/res/drawable/ic_launcher.xml` — Android vector launcher icon.
 - `mobile/app/src/main/java/com/safehouse/pg/BrandSplash.java` — custom PGOne startup animation.
 - `mobile/frontend/build.mjs` — compiles the maintained frontend into Android WebView assets.

@@ -13,6 +13,7 @@ const types = {
   ".ttf": "font/ttf",
   ".txt": "text/plain",
   ".webp": "image/webp",
+  ".png": "image/png",
 };
 http
   .createServer(async (req, res) => {
@@ -20,7 +21,7 @@ http
       req.url?.split("?")[0] === "/"
         ? "index.html"
         : req.url?.split("?")[0].slice(1);
-    if (!["index.html", "app.js", "app.css", "InterVariable.woff2", "Inter-OFL.txt", "ManropeVariable.ttf", "Manrope-OFL.txt", ...["residence","room","records","royal-residence"].map(x => `illustration-${x}.webp`)].includes(name)) {
+    if (!["index.html", "app.js", "app.css", "InterVariable.woff2", "Inter-OFL.txt", "ManropeVariable.ttf", "Manrope-OFL.txt", "pgone-logo.png", "pgone-mark.png", ...["residence","room","records","royal-residence"].map(x => `illustration-${x}.webp`)].includes(name)) {
       res.writeHead(404).end();
       return;
     }

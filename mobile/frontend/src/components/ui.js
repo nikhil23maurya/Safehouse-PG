@@ -126,8 +126,8 @@ export function search(
 export function filters(items, active, action = "filter") {
   return `<div class="filter-row" aria-label="Filter">${items.map(([value, label]) => `<button class="filter-chip${active === value ? " selected" : ""}" data-action="${action}" data-value="${esc(value)}" aria-pressed="${active === value}">${esc(label)}</button>`).join("")}</div>`;
 }
-export function skeleton(name = "dashboard") {
-  return `<div class="screen-loading">${dots(`Loading ${name}`)}</div>`;
+export function skeleton() {
+  return `<div class="screen-loading">${dots("Loading page", "loading-dots-large")}</div>`;
 }
 
 const ownerTabs = [

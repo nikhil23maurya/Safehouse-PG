@@ -61,7 +61,18 @@ export async function createDirectClaim(accountId:string,membershipId:string,inv
   });
 }
 export function directIntent(claim:{payeeAddress:string;payeeName:string;amountPaise:number;reference:string}) {
-  return `upi://pay?${new URLSearchParams({pa:claim.payeeAddress,pn:claim.payeeName,am:(claim.amountPaise/100).toFixed(2),cu:"INR",tr:claim.reference,tn:"PG rent - owner bank confirmation required"})}`;
+  const parameters = {
+    pa: claim.payeeAddress,
+    pn: claim.payeeName,
+    am: (claim.amountPaise / 100).toFixed(2),
+    cu: "INR",
+    tr: claim.reference,
+    tn: "PGOne payment",
+  };
+  // Encode spaces as %20 for apps that parse the query as a URI.
+  return "upi://pay?" + Object.entries(parameters)
+    .map(([key, value]) => key + "=" + encodeURIComponent(value))
+    .join("&");
 }
 // Confirmation attaches an existing owner-recorded bank receipt. It NEVER posts another credit.
 export async function confirmDirectClaim(accountId:string,propertyId:string,claimId:string,paymentId:string) {

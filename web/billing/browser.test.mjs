@@ -12,7 +12,7 @@ before(async () => {
   server = http.createServer(async (req, res) => {
     const name = req.url === "/" ? "index.html" : req.url.slice(1);
     if (
-      !/^(index\.html|billing\.(js|css)|InterVariable\.woff2|ManropeVariable\.ttf|onboarding-payments\.webp)$/.test(
+      !/^(index\.html|billing\.(js|css)|InterVariable\.woff2|ManropeVariable\.ttf|onboarding-payments\.webp|pgone-mark\.png)$/.test(
         name,
       )
     )
@@ -24,7 +24,9 @@ before(async () => {
           ? "application/javascript"
           : name.endsWith(".css")
             ? "text/css"
-            : name.endsWith(".webp")
+            : name.endsWith(".png")
+              ? "image/png"
+              : name.endsWith(".webp")
               ? "image/webp"
               : name.endsWith(".ttf")
                 ? "font/ttf"

@@ -22,8 +22,10 @@ public class DirectRentQrTest {
  }
  @Test public void combinedTransferAndLegacyReferencesUseTheSameStrictUpiContract() {
   for(String prefix:new String[]{"PGO","PGT"}) {
-   String uri="upi://pay?pa=owner%40example&pn=Owner&am=9151.24&cu=INR&tr="+prefix+"1234567890123456";
-   assertEquals(uri,DirectRentQr.validate(uri).toString());
+   String uri="upi://pay?pa=owner%40example&pn=Asha%20%26%20R%C3%A9nt&am=9151.24&cu=INR&tr="+prefix+"1234567890123456";
+   android.net.Uri parsed = DirectRentQr.validate(uri);
+   assertEquals("Asha & R\u00e9nt", parsed.getQueryParameter("pn"));
+   assertEquals(uri,parsed.toString());
   }
   try{DirectRentQr.validate("upi://pay?pa=owner%40example&pn=Owner&am=9151.24&cu=INR&tr=PGX1234567890123456");fail("Unbound reference accepted");}catch(IllegalArgumentException expected){}
  }

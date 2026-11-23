@@ -157,6 +157,7 @@ let sequence = 0,
   screen = null,
   dirty = false,
   depth = 0,
+  historyBackPending = false,
   dialogResolver = null,
   toastTimer,
   loadingTimer;
@@ -351,25 +352,60 @@ function guardedRoute(name) {
   return ownerActivationRoute(state, name);
 }
 
+const pageHistoryId = crypto.getRandomValues(new Uint32Array(2)).join("-");
+const navigationScope = () => JSON.stringify([pageHistoryId, state.authEpoch, state.property?.id]);
+const routeMatches = (a, b) => a.name === b.name &&
+  Object.keys(a.params).length === Object.keys(b.params).length &&
+  Object.keys(a.params).every(key => JSON.stringify(a.params[key]) === JSON.stringify(b.params[key]));
+const historyRecord = () => ({ safehouse: true, ...state.route, depth, scope: navigationScope() });
+const verificationRoutes = new Set(["planVerification", "planSuccess", "rentVerification", "rentSuccess"]);
+const seenVerification = new Map();
+
+function checkoutKey(kind) {
+  const checkout = kind === "plan" ? planCheckout : rentCheckout;
+  const scope = kind === "plan" ? checkout.organisationId : checkout.membershipId;
+  return scope && checkout.orderId ? JSON.stringify([scope, checkout.orderId]) : null;
+}
+
+function offerVerification(kind) {
+  const key = checkoutKey(kind);
+  if (!key) return false;
+  const route = state.route.name;
+  if (route === kind + "Verification") {
+    void (kind === "plan" ? screen?.onPlanResult?.() : screen?.onRentResult?.());
+    return true;
+  }
+  if (seenVerification.get(kind) === key || dirty || submittedForms) return false;
+  seenVerification.set(kind, key);
+  if (route !== kind + "Success") void navigate(kind + "Verification", {}, { replace: true, force: true });
+  return true;
+}
+
+function logicalBack() {
+  const name = backTarget(state);
+  if (!name || guardedRoute(name) === state.route.name) return null;
+  const invoiceId = state.route.params.invoiceId;
+  return { name, params: name === "payment" && invoiceId ? { invoiceId } : {} };
+}
+
 async function navigate(
   name,
   params = {},
   { replace = false, force = false } = {},
 ) {
-  const next = guardedRoute(name);
-  if (
-    !force &&
-    next === state.route.name &&
-    JSON.stringify(params) === JSON.stringify(state.route.params)
-  )
-    return;
-  if (!force && !(await canLeave())) return;
-  if (rootRoutes.has(next) && rootRoutes.has(state.route.name)) replace = true;
+  const guarded = guardedRoute(name);
+  const next = { name: guarded, params: guarded === name ? params : {} };
+  const same = routeMatches(next, state.route);
+  if (!force && (historyBackPending || same || !(await canLeave()))) return;
+  if (history.state?.scope !== navigationScope()) {
+    depth = 0;
+    replace = true;
+  }
+  if (same || guarded !== name || (rootRoutes.has(guarded) && rootRoutes.has(state.route.name))) replace = true;
   dirty = false;
-  state.route = { name: next, params: next === name ? params : {} };
+  state.route = next;
   if (!replace) depth++;
-  const record = { safehouse: true, ...state.route, depth };
-  history[replace ? "replaceState" : "pushState"](record, "", `#${next}`);
+  history[replace ? "replaceState" : "pushState"](historyRecord(), "", '#' + guarded);
   await render();
 }
 
@@ -378,23 +414,19 @@ async function back() {
     dialogResolver(false);
     return;
   }
-  if (!(await canLeave())) return;
+  if (historyBackPending || !(await canLeave())) return;
   dirty = false;
-  if(["planVerification","planSuccess","rentVerification","rentSuccess"].includes(state.route.name)){
-    const parent=backTarget(state);if(parent)return navigate(parent,{},{replace:true,force:true});
-  }
-  if (depth > 0) history.back();
-  else {const parent=backTarget(state);if(parent)await navigate(parent, {}, { replace: true, force: true });}
+  const parent = logicalBack();
+  if (verificationRoutes.has(state.route.name) && parent)
+    return navigate(parent.name, parent.params, { replace: true, force: true });
+  if (depth > 0) {
+    historyBackPending = true;
+    history.back();
+  } else if (parent) await navigate(parent.name, parent.params, { replace: true, force: true });
 }
 
 window.SafeHouseBack = () => {
-  if (
-    dialogResolver ||
-    dirty ||
-    submittedForms ||
-    depth > 0 ||
-    backTarget(state)
-  ) {
+  if (dialogResolver || dirty || submittedForms || depth > 0 || logicalBack()) {
     void back();
     return true;
   }
@@ -402,29 +434,41 @@ window.SafeHouseBack = () => {
 };
 
 window.addEventListener("popstate", async (event) => {
+  const requested = event.state;
+  const requestedDepth = Number(requested?.depth) || 0;
   if (!(await canLeave())) {
-    history.pushState(
-      { safehouse: true, ...state.route, depth },
-      "",
-      `#${state.route.name}`,
-    );
+    historyBackPending = false;
+    history.pushState(historyRecord(), "", '#' + state.route.name);
     return;
   }
+  if (requested?.scope !== navigationScope()) {
+    historyBackPending = false;
+    depth = 0;
+    history.replaceState(historyRecord(), "", '#' + state.route.name);
+    const parent = logicalBack();
+    if (parent) await navigate(parent.name, parent.params, { replace: true, force: true });
+    return;
+  }
+
   dirty = false;
-  const requested = event.state || {};
-  let name = guardedRoute(requested.name);
-  if(Number(requested.depth)<depth&&name===state.route.name&&name!==requested.name){const parent=backTarget(state);if(parent)name=guardedRoute(parent);}
-  depth = Math.max(0, Number(requested.depth) || 0);
-  state.route = {
-    name,
-    params: name === requested.name ? requested.params || {} : {},
-  };
-  history.replaceState(
-    { safehouse: true, ...state.route, depth },
-    "",
-    `#${name}`,
-  );
-  await render();
+  const name = guardedRoute(requested.name);
+  const next = { name, params: name === requested.name ? requested.params || {} : {} };
+  const same = routeMatches(next, state.route);
+  const backwards = requestedDepth < depth || historyBackPending;
+  depth = Math.max(0, requestedDepth);
+  if (backwards && same && depth > 0) {
+    historyBackPending = true;
+    history.back();
+    return;
+  }
+  historyBackPending = false;
+  if (backwards && same) {
+    const parent = logicalBack();
+    if (parent) return navigate(parent.name, parent.params, { replace: true, force: true });
+  }
+  state.route = next;
+  history.replaceState(historyRecord(), "", '#' + name);
+  if (!same) await render();
 });
 
 async function signIn(email,password) {
@@ -601,31 +645,39 @@ window.PGOnePlanPaymentResult=(order,status,message)=>{
   const org=state.platform?.memberships?.find(m=>m.id===state.platform.membershipId)?.organisation;
   if(state.tokens?.kind!=="PLATFORM" || !org || planCheckout.organisationId!==org.id)return;
   if(planCheckout.receive(order,status,message)){
-    if(!["DISCOVERING","CHOOSING_APP","SUBMITTED"].includes(status)){if(state.route.name==="planVerification")void screen?.onPlanResult?.();else void navigate("planVerification",{},{replace:true,force:true});}
+    if(!["DISCOVERING","CHOOSING_APP","SUBMITTED"].includes(status))offerVerification("plan");
     else void screen?.onPlanResult?.();
   }
 };
 window.PGOneRentPaymentResult=(providerOrder,status)=>{
   if(state.user?.role!=="STUDENT"||state.platform?.membershipId!==rentCheckout.membershipId)return;
   if(!rentCheckout.receive(providerOrder,status))return;
-  if(!["DISCOVERING","CHOOSING_APP"].includes(status)){
-    if(state.route.name==="rentVerification")void screen?.onRentResult?.();
-    else void navigate("rentVerification",{},{replace:true,force:true});
-  }
+  if (!["DISCOVERING", "CHOOSING_APP"].includes(status)) offerVerification("rent");
 };
 window.PGOneMerchantReturned=()=>{if(state.user?.role==="OWNER"&&state.tokens?.kind==="PLATFORM")void navigate("merchant",{},{replace:true,force:true});};
 window.PGOneDirectUpiResult=(opened,message)=>screen?.directUpiResult?.(opened,message);
 window.PGOneDirectUpiReturned=()=>{
   const pending=pendingDirect(state,native);
-  if(state.user?.role!=="STUDENT"||!pending||!["LAUNCHED","PROOF"].includes(pending.stage))return;
-  if(state.route.name==="transferProof"&&state.route.params.id===pending.transferId)screen?.directReturned?.();
-  else if(pending.stage==="LAUNCHED"&&!dirty&&!submittedForms)void navigate("transferProof",{id:pending.transferId,invoiceId:pending.invoiceId},{replace:true,force:true});
+  if (state.user?.role !== "STUDENT" || pending?.stage !== "LAUNCHED") return;
+  if (state.route.name === "transferProof" && state.route.params.id === pending.transferId) {
+    screen?.directReturned?.();
+  } else {
+    // Preserve the proof step for the next visit without taking over navigation.
+    saveDirect(state,native,{...pending,stage:"PROOF"});
+  }
 };
 // The native Custom SDK returns a UPI-app result, never an entitlement.
 window.PGOnePlanPaymentError = (message) => {
   toast(message || "UPI checkout could not open. Check payment status before retrying.", "error");
   if (state.route?.name === "subscription") void revalidateOwnerActivation();
 };
+function resumePlanVerification() {
+  const org = state.platform?.memberships?.find(m => m.id === state.platform.membershipId)?.organisation;
+  return Boolean(org?.id && org.id === planCheckout.organisationId &&
+    ["SUBMITTED", "RETURNED_CHECK_PROVIDER", "INTERRUPTED_CHECK_PROVIDER", "FAILED_OR_UNKNOWN_CHECK_PROVIDER"].includes(planCheckout.status) &&
+    offerVerification("plan"));
+}
+
 window.SafeHouseResume = () => {
   applyMotionPreference();
   if(state.user?.role==="STUDENT"&&pendingDirect(state,native)?.stage==="LAUNCHED"){
@@ -633,12 +685,11 @@ window.SafeHouseResume = () => {
     window.PGOneDirectUpiReturned();return;
   }
   if(state.route.name==="transferProof"&&pendingDirect(state,native)?.stage==="PROOF")return;
-  if(state.route?.name==="rentVerification"){void screen?.onRentResult?.();return;}
-  if(state.user?.role==="STUDENT"&&state.platform?.membershipId===rentCheckout.membershipId&&rentCheckout.orderId&&!["DISCOVERING","CHOOSING_APP"].includes(rentCheckout.status)){void navigate("rentVerification",{},{replace:true,force:true});return;}
+  if (state.user?.role === "STUDENT" && state.platform?.membershipId === rentCheckout.membershipId &&
+      !["DISCOVERING", "CHOOSING_APP"].includes(rentCheckout.status) && offerVerification("rent")) return;
   if(state.user?.role==="OWNER"&&native.call("getMerchantReturnPending")){window.PGOneMerchantReturned();return;}
   if (screen?.paymentFlow) void payment.resume();
-  else if(state.route?.name==="planVerification")void screen?.onPlanResult?.();
-  else if(planCheckout.orderId&&planCheckout.organisationId&&!["DISCOVERING","CHOOSING_APP"].includes(planCheckout.status))void navigate("planVerification",{},{replace:true,force:true});
+  else if (resumePlanVerification()) return;
   else if (state.route?.name === "subscription") void revalidateOwnerActivation();
   else if (state.tokens && state.user && !dirty && !submittedForms) {
     cache.clear();
@@ -703,7 +754,7 @@ function makeContext(snapshot, key) {
   };
   return {
     snapshot,
-    canGoBack:depth>0||Boolean(backTarget(snapshot)),
+    canGoBack:depth>0||Boolean(logicalBack()),
     params: state.route.params,
     periodQuery: periodQuery(snapshot.period),
     api: scopedApi,
@@ -797,6 +848,11 @@ function makeContext(snapshot, key) {
 
 async function render() {
   const seq = ++sequence;
+  if (verificationRoutes.has(state.route.name)) {
+    const kind = state.route.name.startsWith("plan") ? "plan" : "rent";
+    const key = checkoutKey(kind);
+    if (key) seenVerification.set(kind, key);
+  }
   screen?.unmount?.();
   screen = null;
   // During async route resolution, the previous form must not accept input
@@ -814,15 +870,16 @@ async function render() {
   const nav = snapshot.user?.role === "OWNER" ? "ownerHome" : "studentHome";
   loadingTimer = setTimeout(() => {
     if (seq !== sequence) return;
-    document.getElementById("app").innerHTML = shell(
-      ["rentSuccess","rentVerification"].includes(state.route.name)?{bare:true,content:rentVerificationMarkup()}:["planSuccess","planVerification"].includes(state.route.name)?{bare:true,content:verificationMarkup()}:{ title: "Loading", content: skeleton(state.route.name), nav },
-      snapshot,
-    );
-  }, 130);
-  document.body.insertAdjacentHTML(
-    "beforeend",
-    `<div class="page-progress">${dots("Loading page")}</div>`,
-  );
+    const app = document.getElementById("app");
+    if (app.querySelector(".boot, .verification-page")) return;
+    app.innerHTML = shell({
+      title: "PGOne",
+      back: ctx.canGoBack,
+      nav: false,
+      contentClass: "route-loading",
+      content: skeleton(),
+    }, snapshot);
+  }, 150);
   try {
     const next = await routes[state.route.name][0](ctx);
     if (seq !== sequence || contextKey() !== key) return;
@@ -848,9 +905,6 @@ async function render() {
     document.getElementById("app").innerHTML = shell(screen, snapshot);
     document.getElementById("app").dataset.screen = state.route.name;
     native.call("ready");
-  } finally {
-    if (seq === sequence)
-      document.querySelectorAll(".page-progress").forEach((el) => el.remove());
   }
 }
 
@@ -929,7 +983,7 @@ document.addEventListener("click", async (event) => {
     if (element.dataset.busy) return;
     const restoreFocus = document.activeElement === element;
     element.dataset.busy = "true";
-    const restoreBusy=busyButton(element);
+    const restoreBusy = busyButton(element, { showIndicator: !["checkPlan", "checkRent"].includes(action) });
     try {
       await screen?.action?.(action, element, event);
     } finally {
@@ -1102,8 +1156,7 @@ async function revalidateOwnerActivation() {
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) return;
   if (screen?.paymentFlow) void payment.resume();
-  if(planCheckout.orderId&&["SUBMITTED","RETURNED_CHECK_PROVIDER","INTERRUPTED_CHECK_PROVIDER","FAILED_OR_UNKNOWN_CHECK_PROVIDER"].includes(planCheckout.status))void navigate("planVerification",{},{replace:true,force:true});
-  else void revalidateOwnerActivation();
+  if (!resumePlanVerification()) void revalidateOwnerActivation();
 });
 // Expiry comes from the server clock; re-read entitlements without provider calls.
 setInterval(async()=>{
@@ -1157,7 +1210,7 @@ async function boot() {
     restoringMetadata = stored;
     state.tokens = stored.tokens;
     document.getElementById("app").innerHTML =
-      (()=>{try{const rentPending=JSON.parse(native.call("getRentPaymentState")||"null");if(rentPending?.orderId)return rentVerificationMarkup();const pending=JSON.parse(native.call("getPlanPaymentState")||"null");if(pending?.orderId)return verificationMarkup();}catch{}return `<main class="boot session-restore">${brand()}<p>Restoring your account…</p>${dots("Restoring account")}</main>`;})();
+      (()=>{try{const rentPending=JSON.parse(native.call("getRentPaymentState")||"null");if(rentPending?.orderId)return rentVerificationMarkup();const pending=JSON.parse(native.call("getPlanPaymentState")||"null");if(pending?.orderId)return verificationMarkup();}catch{}return `<main class="boot session-restore">${brand({stacked:true})}<p>Restoring your account…</p>${dots("Restoring account", "loading-dots-large")}</main>`;})();
     requestAnimationFrame(() => native.call("ready"));
     try {
       if (state.tokens.kind !== "PLATFORM") {
@@ -1214,7 +1267,9 @@ async function boot() {
       restoringMetadata = null;
       state.route = { name: guardedRoute(postAuthRoute()), params: {} };
       const directPending=state.user?.role==="STUDENT"?pendingDirect(state,native):null;
-      if(directPending)state.route={name:guardedRoute("transferProof"),params:{id:directPending.transferId,invoiceId:directPending.invoiceId}};
+      if (directPending && ["LAUNCHED", "PROOF"].includes(directPending.stage) &&
+          guardedRoute("transferProof") === "transferProof")
+        state.route = { name: "transferProof", params: { id: directPending.transferId, invoiceId: directPending.invoiceId } };
     } catch (error) {
       if (state.authEpoch !== restoreEpoch) return;
       if (error.status === 401 || !state.tokens) clearSession();
@@ -1242,7 +1297,7 @@ async function boot() {
     }
   }
   history.replaceState(
-    { safehouse: true, ...state.route, depth: 0 },
+    historyRecord(),
     "",
     `#${state.route.name}`,
   );

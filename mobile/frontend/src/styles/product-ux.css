@@ -1,17 +1,22 @@
 /* Functional surfaces: quiet, readable, and consistent across payment states. */
 .boot {gap:22px;}
-.boot > .loading-dots {color:#2455df;}
-.page-progress {position:fixed;left:auto;right:20px;top:14px;width:auto;height:auto;border-radius:14px;padding:4px 9px;background:#fff;color:#2455df;box-shadow:0 3px 18px #172b4b12;z-index:100;}
+.boot .brand-logo { width: clamp(145px, 48vw, 205px); display: block; height: auto; }
+.brand-mark { object-fit: contain; }
+.verification-center > .loading-dots {
+  width: auto; height: 58px; gap: 11px; margin-bottom: 18px;
+  background: transparent; border: 0; box-shadow: none;
+}
+.verification-center > .loading-dots > i {
+  width: var(--dot-size); height: var(--dot-size);
+  flex-basis: var(--dot-size); background: currentColor; box-shadow: none;
+}
 .royal-back.button {font-size:0;gap:0;flex:0 0 42px;overflow:hidden;}
-.page-progress::after {display:none;}
 .verification-page {background:#f8faff;color:#102549;display:flex;flex-direction:column;}
 .verification-page::before {display:none;}
 .verification-page header,.plan-success-page > header {display:flex;align-items:center;gap:18px;height:44px;width:100%;}
 .verification-page .brand,.plan-success-page .brand {color:#0c2c78;}
 .verification-center h1 {color:#102549;}
 .verification-center > p {color:#62718a;}
-.verification-center > .loading-dots {color:#2455df;background:#edf3ff;border:1px solid #e0e9fa;box-shadow:none;border-radius:24px;width:84px;height:84px;gap:9px;}
-.verification-center > .loading-dots i {background:currentColor;box-shadow:none;}
 .verification-pending {background:#fff;border:1px solid #e1e8f4;box-shadow:0 8px 26px #152f5a06;}
 .royal-plan,.royal-plan.refined-plan {color:#11284c;background:#fff;border:1px solid #dfe6f0;border-radius:20px;padding:24px;margin:22px 0;box-shadow:0 8px 26px #152f5a05;}
 .royal-plan::before,.royal-plan::after {display:none;}
@@ -32,20 +37,91 @@
 .request-state .row-icon {margin:auto auto 18px;}
 .request-state p {font-size:13px;line-height:1.7;color:#67758c;}
 @media(max-height:700px){.royal-plan,.royal-plan.refined-plan{padding:20px;margin:18px 0;}.royal-plan .plan-price{font-size:36px;}.verification-center{padding:12px 0;}}
-/* Direct-owner payment evidence uses the same light surfaces and type scale. */
-.transfer-breakdown { margin:12px 0; }
-.transfer-breakdown > div { display:flex; justify-content:space-between; align-items:baseline; gap:20px; padding:8px 0; }
-.transfer-breakdown dt { color:var(--text-secondary,#56647b); }
-.transfer-breakdown dd { margin:0; font-weight:700; white-space:nowrap; }
-.transfer-breakdown .transfer-total { border-top:1px solid var(--border,#e2e8f2); margin-top:6px; padding-top:14px; font-size:1.2rem; }
-.charge-summary > div { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.charge-summary h2 { margin:0; font-size:1.05rem; }
-.charge-summary strong { font-size:1.25rem; color:var(--text-primary,#101b3c); }
-.charge-summary > span { display:block; color:var(--text-secondary,#56647b); margin-top:8px; font-size:.86rem; }
-.evidence-photo { margin:16px 0 0; }
-.evidence-photo figcaption { font-size:.8rem; font-weight:600; color:var(--text-secondary,#56647b); margin-bottom:8px; }
-.evidence-photo img { display:block; width:100%; max-height:480px; object-fit:contain; border:1px solid var(--border,#e2e8f2); border-radius:14px; background:#f7f9fd; }
-.evidence-photo img[hidden] { display:none; }
-.bank-check { display:flex; gap:12px; align-items:flex-start; line-height:1.5; padding:16px; background:#f3f6fc; border-radius:16px; margin-bottom:20px; }
-.bank-check input { flex-shrink:0; margin-top:5px; }
-.field input[type="file"]::file-selector-button { border:0; border-radius:8px; background:#e8efff; color:#123caa; padding:9px 12px; font:inherit; font-weight:600; margin-right:12px; cursor:pointer; }
+/* The same quiet surfaces carry the owner overview and payment flows. */
+.owner-dashboard .dashboard-hero {
+  min-height: 108px;
+  padding: 20px;
+  background: linear-gradient(115deg, #fffcf5, #f3ece0);
+  border: 1px solid #eae1d2;
+  color: var(--text);
+  box-shadow: none;
+}
+.owner-dashboard .dashboard-hero::before { display: none; }
+.owner-dashboard .dashboard-hero h1 { color: var(--navy); font-size: clamp(22px, 5.9vw, 35px); }
+.owner-dashboard .dashboard-hero p { color: #5d564e; margin-top: 7px; font-size: 13px; }
+.owner-dashboard .dashboard-hero img { opacity: .84; filter: none; }
+.owner-dashboard .financial-summary, .resident-summary {
+  background: #fff;
+  border-color: var(--border);
+  box-shadow: var(--surface-shadow);
+  color: var(--navy);
+}
+.owner-dashboard .financial-amount, .resident-summary .financial-amount { color: var(--navy); }
+.owner-dashboard .financial-summary .summary-top { font-size: 13px; }
+.owner-dashboard .financial-summary > p, .resident-summary .summary-top, .resident-summary > p { color: var(--muted); }
+.owner-dashboard .summary-bottom strong { color: var(--text); }
+.owner-dashboard .collection-track { background: #eaeff4; }
+.owner-dashboard .collection-track > span { background: #25775d; box-shadow: none; }
+.resident-summary .summary-top > span:last-child { color: var(--primary); background: transparent; }
+.resident-summary .summary-pay { background: #1a49bf; color: #fff; border-color: transparent; }
+.resident-summary .summary-link { color: #1844ad; }
+.owner-dashboard .quick-action {
+  background: #fff;
+  border-color: var(--border);
+  color: var(--text);
+  box-shadow: none;
+}
+.owner-dashboard .quick-action > span { background: #edf2fc; border-color: transparent; color: #204faf; }
+.owner-dashboard .quick-action:nth-child(2n) > span { background: #f8f0e1; color: #895b16; }
+.owner-dashboard .quick-action small { color: var(--text); font-size: 11px; }
+.owner-dashboard .quick-action.touch-feedback::after { background: #2455df20; }
+
+.direct-payment { max-width: 610px; padding-bottom: 20px; }
+.direct-payment .transfer-card, .direct-payment > .card { background: #fff; border: 1px solid var(--border); border-radius: 20px; }
+.direct-payment > .transfer-card, .direct-payment > .card { margin: 0 0 14px; }
+.direct-payment .transfer-card > h2, .direct-payment > .card > h2 { font-size: 18px; margin: 0 0 10px; }
+.transfer-section-title { font-size: 16px; margin: 22px 0 10px; }
+.transfer-note { font-size: 13px; color: var(--muted); line-height: 1.6; margin: 8px 0 16px; }
+.transfer-card .disclosure { margin: 10px 0 0; }
+.direct-payment > .disclosure.transfer-card { padding: 0 16px; }
+.transfer-card .disclosure form, .proof-card form { margin-top: 14px; }
+.transfer-card .button { min-height: 48px; }
+.transfer-breakdown { margin: 10px 0 14px; font-size: 14px; }
+.transfer-breakdown > div { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; padding: 7px 0; }
+.transfer-breakdown dt { color: var(--muted); }
+.transfer-breakdown dd { margin: 0; font-weight: 730; text-align: right; font-variant-numeric: tabular-nums; }
+.transfer-breakdown .transfer-total { border-top: 1px solid var(--border); margin-top: 7px; padding-top: 13px; }
+.transfer-total dd { font: 800 clamp(21px,6vw,28px)/1.2 Manrope, Inter, sans-serif; }
+.charge-summary, .transfer-payee { display: flex; align-items: center; gap: 12px; }
+.charge-summary > div, .transfer-payee > div { flex: 1; min-width: 0; }
+.charge-summary h2 { margin: 0; font-size: 16px; }
+.charge-summary strong { font: 800 18px Manrope, Inter, sans-serif; text-align: right; }
+.charge-summary small, .transfer-payee small { display: block; color: var(--muted); font-size: 12px; }
+.transfer-icon { display: inline-grid; flex: 0 0 40px; width: 40px; height: 40px; place-items: center; border-radius: 12px; color: #2852aa; background: #edf2fc; }
+.transfer-icon .icon { width: 20px; height: 20px; }
+.charge-electricity .transfer-icon { color: #895b16; background: #f8f0e1; }
+.transfer-payee { padding: 11px; margin: 12px 0 0; border-radius: 12px; background: #f5f7fa; }
+.transfer-payee strong { display: block; font-size: 14px; }
+.transfer-payee .payee-address { display: block; font-size: 12px; margin: 1px 0 0; }
+.transfer-payee + form { margin-top: 16px; }
+.transfer-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.transfer-actions > .button { flex: 1 1 100px; }
+.transfer-launch-error { font-size: 13px; margin: 12px 0; color: #a44034; }
+.transfer-launch-error:empty { display: none; }
+.transfer-qr { display: block; width: min(100%, 260px); height: auto; margin: 12px auto; }
+.proof-card > .transfer-icon { margin-bottom: 12px; }
+.evidence-photo { margin: 14px 0 0; }
+.evidence-photo figcaption { font-size: 12px; font-weight: 650; color: var(--muted); margin-bottom: 8px; }
+.evidence-photo img { display: block; width: 100%; max-height: 480px; object-fit: contain; border: 1px solid var(--border); border-radius: 12px; background: #f6f7f9; }
+.bank-check { display: flex; gap: 10px; align-items: flex-start; line-height: 1.5; padding: 14px; background: #f5f7fa; border-radius: 12px; margin-bottom: 16px; }
+.bank-check input { flex-shrink: 0; margin-top: 5px; }
+.direct-payment .field input[type="file"] { background: #f7f8fa; border: 1px dashed #a8b8d3; }
+.field input[type="file"]::file-selector-button { border: 0; border-radius: 8px; background: #eaf0fc; color: #17449e; padding: 8px 12px; font: inherit; font-weight: 650; margin-right: 8px; cursor: pointer; }
+
+@media (max-height: 730px) {
+  .owner-dashboard .dashboard-hero { min-height: 84px; padding: 14px 18px; }
+  .owner-dashboard .financial-summary { padding: 14px 16px; }
+  .direct-payment .page-heading { margin-bottom: 15px; }
+  .direct-payment .transfer-card, .direct-payment > .card { padding: 16px; }
+  .direct-payment > .disclosure.transfer-card { padding: 0 16px; }
+}

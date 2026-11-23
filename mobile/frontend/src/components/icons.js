@@ -6,6 +6,8 @@ const paths = {
   rooms: '<path d="M3 21V4h18v17M8 4v17m4-11h5m-5 5h5M1 21h22"/>',
   building: '<path d="M4 21V3h12v18m0-13h4v13M2 21h20M8 7h4M8 11h4M8 15h4"/>',
   bed: '<path d="M3 19V7m0 7h18v5m-18-8h14a4 4 0 0 1 4 4M6 11V7h5v4"/>',
+  bolt: '<path d="M13 2 4 14h7l-1 8 10-12h-8z"/>',
+  image: '<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="9" cy="9" r="1.5"/><path d="m3 17 5-4 4 3 4-5 5 5"/>',
   wallet:
     '<path d="M20 8V5H5a2 2 0 0 0 0 4h16v12H5a2 2 0 0 1-2-2V7m18 6h-5v4h5"/>',
   invoice: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3m3 5h6m-6 4h6m-6 4h3"/>',

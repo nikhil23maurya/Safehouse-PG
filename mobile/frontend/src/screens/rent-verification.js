@@ -3,7 +3,7 @@ import {brand} from "../components/brand.js";
 import {dots,successMark} from "../components/motion.js";
 import {card,button,esc,date} from "../components/ui.js";
 import {rentCheckout} from "../payments/rent.js";
-export const rentVerificationMarkup=()=>`<main class="verification-page"><header>${button("Go back",{action:"back",kind:"royal-back",glyph:"back"})}${brand()}</header><div class="verification-center">${dots("Verifying rent payment")}<h1>Verifying your payment</h1><p>We're confirming your rent payment securely.<br>Please don't pay again.</p><div data-rent-verification-result aria-live="polite"></div></div></main>`;
+export const rentVerificationMarkup=()=>`<main class="verification-page"><header>${button("Go back",{action:"back",kind:"royal-back",glyph:"back"})}${brand()}</header><div class="verification-center">${dots("Verifying rent payment", "loading-dots-large")}<h1>Verifying your payment</h1><p>We're confirming your rent payment securely.<br>Please don't pay again.</p><div data-rent-verification-result aria-live="polite"></div></div></main>`;
 export function rentVerificationScreen(ctx){
  const invoice=rentCheckout.invoiceId,order=rentCheckout.orderId,member=ctx.snapshot.platform?.membershipId;let disposed=false,checking=false;
  const current=()=>!disposed&&order===rentCheckout.orderId&&invoice===rentCheckout.invoiceId&&member===rentCheckout.membershipId;
