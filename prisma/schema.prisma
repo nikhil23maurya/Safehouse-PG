@@ -317,7 +317,7 @@ model PgPlanOrder {
   receiptReference String @unique
   providerOrderId String? @unique
   providerKeyId String
-  amountPaise Int @default(24900)
+  amountPaise Int @default(15900)
   taxPaise Int
   currency String @default("INR")
   status String @default("CREATING")
