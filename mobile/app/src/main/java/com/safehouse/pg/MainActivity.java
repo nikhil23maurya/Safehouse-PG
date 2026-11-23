@@ -439,6 +439,21 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
             }
         }
 
+        @JavascriptInterface public boolean openPaytm() {
+            Intent launch = getPackageManager().getLaunchIntentForPackage("net.one97.paytm");
+            if (launch == null) return false;
+            runOnUiThread(() -> {
+                try {
+                    startActivity(launch);
+                } catch (ActivityNotFoundException | SecurityException unavailable) {
+                    Toast.makeText(MainActivity.this,
+                            "Paytm could not open. Paste the copied UPI ID in your UPI app.",
+                            Toast.LENGTH_LONG).show();
+                }
+            });
+            return true;
+        }
+
         @JavascriptInterface public void sharePgCode(String name,String code){
             if(name==null||name.length()>120||code==null||!code.matches("[A-HJ-NP-Z2-9]{4}(-[A-HJ-NP-Z2-9]{4}){2}"))return;
             runOnUiThread(()->{Intent send=new Intent(Intent.ACTION_SEND);send.setType("text/plain");send.putExtra(Intent.EXTRA_TEXT,"Join "+name+" on PGOne. PG code: "+code);startActivity(Intent.createChooser(send,"Share PG code"));});
