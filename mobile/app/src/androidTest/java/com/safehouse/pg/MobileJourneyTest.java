@@ -19,6 +19,7 @@ import android.view.accessibility.AccessibilityNodeInfo;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.platform.app.InstrumentationRegistry;
 import org.junit.Test;
+import org.junit.After;
 import org.junit.runner.RunWith;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
@@ -38,6 +39,31 @@ public class MobileJourneyTest {
     private final Context target = instrumentation.getTargetContext();
     private Activity activity;
     private WebView web;
+    private final java.util.List<Instrumentation.ActivityMonitor> evidenceMonitors=new java.util.ArrayList<>();
+    @After public void cleanupEvidenceMonitors(){
+        for(Instrumentation.ActivityMonitor m:evidenceMonitors)instrumentation.removeMonitor(m);
+        if(activity!=null)instrumentation.runOnMainSync(()->activity.finish());
+    }
+    private Instrumentation.ActivityMonitor evidenceMonitor(String action,Instrumentation.ActivityResult result){
+        android.content.IntentFilter filter=new android.content.IntentFilter(action);
+        if(Intent.ACTION_OPEN_DOCUMENT.equals(action)){
+            filter.addCategory(Intent.CATEGORY_OPENABLE);
+            try{filter.addDataType("image/*");}catch(android.content.IntentFilter.MalformedMimeTypeException error){throw new AssertionError(error);}
+        }
+        Instrumentation.ActivityMonitor m=instrumentation.addMonitor(filter,result,true);evidenceMonitors.add(m);return m;
+    }
+    private void tapFileInput(String selector)throws Exception{
+        String quoted=org.json.JSONObject.quote(selector);
+        js("document.querySelector("+quoted+").scrollIntoView({block:'center'})");
+        Thread.sleep(250);
+        float cssX=Float.parseFloat(js("(()=>{const r=document.querySelector("+quoted+").getBoundingClientRect();return r.left+r.width/2})()"));
+        float cssY=Float.parseFloat(js("(()=>{const r=document.querySelector("+quoted+").getBoundingClientRect();return r.top+r.height/2})()"));
+        float viewport=Float.parseFloat(js("innerWidth"));int[] location=new int[2];instrumentation.runOnMainSync(()->web.getLocationOnScreen(location));
+        float scale=web.getWidth()/viewport;long time=android.os.SystemClock.uptimeMillis();
+        android.view.MotionEvent down=android.view.MotionEvent.obtain(time,time,android.view.MotionEvent.ACTION_DOWN,location[0]+cssX*scale,location[1]+cssY*scale,0);
+        android.view.MotionEvent up=android.view.MotionEvent.obtain(time,time+80,android.view.MotionEvent.ACTION_UP,location[0]+cssX*scale,location[1]+cssY*scale,0);
+        instrumentation.sendPointerSync(down);instrumentation.sendPointerSync(up);down.recycle();up.recycle();
+    }
 
     private String read(InputStream input) throws Exception {
         try (InputStream stream = input; ByteArrayOutputStream bytes = new ByteArrayOutputStream()) {
@@ -56,7 +82,7 @@ public class MobileJourneyTest {
     private String js(String script) throws Exception {
         CountDownLatch done = new CountDownLatch(1); AtomicReference<String> value = new AtomicReference<>();
         instrumentation.runOnMainSync(() -> web.evaluateJavascript(script, result -> { value.set(result); done.countDown(); }));
-        assertTrue("JavaScript evaluation timed out", done.await(10, TimeUnit.SECONDS)); return value.get();
+        assertTrue("JavaScript evaluation timed out", done.await(25, TimeUnit.SECONDS)); return value.get();
     }
     private String shell(String command) throws Exception {
         try (android.os.ParcelFileDescriptor descriptor = instrumentation.getUiAutomation().executeShellCommand(command)) {
@@ -86,7 +112,7 @@ public class MobileJourneyTest {
     private void await(String expression) throws Exception {
         long deadline = System.currentTimeMillis() + 25000;
         do { if ("true".equals(js("Boolean(" + expression + ")"))) return; Thread.sleep(150); } while (System.currentTimeMillis() < deadline);
-        fail("Condition failed: " + expression + " state=" + js("document.body.innerText.slice(0,1200)"));
+        fail("Condition failed: " + expression + " state=" + js("JSON.stringify({text:document.body.innerText.slice(0,1600),fields:Array.from(document.querySelectorAll('input')).map(i=>({name:i.name,value:i.type==='password'?'redacted':i.value,valid:i.validity.valid,missing:i.validity.valueMissing,file:i.files?.[0]&&{size:i.files[0].size,type:i.files[0].type}})),uploads:window.__directFixtures?.uploads?.length})"));
     }
     private void go(String name, String params) throws Exception {
         js("history.pushState({name:'" + name + "',params:" + params + ",depth:1},'','#" + name + "');dispatchEvent(new PopStateEvent('popstate',{state:history.state}));");
@@ -307,6 +333,43 @@ public class MobileJourneyTest {
         js("document.querySelector('[data-action=logout]').click()"); await("document.querySelector('[data-action=dialog-confirm]')");
         js("document.querySelector('[data-action=dialog-confirm]').click()"); await("document.querySelector('[data-form=login]')");
         signIn(true); screenshot("20-resident-home");
+        // New direct UPI flow: installed WebView, OS image-picker callback,
+        // server-backed synthetic allocations, resume and proof submission.
+        // The monitor returns only a synthetic image; no real UPI payment.
+        js("window.__directFixtureEnabled=true");
+        go("payment","{invoiceId:'invoice1'}");
+        android.net.Uri evidenceUri=android.net.Uri.parse("content://com.safehouse.pg.testing.test.evidence/photo");
+        instrumentation.getContext().grantUriPermission(target.getPackageName(),evidenceUri,Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        Instrumentation.ActivityMonitor photoMonitor=evidenceMonitor(Intent.ACTION_OPEN_DOCUMENT,new Instrumentation.ActivityResult(Activity.RESULT_OK,new Intent().setData(evidenceUri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)));
+        js("const meterAmount=document.querySelector('[name=amount]');meterAmount.value='650.25';meterAmount.dispatchEvent(new Event('input',{bubbles:true}))");
+        tapFileInput("[name=meter]");
+        await("document.querySelector('[name=meter]').files.length===1");
+        assertEquals("The picker must preserve the resident-entered amount","\"650.25\"",js("document.querySelector('[name=amount]').value"));
+        js("window.__selectedImageRead=null;document.querySelector('[name=meter]').files[0].arrayBuffer().then(b=>window.__selectedImageRead=Array.from(new Uint8Array(b).slice(0,8)).join(','),e=>window.__selectedImageRead='ERROR:'+e.name)");
+        await("window.__selectedImageRead!==null");
+        assertEquals("The selected image must remain readable by the browser File API","\"137,80,78,71,13,10,26,10\"",js("window.__selectedImageRead"));
+        js("document.querySelector('[data-form=electricityBill]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
+        await("window.__directFixtures.bill && document.querySelector('[name=charges] option[value=BOTH]')");
+        js("document.querySelector('[name=charges]').value='BOTH';document.querySelector('[data-form=chooseTransfer]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
+        await("document.getElementById('app').dataset.screen==='transferProof'");screenshot("60-direct-combined-payment");
+        assertEquals("Combined bank amount is rent plus independent electricity","915124",js("window.__directFixtures.transfers[0].amountPaise"));
+        // Resume is independent of any success callback. Resident can always
+        // return manually; app recovery opens the upload step, never Paid.
+        setReceiverEnabled(true);
+        Instrumentation.ActivityMonitor upiMonitor=evidenceMonitor(Intent.ACTION_CHOOSER,new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null));
+        js("document.querySelector('[data-action=openTransferUpi]').click()");
+        await("!document.querySelector('[data-proof-upload]').hidden");screenshot("61-direct-attach-proof");
+        assertTrue("Direct UPI must launch through the native chooser",upiMonitor.getHits()>=1);
+        instrumentation.removeMonitor(upiMonitor);setReceiverEnabled(false);
+        js("document.querySelector('[name=reference]').value='123456789012'");
+        tapFileInput("[name=proof]");
+        await("document.querySelector('[name=proof]').files.length===1");
+        js("document.querySelector('[data-form=transferProof]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
+        await("window.__directFixtures.transfers[0].status==='SUBMITTED'&&!document.querySelector('.page-progress')");screenshot("62-direct-owner-review-pending");
+        assertTrue("The native image picker must service both uploads",photoMonitor.getHits()>=2);
+        assertEquals("A screenshot must never confirm a bank credit","false",js("Boolean(document.querySelector('[data-action=transferReceipt]'))"));
+        instrumentation.removeMonitor(photoMonitor);
+        js("window.SafeHouseNative.saveDirectTransferState('[]')");
         go("invoices", "{}"); screenshot("21-invoices");
         go("history", "{}"); screenshot("22-history");
         // New owner-merchant flow uses a synthetic native gateway. It never
@@ -323,7 +386,7 @@ public class MobileJourneyTest {
                 java.lang.reflect.Field field=MainActivity.class.getDeclaredField("rentCheckout");field.setAccessible(true);field.set(activity,rent);
             }catch(Exception error){throw new RuntimeException(error);}
         });
-        js("window.__ownerRentFixtureEnabled=true;window.__ownerRentHold=true");
+        js("window.__directFixtureEnabled=false;window.__ownerRentFixtureEnabled=true;window.__ownerRentHold=true");
         go("payment", "{invoiceId:'invoice1'}"); screenshot("55-resident-owner-rent");
         js("document.querySelector('[name=contact]').value='9999999999';document.querySelector('[data-form=payOwnerRent]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
         await("document.getElementById('app').dataset.screen==='rentVerification'&&Boolean(window.__releaseOwnerRentCheck)"); screenshot("56-rent-verifying");

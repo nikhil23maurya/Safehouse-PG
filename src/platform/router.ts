@@ -1,3 +1,4 @@
+import {directTransferRouter} from "./direct-transfer-router.js";
 import {residentRequestRouter} from "./resident-request-router.js";
 import {planStatusRouter} from "./plan-status-router.js";
 import {ownerPaymentsRouter} from "./owner-payments/router.js";
@@ -72,11 +73,17 @@ async function session(req: Request) {
 
 platformRouter.get("/config", (req, res) => {
   const packageId = String(req.query.package || "web");
+  // Existing APKs only accept INR1/249 in their native SDK. Capability metadata
+  // avoids advertising a checkout those versions cannot open at the new price.
+  // It is not authorisation: exact server order/capture verification is unchanged.
+  let nativeAmounts:number[]=[100,24900];
+  try{const value=JSON.parse(String(req.query.nativePlanAmounts||"null"));if(Array.isArray(value)&&value.length<=10&&value.every(v=>Number.isSafeInteger(v)&&v>0))nativeAmounts=value;}catch{}
   res.json({
     enabled: platformEnabled(),
     phone: null,
     authentication: "EMAIL_PASSWORD",
     ownerRent: {enabled:ownerPaymentConfig().enabled&&ownerPaymentConfig().ledgerAllowed},
+    directRentProof: true,
     recoveryAvailable: mailReady(),
     googleEnabled: false,
     customWebBilling: {
@@ -90,7 +97,7 @@ platformRouter.get("/config", (req, res) => {
     deploymentCommit: process.env.RENDER_GIT_COMMIT || null,
     // Sideloaded internal test APK only. Google Play builds must not bypass Play Billing.
     androidBilling: packageId === "com.safehouse.pg.testing" || (packageId === "com.safehouse.pg" && req.query.distribution === "SIDELOAD")
-      ? (platformEnabled() && planProviderConfigured() ? "CUSTOM_UPI_INTENT" : "NOT_CONFIGURED")
+      ? (platformEnabled() && planProviderConfigured() ? (nativeAmounts.includes(PLAN.amountPaise)?"CUSTOM_UPI_INTENT":"UPGRADE_REQUIRED") : "NOT_CONFIGURED")
       : "CONSUMPTION_ONLY",
     legal: {
       terms: platformConfig.PGONE_TERMS_URL || null,
@@ -171,6 +178,7 @@ platformRouter.post("/phone", (_req,_res) => {
 });
 platformRouter.use("/auth",emailAuthRouter);
 platformRouter.use("/rent",directRentRouter);
+platformRouter.use("/direct-payments",directTransferRouter);
 platformRouter.use("/owner-payments",ownerPaymentsRouter);
 platformRouter.use(joinCodeRouter);
 platformRouter.use(residentRequestRouter);

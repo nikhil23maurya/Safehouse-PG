@@ -8,7 +8,7 @@ export async function platformConfig(ctx, {force=false} = {}) {
   if (!force && onboarding.config && Date.now()-onboarding.configFetchedAt<30000) return onboarding.config;
   try {
     const value = await ctx.api(
-      `/api/platform/config?package=${encodeURIComponent(ctx.native.call("getPackageId") || "web")}&distribution=${encodeURIComponent(ctx.native.call("getBillingDistribution") || "CONSUMPTION_ONLY")}`,
+      `/api/platform/config?package=${encodeURIComponent(ctx.native.call("getPackageId") || "web")}&distribution=${encodeURIComponent(ctx.native.call("getBillingDistribution") || "CONSUMPTION_ONLY")}&nativePlanAmounts=${encodeURIComponent(ctx.native.call("getPlanSupportedAmounts") || "[]")}`,
       { public: true, timeout: 10000 },
     );
     onboarding.configFetchedAt = Date.now();

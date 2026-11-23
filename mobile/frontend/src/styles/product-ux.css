@@ -32,3 +32,20 @@
 .request-state .row-icon {margin:auto auto 18px;}
 .request-state p {font-size:13px;line-height:1.7;color:#67758c;}
 @media(max-height:700px){.royal-plan,.royal-plan.refined-plan{padding:20px;margin:18px 0;}.royal-plan .plan-price{font-size:36px;}.verification-center{padding:12px 0;}}
+/* Direct-owner payment evidence uses the same light surfaces and type scale. */
+.transfer-breakdown { margin:12px 0; }
+.transfer-breakdown > div { display:flex; justify-content:space-between; align-items:baseline; gap:20px; padding:8px 0; }
+.transfer-breakdown dt { color:var(--text-secondary,#56647b); }
+.transfer-breakdown dd { margin:0; font-weight:700; white-space:nowrap; }
+.transfer-breakdown .transfer-total { border-top:1px solid var(--border,#e2e8f2); margin-top:6px; padding-top:14px; font-size:1.2rem; }
+.charge-summary > div { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.charge-summary h2 { margin:0; font-size:1.05rem; }
+.charge-summary strong { font-size:1.25rem; color:var(--text-primary,#101b3c); }
+.charge-summary > span { display:block; color:var(--text-secondary,#56647b); margin-top:8px; font-size:.86rem; }
+.evidence-photo { margin:16px 0 0; }
+.evidence-photo figcaption { font-size:.8rem; font-weight:600; color:var(--text-secondary,#56647b); margin-bottom:8px; }
+.evidence-photo img { display:block; width:100%; max-height:480px; object-fit:contain; border:1px solid var(--border,#e2e8f2); border-radius:14px; background:#f7f9fd; }
+.evidence-photo img[hidden] { display:none; }
+.bank-check { display:flex; gap:12px; align-items:flex-start; line-height:1.5; padding:16px; background:#f3f6fc; border-radius:16px; margin-bottom:20px; }
+.bank-check input { flex-shrink:0; margin-top:5px; }
+.field input[type="file"]::file-selector-button { border:0; border-radius:8px; background:#e8efff; color:#123caa; padding:9px 12px; font:inherit; font-weight:600; margin-right:12px; cursor:pointer; }

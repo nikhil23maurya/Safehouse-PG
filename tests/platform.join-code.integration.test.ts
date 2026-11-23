@@ -54,7 +54,7 @@ test("exact-order payment status never substitutes existing entitlement, another
  const {a,setup}=await owner(),foreign=await owner();
  const member=await prisma.pgMembership.findFirstOrThrow({where:{accountId:a.id,propertyId:setup.propertyId,role:"OWNER"}});
  const tokens=await membershipTokens(a.id,member.id),providerOrderId=`order_${crypto.randomUUID().replaceAll("-","")}`;
- const order=await prisma.pgPlanOrder.create({data:{organisationId:setup.organisationId,requestKey:crypto.randomUUID(),receiptReference:crypto.randomUUID(),providerOrderId,providerKeyId:"rzp_test_SYNTHETIC",taxPaise:0,status:"VERIFYING"}});
+ const order=await prisma.pgPlanOrder.create({data:{organisationId:setup.organisationId,requestKey:crypto.randomUUID(),receiptReference:crypto.randomUUID(),providerOrderId,providerKeyId:"rzp_test_SYNTHETIC",amountPaise:24900,taxPaise:0,status:"VERIFYING"}});
  const get=()=>fetch(`${base}/api/platform/organisations/${setup.organisationId}/plan/orders/${providerOrderId}/state`,{headers:{authorization:`Bearer ${tokens.accessToken}`}});
  await prisma.pgOrganisation.update({where:{id:setup.organisationId},data:{legacyAccess:true}});
  let response=await get();assert.equal(response.status,200);assert.equal((await response.json() as any).captured,false);

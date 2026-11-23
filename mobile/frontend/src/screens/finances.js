@@ -1,4 +1,5 @@
 import { icon } from "../components/icons.js";
+import {platformConfig} from "../platform/client.js";
 import {
   money,
   parseRupees,
@@ -142,8 +143,9 @@ export async function invoiceScreen(ctx) {
     content:
       `<div class="invoice-header"><span class="row-icon">${icon("invoice")}</span><p class="eyebrow">RENT INVOICE</p><h1>${esc(month(i.year, i.month))}</h1><p class="subtitle">${esc(owner ? resident.name : ctx.snapshot.property?.name)}</p><div class="financial-amount">${money(i.remainingPaise)}</div>${badge(status.label, status.tone)}<p class="subtitle">Due ${esc(date(i.dueDate, ctx.snapshot.property?.timezone))}</p><p class="invoice-reference">Invoice ${esc(i.id)}</p></div>` +
       section("The breakdown", card(breakdown(i))) +
+      (!owner&&ctx.snapshot.tokens?.kind==="PLATFORM"?button("Rent & electricity",{route:"payment",params:{invoiceId:i.id},kind:"primary block",glyph:"wallet"}):"")+
       (payable
-        ? `<div class="action-stack">${owner ? button("Record payment", { route: "manualPayment", params, glyph: "wallet" }) : button(i.status === "PROCESSING" ? "Check payment" : "Pay rent", { route: "payment", params: { invoiceId: i.id }, glyph: "qr" })}${owner && i.status === "DUE" ? button("Edit charges", { route: "invoiceCharges", params, kind: "secondary", glyph: "edit" }) : ""}</div>`
+        ? `<div class="action-stack">${owner ? button("Record payment", { route: "manualPayment", params, glyph: "wallet" }) : ctx.snapshot.tokens?.kind!=="PLATFORM"?button(i.status === "PROCESSING" ? "Check payment" : "Pay rent", { route: "payment", params: { invoiceId: i.id }, glyph: "qr" }):""}${owner && i.status === "DUE" ? button("Edit charges", { route: "invoiceCharges", params, kind: "secondary", glyph: "edit" }) : ""}</div>`
         : "") +
       (i.payments?.length
         ? section(
@@ -231,6 +233,12 @@ export async function paymentsScreen(ctx) {
       })
       .sort((a, b) => Date.parse(b.paidAt) - Date.parse(a.paidAt));
   }
+  const cfg=ctx.snapshot.tokens?.kind==="PLATFORM"?await platformConfig(ctx):{};
+  const direct=cfg.directRentProof===true?await ctx.api(`/api/platform/direct-payments/${owner?"owner":"history"}`):{transfers:[]};
+  const confirmedTransfers=direct.transfers.filter(t=>!t.status||t.status==="CONFIRMED");
+  const linkedRentPayments=new Set(confirmedTransfers.map(t=>t.rentPaymentId).filter(Boolean));
+  payments=payments.filter(p=>!linkedRentPayments.has(p.id));
+  const {transferList}=await import("./direct-transfers.js");
   return {
     title: "Payment history",
     back: owner,
@@ -242,6 +250,7 @@ export async function paymentsScreen(ctx) {
         "",
       ) +
       (owner ? periodControl(ctx.snapshot.period) : "") +
+      (confirmedTransfers.length?`<section><h2>Direct UPI payments & electricity</h2><p class="subtitle">Owner-confirmed transfers with rent and electricity shown separately in each receipt.</p>${transferList(confirmedTransfers,owner)}</section>`:"")+
       `<div class="list">${payments.length ? payments.map((p) => paymentRow(p, owner, ctx.snapshot.property?.timezone)).join("") : empty("No payments yet", owner ? "No recorded payments for this billing month." : "Your recorded payments and receipts will appear here.", { glyph: "wallet" })}</div>` +
       button("Refresh payments", {
         action: "reload",

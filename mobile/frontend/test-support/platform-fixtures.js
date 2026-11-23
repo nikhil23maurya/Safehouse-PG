@@ -50,7 +50,7 @@ export function createPlatformFixtures() {
       if (path.endsWith("/config"))
         return {
           enabled: true,
-          plan:{amountPaise:100,currency:"INR"},androidBilling:"NOT_CONFIGURED",
+          plan:{amountPaise:15900,currency:"INR"},androidBilling:"NOT_CONFIGURED",
           authentication:"EMAIL_PASSWORD",phone:null,
           legal: {
             terms: "https://example.test/terms",
@@ -94,7 +94,7 @@ export function createPlatformFixtures() {
           entitled: paid,
           legacyAccess: false,
           configured: false,
-          plan:{amountPaise:100,currency:"INR"},
+          plan:{amountPaise:15900,currency:"INR"},
           mode: "MANUAL_MONTHLY",
           recurring: false,
           tax: null,
