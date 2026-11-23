@@ -11,7 +11,7 @@ import java.io.*;
 public class EvidenceFixtureProvider extends ContentProvider {
  public boolean onCreate(){return true;}
  public String getType(Uri uri){return "image/png";}
- public Cursor query(Uri uri,String[] projection,String selection,String[] args,String sort){MatrixCursor c=new MatrixCursor(new String[]{"_display_name","_size"});c.addRow(new Object[]{"synthetic-evidence.png",1024});return c;}
+ public Cursor query(Uri uri,String[] projection,String selection,String[] args,String sort){MatrixCursor c=new MatrixCursor(new String[]{"_display_name","_size"});long size=0;try(InputStream in=getContext().getAssets().open("qr-fixture.png")){size=in.available();}catch(IOException ignored){}c.addRow(new Object[]{"synthetic-evidence.png",size});return c;}
  public ParcelFileDescriptor openFile(Uri uri,String mode)throws FileNotFoundException{
   try{File f=new File(getContext().getCacheDir(),"synthetic-evidence.png");try(InputStream in=getContext().getAssets().open("qr-fixture.png");OutputStream out=new FileOutputStream(f)){byte[] b=new byte[8192];int n;while((n=in.read(b))!=-1)out.write(b,0,n);}return ParcelFileDescriptor.open(f,ParcelFileDescriptor.MODE_READ_ONLY);}catch(IOException e){throw new FileNotFoundException(e.getMessage());}
  }
