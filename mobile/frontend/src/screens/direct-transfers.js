@@ -4,6 +4,7 @@ import {icon} from "../components/icons.js";
 import {field,formValues} from "../components/forms.js";
 import {uploadEvidence,evidenceImages} from "../components/evidence.js";
 import {requestId} from "../platform/client.js";
+import {copyPaymentDetail,manualUpiInstructions} from "../payments/manual-upi.js";
 import {pendingDirect,saveDirect} from "../payments/direct-return.js";
 
 const base="/api/platform/direct-payments";
@@ -45,14 +46,10 @@ export async function transferProofScreen(ctx){
  const images=evidenceImages(ctx),proof=t.proofs[0];
  const pending=pendingDirect(ctx.snapshot,ctx.native);
  const returned=pending?.transferId===t.id&&["LAUNCHED","PROOF"].includes(pending.stage);
- const qr=intent&&ctx.native.call("directRentQrImageUrl",intent);
  const proofKey=requestId();
- let launched=false;
- let paymentAttempted=returned;
 
  function setProof() {
   saveDirect(ctx.snapshot,ctx.native,{transferId:t.id,invoiceId:t.invoiceId,stage:"PROOF"});
-  paymentAttempted = true;
   const title=document.querySelector("#main h1");
   if(title)title.textContent="Attach payment proof";
   document.querySelector("[data-payment-launch]")?.setAttribute("hidden","");
@@ -65,15 +62,8 @@ export async function transferProofScreen(ctx){
   card(`${proofStatus(t)}${split(t)}${payee(t)}`,"transfer-card transfer-receipt")+
   (issue?notice(issue):"")+
   (t.status==="READY"?`<section class="card transfer-card" data-payment-launch ${returned?"hidden":""}>
-    <h2>Pay by UPI</h2>
-    <p class="transfer-note">Check the payee and amount in your UPI app. Save a screenshot and the UTR from the completed transaction.</p>
-    ${intent&&ctx.native.has("openDirectOwnerUpi")?button("Pay with UPI app",{action:"openTransferUpi",kind:"primary block",glyph:"external"}):""}
-    <p data-direct-launch-error class="transfer-launch-error" role="status"></p>
-    ${intent?`<details class="disclosure" data-upi-options ${ctx.native.has("openDirectOwnerUpi")?"":"open"}><summary>Other ways to pay</summary>
-      <p>If your UPI app declines the link, check your bank first. You can enter the UPI ID and amount directly in your payment app.</p>
-      <div class="transfer-actions">${button("Copy UPI ID",{action:"copyPayee",kind:"secondary"})}${button("Copy amount",{action:"copyAmount",kind:"secondary"})}</div>
-      ${qr?`<details class="disclosure"><summary>Show payment QR</summary><img class="transfer-qr" src="${esc(qr)}" alt="Scan to pay the owner the amount shown above">${button("Save QR",{action:"saveTransferQr",kind:"secondary block",glyph:"download"})}</details>`:""}
-    </details>`:""}
+    ${intent ? manualUpiInstructions() : ""}
+    <p class="transfer-note">If an earlier payment was debited or is pending, don’t pay again. After a successful payment, save the screenshot and UTR.</p>
     ${button("I have paid — attach proof",{action:"attachTransferProof",kind:"secondary block",glyph:"arrow"})}
   </section>`:"")+
   (["READY","REJECTED"].includes(t.status)?`<section class="card transfer-card proof-card" data-proof-upload ${t.status==="READY"&&!returned?"hidden":""}>
@@ -85,7 +75,7 @@ export async function transferProofScreen(ctx){
       ${field("proof","Payment screenshot",{type:"file",required:true,attrs:imageTypes,help:"Choose your screenshot from Photos or Files."})}
       ${button("Submit payment proof",{type:"submit",kind:"primary block",glyph:"send"})}
     </form>
-    ${t.status==="READY"&&intent?button("View UPI options",{action:"showUpiOptions",kind:"text-button block"}):""}
+    ${t.status==="READY"&&intent?button("View payment instructions",{action:"showPaymentInstructions",kind:"text-button block"}):""}
   </section>`:"")+
   (t.status==="SUBMITTED"?notice("Your owner will check the bank credit before confirming payment."):"")+
   (proof?card(`<h2>Submitted evidence</h2><p class="transfer-note">Bank reference: ${esc(proof.bankReference)}</p>${image(proof.evidenceId,"Payment screenshot")}`,"transfer-card"):"")+
@@ -99,27 +89,14 @@ export async function transferProofScreen(ctx){
   if(["CONFIRMED","SUBMITTED","CANCELLED"].includes(t.status)&&pending?.transferId===t.id)saveDirect(ctx.snapshot,ctx.native,null);
  },
  unmount(){images.unmount();},
- directUpiResult(opened,message){
-  if(opened||!launched)return;
-  launched=false;
-  saveDirect(ctx.snapshot,ctx.native,{transferId:t.id,invoiceId:t.invoiceId,stage:paymentAttempted?"PROOF":"READY"});
-  const el=document.querySelector("[data-direct-launch-error]");
-  if(el)el.textContent=message||"UPI app did not open. Check your bank first, then use the QR or copy the payment details.";
-  document.querySelector("[data-upi-options]")?.setAttribute("open","");
- },
- directReturned(){
-  if(t.status!=="READY"||!launched)return;
-  launched=false;
-  setProof();
- },
+ directReturned(){ if (t.status === "READY") setProof(); },
  async action(name){
   if(name==="refreshTransfer")return ctx.reload();
   if(name==="returnToCharges")return ctx.navigate("payment",{invoiceId:t.invoiceId},{replace:true});
   if(name==="attachTransferProof")return setProof();
-  if(name==="showUpiOptions"){
+  if(name==="showPaymentInstructions"){
    const launch=document.querySelector("[data-payment-launch]");
    launch?.removeAttribute("hidden");
-   launch?.querySelector("[data-upi-options]")?.setAttribute("open","");
    launch?.querySelector("button")?.focus();
    return;
   }
@@ -131,25 +108,11 @@ export async function transferProofScreen(ctx){
    ctx.markSaved();
    return ctx.navigate("payment",{invoiceId:t.invoiceId},{replace:true,force:true});
   }
-  if(!["openTransferUpi","copyPayee","copyAmount","saveTransferQr"].includes(name)||launched)return;
-  if(name==="openTransferUpi"&&paymentAttempted&&!await ctx.confirm({
-   title:"Check your bank before retrying",
-   message:"Continue only after confirming that your earlier transfer was cancelled and no money was debited.",
-   confirmLabel:"No debit — open UPI"
-  }))return;
-  const fresh=await ctx.api(`${base}/transfers/${t.id}`);
-  if(!fresh.intent)throw new Error(fresh.issue||"Payment status changed. Refresh before paying.");
-  if(name==="saveTransferQr")return ctx.native.call("saveDirectRentQr",fresh.intent);
-  if(name==="copyPayee"||name==="copyAmount"){
-   const text=name==="copyPayee"?fresh.transfer.payeeAddress:(fresh.transfer.amountPaise/100).toFixed(2);
-   if(ctx.native.has("copyText"))ctx.native.call("copyText",text);
-   else await navigator.clipboard.writeText(text);
-   return ctx.toast("Copied.");
+  if (name === "copyPayee" || name === "copyAmount") {
+   const fresh = await ctx.api(`${base}/transfers/${t.id}`);
+   if (!fresh.intent) throw new Error(fresh.issue || "Payment status changed. Refresh before paying.");
+   return copyPaymentDetail(ctx, name, fresh.transfer);
   }
-  saveDirect(ctx.snapshot,ctx.native,{transferId:t.id,invoiceId:t.invoiceId,stage:"LAUNCHED"});
-  launched=true;
-  ctx.markSaved();
-  ctx.native.call("openDirectOwnerUpi",fresh.intent);
  },
  async submit(name,form){if(name!=="transferProof")return;const v=formValues(form),saved=await uploadEvidence(ctx,form.elements.proof.files[0],"PAYMENT");await ctx.api(`${base}/transfers/${t.id}/proof`,{method:"POST",body:{evidenceId:saved.id,bankReference:v.reference.trim(),key:proofKey}});ctx.markSaved();ctx.invalidate();return ctx.reload();}
  };

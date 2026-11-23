@@ -2,50 +2,37 @@ import {heading,notice,button,esc,card,badge} from "../components/ui.js";
 import {field,formValues} from "../components/forms.js";
 import {money} from "../domain/finance.js";
 import {requestId,platformConfig} from "../platform/client.js";
+import {copyPaymentDetail,manualUpiInstructions} from "../payments/manual-upi.js";
 import {transferList} from "./direct-transfers.js";
 
 export async function directRentScreen(ctx) {
   const id=ctx.params.invoiceId || ctx.params.id;
   if(!id)throw new Error("Open a rent invoice first.");
-  const data=await ctx.api(`/api/platform/rent/invoices/${encodeURIComponent(id)}`);
+  const path = `/api/platform/rent/invoices/${encodeURIComponent(id)}`;
+  const data = await ctx.api(path);
   const claim=data.claim,confirmed=claim?.status==="OWNER_CONFIRMED";
-  const canPay=data.canPrepare || data.payable;
-  let opening=false,opened=false;
-  const qr=data.intent?ctx.native.call("directRentQrImageUrl",data.intent):"";
-  const status=(message)=>{const el=document.querySelector('[data-direct-upi-status]');if(el)el.textContent=message;};
-  const prepare=async()=>{
-    const fresh=await ctx.api(`/api/platform/rent/invoices/${encodeURIComponent(id)}`,{method:"POST",body:{key:requestId()}});
-    if(!fresh.payable||!fresh.intent)throw new Error(fresh.issue||"This request is not payable. Refresh its status.");
-    return fresh;
-  };
-  return {title:"Pay your owner",back:true,nav:false,
+  return {title:"Pay your owner",back:true,nav:false,guardForm:true,contentClass:"direct-payment",
     content:heading("","Pay your PG owner")+
       card(`<h2>${money(data.remainingPaise)}</h2>${claim?`<p class="payee">${esc(claim.payeeName)}</p><p class="payee-address">${esc(claim.payeeAddress)}</p>${badge(confirmed?"OWNER CONFIRMED":"AWAITING OWNER CONFIRMATION")}`:""}`,"payment-summary")+
       (data.issue?notice(data.issue):!data.ownerConfigured&&!data.settled?notice("Your owner has not set up rent collection yet. Ask your owner to add their rent-receiving UPI address."):"")+
-      (data.settled?notice(confirmed?"Your owner confirmed this rent payment.":"This invoice has no outstanding balance."):`<p class="payment-safety">Check the payee in your UPI app. Bank confirmation required; if debited, don’t pay again.</p>`)+
-      (canPay?button("Pay with UPI app",{action:"directUpi",kind:"primary block"}):"")+
-      `<p data-direct-upi-status role="status" aria-live="polite"></p>`+
-      (canPay?button("Pay from another phone · show QR",{action:"directQr",kind:"text-button block"}):"")+
-      `<section data-direct-qr ${ctx.params.qr&&qr?"":"hidden"}>${qr?`<img src="${esc(qr)}" alt="Rent QR for your owner's UPI address" style="display:block;width:min(100%,280px);aspect-ratio:1;margin:16px auto;background:white"><p class="subtitle">Owner UPI transfer · bank confirmation required</p>${button("Save QR",{action:"saveDirectQr",kind:"secondary block"})}`:""}</section>`+
+      (data.settled?notice(confirmed?"Your owner confirmed this rent payment.":"This invoice has no outstanding balance."):`<p class="payment-safety">If a previous payment was debited or is pending, check your bank before retrying.</p>`)+
+      (data.payable&&claim?card(manualUpiInstructions(),"transfer-card"):"")+
+      (data.canPrepare?button("Get UPI details",{action:"prepareDirect",kind:"primary block"}):"")+
       (claim&&!confirmed?`<details class="disclosure" data-bank-reference ${claim.bankReference?"open":""}><summary>Already paid? Submit bank reference</summary><p>PGOne reference: ${esc(claim.reference)}</p><form data-form="directReference" novalidate><div class="form-error" role="alert"></div>${field("reference","Bank transaction reference",{required:true,value:claim.bankReference||"",help:"Copy the bank UTR after payment. Never enter a UPI PIN.",attrs:'minlength="6" maxlength="40" autocomplete="off"'})}${button("Submit for owner review",{type:"submit",kind:"secondary block"})}</form></details>`:"")+
       button("Refresh payment status",{action:"refreshDirect",kind:"text-button block"})+
       (data.settled?button("View rent history",{route:"history",kind:"secondary block"}):""),
-    directUpiResult(success,message){opening=false;opened=success;if(success)document.querySelector('[data-bank-reference]')?.setAttribute("open","");status(message||(success?"Submit your bank reference after payment.":"UPI app did not open. Retry or use the QR."));},
     async action(name){
-      if(name==="refreshDirect")return ctx.reload();
-      if(name==="saveDirectQr")return ctx.native.call("saveDirectRentQr",data.intent);
-      if(name!=="directUpi"&&name!=="directQr")return;
-      if(opening)return;
-      if(opened && !(await ctx.confirm({title:"Check your bank first",message:"Continue only if the earlier UPI attempt was cancelled and no money was debited. A pending debit must be checked with your owner.",confirmLabel:"No debit — retry"})))return;
-      opening=true;
-      try {
-        document.querySelector('[data-direct-qr]')?.setAttribute("hidden","");
-        const fresh=await prepare();
-        if(name==="directQr")return ctx.navigate("payment",{invoiceId:id,qr:true},{replace:true,force:true});
-        if(!ctx.native.has("openDirectOwnerUpi"))throw new Error("Open PGOne on your Android phone to pay with a UPI app.");
-        if(!claim)await ctx.reload();
-        ctx.native.call("openDirectOwnerUpi",fresh.intent);
-      } catch(error) {opening=false;throw error;}
+      if (name === "refreshDirect") return ctx.reload();
+      if (name === "prepareDirect") {
+        const fresh = await ctx.api(path,{method:"POST",body:{key:requestId()}});
+        if (!fresh.payable) throw new Error(fresh.issue || "This request is unavailable. Refresh its status.");
+        return ctx.reload();
+      }
+      if (name === "copyPayee" || name === "copyAmount") {
+        const fresh = await ctx.api(path);
+        if (!fresh.payable || !fresh.claim) throw new Error(fresh.issue || "Payment status changed. Refresh before paying.");
+        return copyPaymentDetail(ctx, name, fresh.claim);
+      }
     },
     async submit(_name,form){await ctx.api(`/api/platform/rent/claims/${claim.id}/reference`,{method:"POST",body:{reference:formValues(form).reference.trim()}});
       ctx.markSaved();ctx.toast("Reference submitted. Your owner must verify the bank credit.");await ctx.reload();},

@@ -425,6 +425,20 @@ public class MainActivity extends Activity implements PaymentResultWithDataListe
             if(code==null||!code.matches("[A-HJ-NP-Z2-9]{4}(-[A-HJ-NP-Z2-9]{4}){2}"))return;
             runOnUiThread(()->((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("PGOne PG code",code)));
         }
+        @JavascriptInterface public boolean copyPaymentDetail(String value) {
+            if (value == null || !(value.matches("[A-Za-z0-9._-]{2,128}@[A-Za-z0-9.-]{2,64}")
+                    || value.matches("[0-9]{1,7}\\.[0-9]{2}"))) return false;
+            android.content.ClipboardManager clipboard =
+                    (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+            if (clipboard == null) return false;
+            try {
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("PGOne payment details", value));
+                return true;
+            } catch (RuntimeException unavailable) {
+                return false;
+            }
+        }
+
         @JavascriptInterface public void sharePgCode(String name,String code){
             if(name==null||name.length()>120||code==null||!code.matches("[A-HJ-NP-Z2-9]{4}(-[A-HJ-NP-Z2-9]{4}){2}"))return;
             runOnUiThread(()->{Intent send=new Intent(Intent.ACTION_SEND);send.setType("text/plain");send.putExtra(Intent.EXTRA_TEXT,"Join "+name+" on PGOne. PG code: "+code);startActivity(Intent.createChooser(send,"Share PG code"));});
