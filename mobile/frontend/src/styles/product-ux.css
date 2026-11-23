@@ -106,9 +106,6 @@
 .transfer-payee + form { margin-top: 16px; }
 .transfer-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
 .transfer-actions > .button { flex: 1 1 100px; }
-.transfer-launch-error { font-size: 13px; margin: 12px 0; color: #a44034; }
-.transfer-launch-error:empty { display: none; }
-.transfer-qr { display: block; width: min(100%, 260px); height: auto; margin: 12px auto; }
 .proof-card > .transfer-icon { margin-bottom: 12px; }
 .evidence-photo { margin: 14px 0 0; }
 .evidence-photo figcaption { font-size: 12px; font-weight: 650; color: var(--muted); margin-bottom: 8px; }

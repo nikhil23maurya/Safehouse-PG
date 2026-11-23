@@ -357,14 +357,21 @@ public class MobileJourneyTest {
         js("document.querySelector('[name=charges]').value='BOTH';document.querySelector('[data-form=chooseTransfer]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
         await("document.getElementById('app').dataset.screen==='transferProof'");screenshot("60-direct-combined-payment");
         assertEquals("Combined bank amount is rent plus independent electricity","915124",js("window.__directFixtures.transfers[0].amountPaise"));
-        // Resume is independent of any success callback. Resident can always
-        // return manually; app recovery opens the upload step, never Paid.
-        setReceiverEnabled(true);
+        // Paytm is opened by the resident. PGOne only copies the details and handles proof.
         Instrumentation.ActivityMonitor upiMonitor=evidenceMonitor(Intent.ACTION_VIEW,new Instrumentation.ActivityResult(Activity.RESULT_CANCELED,null));
-        js("document.querySelector('[data-action=openTransferUpi]').click()");
+        js("document.querySelector('[data-action=copyPayee]').click()");
+        await("document.getElementById('toasts').textContent.includes('UPI ID copied')");
+        java.util.concurrent.atomic.AtomicReference<String> copied = new java.util.concurrent.atomic.AtomicReference<>();
+        instrumentation.runOnMainSync(() -> {
+            android.content.ClipboardManager clipboard = activity.getSystemService(android.content.ClipboardManager.class);
+            android.content.ClipData clip = clipboard == null ? null : clipboard.getPrimaryClip();
+            if (clip != null && clip.getItemCount() > 0) copied.set(clip.getItemAt(0).getText().toString());
+        });
+        assertEquals("Native clipboard must receive the owner UPI ID", "owner-fixture@invalid", copied.get());
+        js("document.querySelector('[data-action=attachTransferProof]').click()");
         await("!document.querySelector('[data-proof-upload]').hidden");screenshot("61-direct-attach-proof");
-        assertTrue("Direct UPI must launch through Android’s UPI resolver",upiMonitor.getHits()>=1);
-        instrumentation.removeMonitor(upiMonitor);setReceiverEnabled(false);
+        assertEquals("Manual direct rent must never start a UPI intent",0,upiMonitor.getHits());
+        instrumentation.removeMonitor(upiMonitor);
         js("document.querySelector('[name=reference]').value='123456789012'");
         tapFileInput("[name=proof]");
         await("document.querySelector('[name=proof]').files.length===1");

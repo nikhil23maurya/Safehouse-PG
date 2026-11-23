@@ -20,21 +20,20 @@ test("payment activation retry fetches fresh capabilities instead of retaining a
   assert.equal((await platformConfig(ctx,{force:true})).androidBilling,"CUSTOM_UPI_INTENT");
   assert.equal(reads,2);
 });
-test("direct rent is UPI-first, does not create claims on render, and permits retry after failed launch",async()=>{
-  const calls=[];globalThis.document={querySelector:()=>({textContent:"",setAttribute(){}})};
+test("direct rent refreshes server amounts before copying and never opens a payment intent",async()=>{
+  const calls=[];
   const data={claim:{id:"claim",status:"PENDING_OWNER_CONFIRMATION",amountPaise:10000,payeeName:"Owner",payeeAddress:"owner@example",reference:"PGO1234567890123456"},
-    remainingPaise:10000,payable:true,ownerConfigured:true,intent:"upi://pay?pa=owner@example&am=100.00&cu=INR&tr=PGO1234567890123456"};
-  const screen=await directRentScreen({params:{invoiceId:"invoice"},api:async(path,opts)=>{calls.push(opts?.method||"GET");return data;},
-    native:{has:()=>true,call:(name)=>name==="directRentQrImageUrl"?"https://example.invalid/qr.png":calls.push(name)}});
-  assert.deepEqual(calls,["GET"]);assert.match(screen.content,/Pay with UPI app/);
-  assert.match(screen.content,/<section data-direct-qr hidden>/);
-  await screen.action("directUpi");screen.directUpiResult(false,"App failed to open");await screen.action("directUpi");
-  assert.equal(calls.filter(x=>x==="openDirectOwnerUpi").length,2);
-  assert.equal(calls.filter(x=>x==="POST").length,2,"each launch revalidates the exact amount and payee");
+    remainingPaise:10000,payable:true,ownerConfigured:true};
+  const screen=await directRentScreen({params:{invoiceId:"invoice"},api:async(_path,opts)=>{calls.push(opts?.method||"GET");return data;},
+    native:{has:()=>true,call:(name,value)=>{calls.push([name,value]);return true;}},toast:()=>{}});
+  assert.deepEqual(calls,["GET"]);
+  assert.match(screen.content,/Pay in Paytm or another UPI app/);
+  await screen.action("copyAmount");
+  assert.deepEqual(calls,["GET","GET",["copyPaymentDetail","100.00"]]);
 });
 test("changed or paid direct-rent requests render status without another financial initiation",async()=>{
   const screen=await directRentScreen({params:{id:"invoice"},api:async()=>({remainingPaise:7000,claim:{id:"claim",payeeName:"Owner",payeeAddress:"owner@example",reference:"ref"},
     issue:"The invoice balance changed. Do not pay this old amount.",ownerConfigured:true,payable:false,intent:null}),native:{call:()=>undefined}});
-  assert.doesNotMatch(screen.content,/data-action="directUpi"/);
+  assert.doesNotMatch(screen.content,/data-action="copyPayee"/);
   assert.match(screen.content,/Do not pay this old amount/);
 });

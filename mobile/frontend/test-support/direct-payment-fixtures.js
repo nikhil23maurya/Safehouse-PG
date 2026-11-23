@@ -24,6 +24,6 @@ export function createDirectPaymentFixtures(){
   if(p.endsWith("/proof")){t.proofs.unshift({id:`proof-${t.proofs.length+1}`,evidenceId:body.evidenceId,bankReference:body.bankReference,status:"PENDING"});t.status="SUBMITTED";return ok({proof:t.proofs[0]});}
   if(p.endsWith("/review")){const proof=t.proofs.find(p=>p.id===body.proofId);proof.status=body.approve?"APPROVED":"REJECTED";proof.reason=body.reason;t.status=body.approve?"CONFIRMED":"REJECTED";if(body.approve){f.remainingPaise-=t.rentPaise;if(t.electricityPaise)f.bill.status="PAID";t.receiptNumber="PGT-SYNTHETIC";t.confirmedAt="2026-11-23T08:00:00Z";}return ok({transfer:t});}
   if(p.endsWith("/cancel")){t.status="CANCELLED";return ok({ok:true});}
-  return ok({transfer:t,bill:t.electricityPaise?f.bill:null,invoice:{year:f.year,month:f.month},resident:{name:"Aarav Sharma",room:"203"},intent:t.status==="READY"?`upi://pay?pa=${encodeURIComponent(t.payeeAddress)}&pn=PG%20Owner&am=${(t.amountPaise/100).toFixed(2)}&cu=INR&tr=PGT1234567890123456`:null,issue:null});
+  return ok({transfer:t,bill:t.electricityPaise?f.bill:null,invoice:{year:f.year,month:f.month},resident:{name:"Aarav Sharma",room:"203"},intent:t.status==="READY"&&!f.paymentIssue?`upi://pay?pa=${encodeURIComponent(t.payeeAddress)}&pn=PG%20Owner&am=${(t.amountPaise/100).toFixed(2)}&cu=INR&tr=PGT1234567890123456`:null,issue:f.paymentIssue||null});
  };return f;
 }
