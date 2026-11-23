@@ -63,11 +63,15 @@ test("actual request APIs require authentication, strict rent bodies and propert
  const submitted=await fetch(`${base}/api/platform/join`,{method:"POST",headers:auth,body:JSON.stringify({code:o.code,...profile})});const body:any=await submitted.json();assert.equal(submitted.status,200);assert.equal(body.pendingApproval,true);assert.equal(body.tokens,undefined);
  const denied=await fetch(`${base}/api/platform/properties/${o.setup.propertyId}/resident-requests`,{headers:auth});assert.equal(denied.status,403);
  const own={authorization:`Bearer ${(await issueSession(o.a)).accessToken}`,"content-type":"application/json"},path=`${base}/api/platform/properties/${o.setup.propertyId}/resident-requests/${body.requestId}`;
- assert.equal((await fetch(path+"/decision",{method:"POST",headers:own,body:JSON.stringify({decision:"ACCEPTED",password})})).status,200);
- assert.equal((await fetch(path+"/rent",{method:"POST",headers:own,body:JSON.stringify({...rent(o.room.id),monthlyRentPaise:100.1})})).status,400);
+ assert.equal((await fetch(path+"/decision",{method:"POST",headers:own,body:JSON.stringify({decision:"ACCEPTED"})})).status,400);
+ const decision=JSON.stringify({decision:"ACCEPTED",identityChecked:true});
+ assert.equal((await fetch(path+"/decision",{method:"POST",headers:auth,body:decision})).status,403);
+ assert.equal((await fetch(path+"/decision",{method:"POST",headers:own,body:decision})).status,200);
+ const sessionRent={...rent(o.room.id),password:undefined};
+ assert.equal((await fetch(path+"/rent",{method:"POST",headers:own,body:JSON.stringify({...sessionRent,monthlyRentPaise:100.1})})).status,400);
  assert.equal(await prisma.pgMembership.count({where:{accountId:r.id}}),0);
- const active=await fetch(path+"/rent",{method:"POST",headers:own,body:JSON.stringify(rent(o.room.id))});assert.equal(active.status,200);const enabled:any=await active.json();assert.ok(enabled.membershipId);
- assert.equal((await fetch(path+"/rent",{method:"POST",headers:own,body:JSON.stringify(rent(o.room.id))})).status,200);
+ const active=await fetch(path+"/rent",{method:"POST",headers:own,body:JSON.stringify(sessionRent)});assert.equal(active.status,200);const enabled:any=await active.json();assert.ok(enabled.membershipId);
+ assert.equal((await fetch(path+"/rent",{method:"POST",headers:own,body:JSON.stringify(sessionRent)})).status,200);
 });
 test("multiple owner properties share the plan while requests, rooms and rent remain property scoped",async()=>{
  const o=await owner(),second=await createProperty(o.a.id,{name:"Second Request PG",city:"Pune",key:crypto.randomUUID()}),resident=await account();assert.equal(second.organisationId,o.setup.organisationId);
@@ -90,6 +94,7 @@ test("linking a historical record preserves invoices and rejects duplicated mobi
  const student=await prisma.student.create({data:{userId:user.id,propertyId:o.setup.propertyId,roomId:o.room.id,bedLabel:"A",mobile:profile.mobile.slice(-10),joiningDate:new Date(input.joiningDate+"T12:00:00Z"),monthlyRentPaise:input.monthlyRentPaise,securityDepositPaise:input.securityDepositPaise,rentDueDay:7}});
  const now=new Date(),old=await prisma.rentInvoice.create({data:{propertyId:o.setup.propertyId,studentId:student.id,year:now.getUTCFullYear()-1,month:1,dueDate:new Date("2025-01-07"),rentPaise:123456,totalPaise:123456,paidPaise:123456,status:"PAID"}});
  await prisma.room.update({where:{id:o.room.id},data:{capacity:2}});await decideResidentRequest(o.a.id,o.setup.propertyId,r.id,"ACCEPTED",password);
+ await assert.rejects(()=>setupRequestedResident(o.a.id,o.setup.propertyId,r.id,{...input,existingStudentId:student.id,password:undefined}),{code:"PASSWORD_CONFIRMATION_REQUIRED"});
  await assert.rejects(()=>setupRequestedResident(o.a.id,o.setup.propertyId,r.id,{...input,bedLabel:"B"}),{code:"EXISTING_RESIDENT_RECORD"});
  await assert.rejects(()=>setupRequestedResident(o.a.id,o.setup.propertyId,r.id,{...input,existingStudentId:student.id,monthlyRentPaise:100}),{code:"EXISTING_RECORD_MISMATCH"});
  const linked=await setupRequestedResident(o.a.id,o.setup.propertyId,r.id,{...input,existingStudentId:student.id});assert.equal(linked.studentId,student.id);

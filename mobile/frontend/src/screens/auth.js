@@ -7,8 +7,8 @@ const accountPage = (title,description,body) => ({bare:true,title,
   content:`<main class="login-page royal-page"><div class="login-inner"><div class="login-identity"><button class="royal-back" data-action="back" aria-label="Go back">←</button>${brand()}</div><div class="auth-art" data-depth aria-hidden="true"><div class="art-orbit"></div><img src="illustration-royal-residence.webp" alt="" draggable="false"></div><div class="login-heading"><span class="auth-eyebrow">YOUR SPACE, SIMPLIFIED</span><h1>${title}</h1><p>${description}</p></div><div class="auth-form-panel">${body}</div></div></main>`});
 const emailField = () => field("email","Email address",{type:"email",required:true,placeholder:"you@example.com",attrs:'autocomplete="username" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="254"'});
 const passwordField = (name,label,current=false) => field(name,label,{type:"password",required:true,
-  placeholder:!current&&name==="password"?"At least 12 characters":"",
-  attrs:`autocomplete="${current?"current-password":"new-password"}" ${current?"":'minlength="12"'} maxlength="128"`});
+  placeholder:!current&&name==="password"?"At least 10 characters":"",
+  attrs:`autocomplete="${current?"current-password":"new-password"}" ${current?"":'minlength="10"'} maxlength="128"`});
 const accountForm = (name,fields,label) => `<form data-form="${name}" novalidate><div class="form-error" role="alert"></div>${fields}${button(label,{type:"submit",kind:"primary block",glyph:"arrow"})}</form>`;
 const legalLinks = () => `<p class="legal-copy">By creating an account, you agree to our <button class="text-button" data-route="legal" data-params='{"kind":"terms"}'>Terms</button> and <button class="text-button" data-route="legal" data-params='{"kind":"privacy"}'>Privacy Policy</button>.</p>`;
 export function loginScreen(ctx) {
@@ -64,7 +64,7 @@ export function passwordScreen(ctx) {
           ? "Replace your temporary password to continue."
           : "Choose a strong password you haven’t used before.",
       ) +
-      `<form data-form="password" novalidate>${notice("Use at least 12 characters. A mix of letters, numbers and symbols is recommended.")}<div class="card"><div class="form-error" role="alert"></div>${field("currentPassword", "Current password", { type: "password", required: true, attrs: 'autocomplete="current-password" maxlength="128"' })}${field("newPassword", "New password", { type: "password", required: true, attrs: 'autocomplete="new-password" minlength="12" maxlength="128"' })}${field("confirmPassword", "Confirm new password", { type: "password", required: true, attrs: 'autocomplete="new-password" minlength="12" maxlength="128"' })}${button("Update password", { type: "submit", kind: "primary block" })}</div></form>`,
+      `<form data-form="password" novalidate>${notice("Use at least 10 characters. A mix of letters, numbers and symbols is recommended.")}<div class="card"><div class="form-error" role="alert"></div>${field("currentPassword", "Current password", { type: "password", required: true, attrs: 'autocomplete="current-password" maxlength="128"' })}${field("newPassword", "New password", { type: "password", required: true, attrs: 'autocomplete="new-password" minlength="10" maxlength="128"' })}${field("confirmPassword", "Confirm new password", { type: "password", required: true, attrs: 'autocomplete="new-password" minlength="10" maxlength="128"' })}${button("Update password", { type: "submit", kind: "primary block" })}</div></form>`,
     async submit(name, form) {
       if (name !== "password") return;
       const values = formValues(form);

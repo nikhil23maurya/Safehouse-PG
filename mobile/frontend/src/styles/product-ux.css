@@ -122,3 +122,66 @@
   .direct-payment .transfer-card, .direct-payment > .card { padding: 16px; }
   .direct-payment > .disclosure.transfer-card { padding: 0 16px; }
 }
+
+/* Resident payment summary and actions */
+.rent-payment-hero {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  margin: 0 0 14px;
+  padding: 21px;
+  border-radius: 22px;
+  background: linear-gradient(132deg,#214ebd,#102b77 68%,#162a65);
+  color: white;
+}
+.rent-payment-hero img {
+  position: absolute;
+  z-index: -1;
+  width: min(40%,200px);
+  height: 115%;
+  right: -12px;
+  bottom: -30px;
+  object-fit: contain;
+  opacity: .40;
+  pointer-events: none;
+}
+.rent-payment-hero h1 { margin: 0 0 18px; font-size: clamp(23px, 5.5vw, 32px); color: white; }
+.rent-amount-label { display: block; font-size: 13px; color: #d9e6ff; }
+.rent-amount { display: block; font: 800 clamp(28px, 8.5vw, 45px)/1.2 Manrope,Inter,sans-serif; margin: 3px 0 12px; }
+.rent-payment-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; font-size: 12px; }
+.rent-payment-meta > span:first-child { display: flex; align-items: center; gap: 6px; }
+.rent-payment-meta svg { width: 16px; height: 16px; }
+.rent-payment-meta .badge { box-shadow: none; }
+.rent-payment-review > .rent-bill-details .transfer-breakdown { margin: 0; }
+.rent-payment-review > .rent-bill-details h2 { margin-bottom: 5px; }
+.rent-payment-review [data-payment-launch] .transfer-card { margin: 0 0 14px; padding: 17px; }
+.rent-upi-heading, .rent-upload-action { display: flex; gap: 11px; align-items: center; }
+.rent-upi-heading h2, .rent-upload-action h2 { font-size: 17px; margin: 0; }
+.rent-upi-heading p, .rent-upload-action p, .rent-upi-note p { margin: 3px 0 0; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.rent-upi-recipient {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin: 13px 0 6px;
+  padding: 11px 12px;
+  border-radius: 13px;
+  background: #f0f4fd;
+}
+.rent-upi-recipient > div { min-width: 0; overflow-wrap:anywhere; }
+.rent-upi-recipient strong, .rent-upi-recipient small, .rent-upi-recipient span { display: block; }
+.rent-upi-recipient small { color: var(--muted); font-size: 11px; margin-top: 2px; }
+.rent-upi-recipient span { color: var(--navy); font-size: 12px; }
+.rent-payment-review .rent-upi-recipient .button { flex: 0 0 auto; min-height: 40px; padding: 8px 11px; font-size: 12px; }
+.rent-upi-note { display: flex; align-items:center; gap: 8px; }
+.rent-payment-review .rent-upi-note .button { flex: 0 0 auto; min-height: 40px; padding: 7px 4px; font-size: 12px; }
+.rent-upload-action { flex-wrap:wrap; }
+.rent-payment-review [data-payment-launch] .rent-upload-action { background: #edf3ff; border-color: #dde7fb; }
+.rent-upload-action > div { flex: 1; min-width: 0; }
+.rent-payment-help { margin: 14px 0 4px; padding: 0 16px; border: 1px solid var(--border); background: white; border-radius: 15px; }
+.rent-payment-help > summary { justify-content: flex-start; gap: 9px; }
+.rent-payment-help > summary::after { margin-left: auto; }
+.rent-payment-help > summary svg { width: 17px; height: 17px; }
+.rent-payment-help p { color:var(--muted); margin: 0 0 10px; }
+.rent-payment-footer { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; }
+.rent-payment-footer .button { min-height: 42px; padding: 8px 11px; font-size: 12px; }
