@@ -3,13 +3,15 @@
 .boot .brand-logo { width: clamp(145px, 48vw, 205px); display: block; height: auto; }
 .brand-mark { object-fit: contain; }
 .verification-center > .loading-dots {
-  width: auto; height: 58px; gap: 11px; margin-bottom: 18px;
+  width: auto; height: 58px; gap: 12px; margin-bottom: 18px;
   background: transparent; border: 0; box-shadow: none;
 }
-.verification-center > .loading-dots > i {
-  width: var(--dot-size); height: var(--dot-size);
-  flex-basis: var(--dot-size); background: currentColor; box-shadow: none;
+.verification-center > .pgone-loader > span {
+  min-width:25px; min-height:25px; flex:0 0 25px; box-shadow:none;
 }
+button[aria-busy=true] {opacity:1;}
+.busy-overlay {background:#fff;border-radius:inherit;}
+.busy-overlay--floating {position:fixed;inset:auto;top:calc(env(safe-area-inset-top,0px) + 16px);left:50%;transform:translateX(-50%);z-index:1200;padding:12px 20px;border:1px solid #dce5f8;border-radius:20px;box-shadow:0 8px 30px #163c7d20;}
 .royal-back.button {font-size:0;gap:0;flex:0 0 42px;overflow:hidden;}
 .verification-page {background:#f8faff;color:#102549;display:flex;flex-direction:column;}
 .verification-page::before {display:none;}
@@ -234,3 +236,56 @@
 .collection-selection input { width: 18px; height: 18px; }
 .direct-collection-row fieldset { min-width: 0; margin: 8px 0 0; padding: 0; border: 0; }
 .collection-review-link { min-height: 36px; padding: 5px 10px; border-radius: 10px; background: #fff3df; color: #794813; font-size: 12px; }
+
+/* One framed scene, one purpose and two clear next steps. */
+.entry-welcome {padding:24px 24px max(24px,env(safe-area-inset-bottom));background:radial-gradient(ellipse at 50% 32%,#edf3ff,transparent 55%),#f8faff;}
+.entry-welcome::before {display:none;}
+.entry-welcome header {display:flex;align-items:center;justify-content:space-between;height:44px;flex:0 0 44px;}
+.entry-welcome .brand {font-size:27px;}
+.entry-welcome .brand-mark {width:36px;height:36px;flex-basis:36px;}
+.entry-welcome .entry-signin {min-height:42px;padding:8px 0 8px 16px;font-size:13px;box-shadow:none;background:transparent;border:0;}
+.entry-welcome .entry-portrait {flex:1 1 280px;min-height:190px;max-height:350px;margin:20px -8px 8px;display:flex;align-items:center;justify-content:center;}
+.entry-welcome .entry-guide {width:100%;max-width:400px;height:100%;max-height:330px;object-fit:contain;object-position:center;margin:0;animation:none;filter:none;}
+.entry-welcome .entry-heading {text-align:center;margin:8px 0 22px;}
+.entry-welcome .entry-heading h1 {max-width:none;font-size:34px;line-height:1.13;letter-spacing:-1.25px;}
+.entry-welcome .entry-heading p {margin-top:11px;font-size:13px;line-height:1.5;font-weight:450;color:#63738c;letter-spacing:0;text-transform:none;}
+.entry-role-group {margin-top:auto;}
+.entry-role-label {text-align:center;font-size:11px;font-weight:600;color:#78869c;margin-bottom:10px;}
+.entry-welcome .entry-options {gap:10px;margin-top:0;}
+.entry-welcome .entry-option {min-height:76px;padding:14px 16px;border-radius:18px;}
+.entry-welcome .entry-option strong {font-size:18px;letter-spacing:-.4px;}
+.entry-welcome .entry-option small {font-size:11px;}
+.entry-welcome .entry-option > svg {width:19px;height:19px;padding:0;background:transparent;border-radius:0;}
+.entry-welcome .owner-entry::before {display:none;}
+@media(max-height:700px){.entry-welcome{padding:16px 22px}.entry-welcome .entry-portrait{min-height:150px;max-height:200px;margin:12px -8px 4px}.entry-welcome .entry-heading{margin:4px 0 16px}.entry-welcome .entry-heading h1{font-size:28px}.entry-welcome .entry-heading p{font-size:12px;margin-top:8px}.entry-welcome .entry-option{min-height:67px;padding:10px 14px}.entry-role-label{margin-bottom:8px}}
+
+.rent-status-summary {padding:20px;border-radius:22px;}
+.rent-status-summary .summary-top svg {width:20px;height:20px;}
+.rent-status-summary[data-collection-state=submitted] .financial-amount {color:#ffe0a1;}
+.rent-status-summary[data-collection-state=confirmed] .financial-amount {color:#b4f6d2;}
+.collection-empty-amount {font-size:25px;letter-spacing:-.6px;}
+.rent-status-summary .collection-track {display:flex;height:6px;margin:16px 0;}
+.rent-status-summary .collection-track .confirmed-progress {background:#7be5af;border-radius:5px 0 0 5px;}
+.rent-status-summary .collection-track .submitted-progress {background:#f4c875;border-radius:0 5px 5px 0;}
+.collection-state-values {display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+.collection-state-values div {display:grid;gap:4px;}
+.collection-state-values span {font-size:10px;color:#d7e4ff;}
+.collection-state-values strong {font-size:17px;font-variant-numeric:tabular-nums;}
+.collection-state-values .collection-submitted strong {color:#ffe0a1;}
+.collection-state-values .collection-confirmed strong {color:#b4f6d2;}
+.collection-outstanding {display:flex;justify-content:space-between;gap:10px;border-top:1px solid #ffffff28;margin-top:14px;padding-top:10px;font-size:11px;color:#e1ebff;}
+.electricity-collection {margin:12px 0;padding:16px;background:#fff;border:1px solid #e0e6ef;border-radius:20px;box-shadow:0 5px 18px #193b7805;}
+.collection-electricity-head,.collection-electricity-head>div {display:flex;align-items:center;gap:8px;}
+.collection-electricity-head {justify-content:space-between;}
+.collection-electricity-head svg {width:20px;height:20px;color:#9b6b20;}
+.collection-electricity-head h2 {font-size:19px;margin:0;}
+.collection-electricity-head .button {min-height:32px;padding:4px;font-size:11px;}
+.electricity-collection .direct-collection-totals {margin:12px 0 0;padding:0;border:0;}
+.collection-submitted dd {color:#94601a;}
+.collection-confirmed dd {color:#08714b;}
+.collection-proof-inbox {width:100%;display:flex;align-items:center;gap:10px;padding:13px 14px;margin:0 0 15px;border:1px solid #e0e6ef;border-radius:17px;background:#fff;text-align:left;}
+.collection-proof-inbox>span:nth-child(2) {display:grid;gap:4px;flex:1;min-width:0;}
+.collection-proof-inbox strong {font-size:13px;color:#162b4e;}
+.collection-proof-inbox small {font-size:11px;color:#63718b;}
+.collection-proof-inbox>svg {width:17px;height:17px;color:#3152a7;}
+.direct-payment .collection-meter img {max-height:300px;object-fit:contain;}

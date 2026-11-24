@@ -62,7 +62,7 @@ directTransferRouter.post("/owner/reconcile", async (req, res) => {
     ...period,
     amountPaise: z.number().int().positive(),
     bankChecked: z.literal(true),
-    payments: z.array(z.object({ transferId: id, proofId: id, bankReference }).strict()).min(1).max(10),
+    payments: z.array(z.object({ transferId: id, proofId: id, bankReference:bankReference.optional() }).strict()).min(1).max(10),
   }).strict().parse(req.body);
   res.json(await reconcileTransfers(account.id, membership.propertyId, input));
 });

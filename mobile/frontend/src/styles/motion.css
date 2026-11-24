@@ -7,34 +7,28 @@ button[aria-busy=true] { position: relative; }
 button.primary:not(:disabled):active, .entry-option:not(:disabled):active, .quick-action:not(:disabled):active {
   transform: scale(.955);
 }
-.loading-dots {
-  --dot-size: 8px;
-  --bounce: -5px;
-  display: inline-flex;
+.pgone-loader {
+  display: flex;
   align-items: center;
   justify-content: center;
-  gap: 6px;
-  min-height: 24px;
-  vertical-align: middle;
+  gap: 12px;
 }
-.loading-dots > i {
-  width: var(--dot-size);
-  height: var(--dot-size);
-  flex: 0 0 var(--dot-size);
+.pgone-loader span {
+  display: block;
+  width: 25px;
+  height: 25px;
   border-radius: 50%;
-  background: currentColor;
-  animation: dot-bounce 920ms cubic-bezier(.45,0,.3,1) infinite;
+  background: #4169E1;
+  animation: pgone-breathe 1.65s infinite cubic-bezier(0.42, 0, 0.58, 1);
+  will-change: transform, opacity;
 }
-.loading-dots > i:nth-child(2) { animation-delay: 125ms; }
-.loading-dots > i:nth-child(3) { animation-delay: 250ms; }
-.loading-dots-large { --dot-size: 15px; --bounce: -13px; gap: 11px; min-height: 48px; color: #1647cf; }
-.loading-dots-large > i:nth-child(2) { color: #3768df; }
-.loading-dots-large > i:nth-child(3) { color: #a97004; }
-@keyframes dot-bounce {
-  0%, 70%, 100% { transform: translateY(0) scale(.84); opacity: .6; }
-  33% { transform: translateY(var(--bounce)) scale(1); opacity: 1; }
+.pgone-loader span:nth-child(1) { animation-delay: -0.44s; }
+.pgone-loader span:nth-child(2) { animation-delay: -0.22s; }
+.pgone-loader span:nth-child(3) { animation-delay: 0s; }
+@keyframes pgone-breathe {
+  0%, 100% { transform: scale(0.2); opacity: 0.55; }
+  45%, 55% { transform: scale(1.08); opacity: 1; }
 }
-@keyframes dot-pulse { 0%,65%,100% { opacity:.35; } 32% { opacity:1; } }
 .screen-loading {
   display: grid;
   place-items: center;
@@ -47,12 +41,12 @@ button.primary:not(:disabled):active, .entry-option:not(:disabled):active, .quic
 .confirmed-mark path { fill: none; stroke: #15803d; stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; stroke-dasharray: 42; animation: confirmed-draw 350ms var(--motion-ease) both; }
 @keyframes confirmed-draw { from { stroke-dashoffset: 42; } to { stroke-dashoffset: 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .loading-dots > i { animation-name:dot-pulse;animation-duration:1200ms;transform:none;will-change:opacity; }
+  .pgone-loader span { animation: none; }
   .confirmed-mark path { animation: none; }
   button, summary, .button { transition: none; }
   button:not(:disabled):active, button.primary:not(:disabled):active, .entry-option:not(:disabled):active, .quick-action:not(:disabled):active, summary:active { transform: none; }
 }
-.reduced-motion .loading-dots > i {animation-name:dot-pulse;animation-duration:1200ms;transform:none;will-change:opacity;}
+.reduced-motion .pgone-loader span {animation:none;}
 .reduced-motion .confirmed-mark path { animation:none; }
 .reduced-motion button, .reduced-motion button:not(:disabled):active, .reduced-motion button.primary:not(:disabled):active, .reduced-motion summary { transition: none; transform: none; }
 

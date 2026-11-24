@@ -7,7 +7,7 @@ export function successMark(label="Confirmed") {
 // Keep the original nodes and geometry; replace neither the label nor its listeners.
 export function busyButton(element, { showIndicator = true } = {}) {
   const previousDisabled = element.disabled;
-  const indicator = showIndicator && element.matches(".primary, .secondary, [type=submit]");
+  const indicator = showIndicator;
   let timer;
   let original;
   let overlay;
@@ -15,18 +15,21 @@ export function busyButton(element, { showIndicator = true } = {}) {
   element.disabled = true;
   if (indicator) timer = setTimeout(() => {
     if (!element.isConnected) return;
-    original = document.createElement("span");
-    original.className = "busy-original";
-    while (element.firstChild) original.append(element.firstChild);
     overlay = document.createElement("span");
     overlay.className = "busy-overlay";
     overlay.innerHTML = dots("Working");
-    element.append(original, overlay);
-  }, 160);
+    if(element.getBoundingClientRect().width<120){
+      overlay.classList.add("busy-overlay--floating");document.body.append(overlay);
+    }else{
+      original = document.createElement("span");original.className = "busy-original";
+      while (element.firstChild) original.append(element.firstChild);
+      element.append(original, overlay);
+    }
+  }, 80);
   return () => {
     clearTimeout(timer);
+    overlay?.remove();
     if (original) {
-      overlay.remove();
       while (original.firstChild) element.insertBefore(original.firstChild, original);
       original.remove();
     }

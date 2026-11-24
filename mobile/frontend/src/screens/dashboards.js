@@ -1,6 +1,6 @@
 import { icon } from "../components/icons.js";
 import { money, invoiceStatus } from "../domain/finance.js";
-import { ownerDirectOverview, readOwnerDirectOverview } from "./owner-direct-overview.js";
+import { ownerDirectOverview,ownerRentSummary, readOwnerDirectOverview } from "./owner-direct-overview.js";
 import {
   esc,
   section,
@@ -51,9 +51,6 @@ export async function ownerHomeScreen(ctx) {
   let collectionRefresh, unmounted = false;
   const rooms =
     roomsResult.status === "fulfilled" ? roomsResult.value.rooms : null;
-  const progress = Number.isFinite(m.collectionRate)
-    ? Math.max(0, Math.min(100, m.collectionRate))
-    : 0;
   return {
     title: "Home",
     nav: "ownerHome",
@@ -61,9 +58,9 @@ export async function ownerHomeScreen(ctx) {
     content:
       `<section class="dashboard-hero" data-depth><h1>Hello, ${esc(ctx.snapshot.user.fullName?.split(" ")[0]||"Owner")}</h1><p>Property overview</p><img src="illustration-royal-residence.webp" alt="" draggable="false"></section><div class="property-context"><button data-route="properties">${icon("building")}<span>${esc(d.property.name)}</span>${icon("down")}</button>${button("Refresh", { action: "reload", kind: "secondary", glyph: "refresh" })}</div>` +
       periodControl(ctx.snapshot.period) +
-      `<section class="financial-summary" aria-label="Monthly collection"><div class="summary-top"><span>Rent collected</span>${direct?.summary.proofCount
-        ? button(`${direct.summary.proofCount} to review`, {route:"ownerDirectOverview",params:{view:"proofs"},kind:"collection-review-link"})
-        : `<span>${icon("wallet")}</span>`}</div><div class="financial-amount">${money(m.totalCollectedPaise)}</div><p>of ${money(m.totalExpectedPaise)} expected</p><div class="collection-track" role="progressbar" aria-label="Rent collection" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span style="width:${progress}%"></span></div><div class="summary-bottom"><span><small>Outstanding</small><strong>${money(m.pendingTotalPaise)}</strong></span><span><small>Collected</small><strong>${Number.isFinite(m.collectionRate) ? `${m.collectionRate}%` : "—"}</strong></span></div></section>` +
+      ownerRentSummary(m,direct?.summary) +
+      (direct ? ownerDirectOverview(direct, ctx.snapshot.period)
+        : directUnavailable ? notice("Payment proofs and electricity are temporarily unavailable. Refresh to try again.") : "") +
       (roomsResult.status === "rejected"
         ? notice(
             "Room totals are temporarily unavailable. Refresh to try again.",
@@ -84,8 +81,6 @@ export async function ownerHomeScreen(ctx) {
         [m.totalStudents, "Residents"],
         [m.pendingStudents, "Rent outstanding"],
       ]) +
-      (direct ? ownerDirectOverview(direct, ctx.snapshot.period, timeZone)
-        : directUnavailable ? notice("Payment proofs and electricity are temporarily unavailable. Refresh to try again.") : "") +
       section(
         "Needs attention",
         `<div class="list">${dues.length ? dues.map(i => dueRow(i, timeZone, proofsByInvoice.has(i.id))).join("") : `<p class="compact-empty">No pending dues this month.</p>`}</div>`,

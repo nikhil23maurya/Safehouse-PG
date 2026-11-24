@@ -21,19 +21,23 @@ import static org.junit.Assert.*;
 /** Native UI/adapter contracts, not a claim of merchant-authorized bank acceptance. */
 @RunWith(AndroidJUnit4.class)
 public class PlanCheckoutTest {
-    @Test public void nativeBubblesMoveWithSystemAnimationsDisabledAndStopOnDetach() throws Exception {
+    @Test public void nativeBubblesBreatheAtNormalMotionAndStopOnDetach() throws Exception {
+        String prior=android.provider.Settings.Global.getString(instrumentation.getTargetContext().getContentResolver(),android.provider.Settings.Global.ANIMATOR_DURATION_SCALE);
+        try(android.os.ParcelFileDescriptor command=instrumentation.getUiAutomation().executeShellCommand("settings put global animator_duration_scale 1")){new java.io.FileInputStream(command.getFileDescriptor()).readAllBytes();}
         MainActivity activity=start();final BouncingDotsView[] bubbles={null};final FrameLayout[] host={null};
+        try{
         instrumentation.runOnMainSync(()->{
             host[0]=(FrameLayout)((android.view.ViewGroup)activity.findViewById(android.R.id.content)).getChildAt(0);
-            bubbles[0]=new BouncingDotsView(activity);host[0].addView(bubbles[0],new FrameLayout.LayoutParams(180,100));
+            bubbles[0]=new BouncingDotsView(activity);host[0].addView(bubbles[0],new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,200));
         });
         java.util.HashSet<String> frames=new java.util.HashSet<>();
         for(int frame=0;frame<6;frame++){
             android.os.SystemClock.sleep(130);final String[] sampled={null};
-            instrumentation.runOnMainSync(()->{String value="";assertEquals(3,bubbles[0].getChildCount());for(int dot=0;dot<3;dot++){View view=bubbles[0].getChildAt(dot);value+=Math.round(view.getAlpha()*100)+":"+Math.round(view.getTranslationY()*100)+",";}sampled[0]=value;});frames.add(sampled[0]);
+            instrumentation.runOnMainSync(()->{String value="";assertEquals(3,bubbles[0].getChildCount());for(int dot=0;dot<3;dot++){View view=bubbles[0].getChildAt(dot);assertEquals(0f,view.getTranslationY(),.001f);value+=Math.round(view.getAlpha()*100)+":"+Math.round(view.getScaleX()*100)+",";}sampled[0]=value;});frames.add(sampled[0]);
         }
         assertTrue("Loading bubbles remained static",frames.size()>2);
-        instrumentation.runOnMainSync(()->{host[0].removeView(bubbles[0]);try{java.lang.reflect.Field running=BouncingDotsView.class.getDeclaredField("running");running.setAccessible(true);assertFalse(running.getBoolean(bubbles[0]));}catch(Exception e){throw new RuntimeException(e);}activity.finish();});
+        instrumentation.runOnMainSync(()->{host[0].removeView(bubbles[0]);try{java.lang.reflect.Field running=BouncingDotsView.class.getDeclaredField("running");running.setAccessible(true);assertFalse(running.getBoolean(bubbles[0]));}catch(Exception e){throw new RuntimeException(e);}});
+        }finally{instrumentation.runOnMainSync(activity::finish);try(android.os.ParcelFileDescriptor command=instrumentation.getUiAutomation().executeShellCommand("settings put global animator_duration_scale "+(prior==null?"0":prior))){new java.io.FileInputStream(command.getFileDescriptor()).readAllBytes();}}
     }
     @Test public void ownerRentUsesOAuthContextAndSeparateNativeState() throws Exception {
         MainActivity activity=start();final JSONObject[] submitted={null};final PlanUpiCheckout[] rent={null};
