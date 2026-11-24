@@ -237,17 +237,27 @@ button[aria-busy=true] {opacity:1;}
 .direct-collection-row fieldset { min-width: 0; margin: 8px 0 0; padding: 0; border: 0; }
 .collection-review-link { min-height: 36px; padding: 5px 10px; border-radius: 10px; background: #fff3df; color: #794813; font-size: 12px; }
 
-/* The selected PGOne guide belongs to role selection; other artwork is unchanged. */
-.entry-page {padding:22px 24px 24px;}
-.entry-page .entry-heading {margin-top:22px;}
-.entry-page .entry-heading h1 {font-size:clamp(32px,9vw,39px);line-height:1.1;}
-.entry-portrait {flex:1;min-height:220px;margin:12px 0 20px;display:flex;align-items:center;justify-content:center;}
-.entry-portrait .entry-guide {width:100%;max-width:360px;height:min(43dvh,380px);margin:0;object-fit:contain;object-position:center;animation:none;filter:none;}
-.entry-page .entry-options {gap:11px;margin-top:0;}
-.entry-page .entry-option {min-height:78px;padding:14px 16px;border-radius:20px;}
-.entry-page .entry-option strong {font-size:19px;}
-.entry-page .entry-option small {font-size:11px;}
-@media(max-height:700px){.entry-page{padding:16px 22px}.entry-page .entry-heading{margin-top:14px}.entry-page .entry-heading h1{font-size:30px}.entry-portrait{min-height:170px;margin:4px 0 8px}.entry-portrait .entry-guide{height:min(40dvh,280px)}.entry-page .entry-option{min-height:72px;padding:12px 14px}}
+/* One framed scene, one purpose and two clear next steps. */
+.entry-welcome {padding:24px 24px max(24px,env(safe-area-inset-bottom));background:radial-gradient(ellipse at 50% 32%,#edf3ff,transparent 55%),#f8faff;}
+.entry-welcome::before {display:none;}
+.entry-welcome header {display:flex;align-items:center;justify-content:space-between;height:44px;flex:0 0 44px;}
+.entry-welcome .brand {font-size:27px;}
+.entry-welcome .brand-mark {width:36px;height:36px;flex-basis:36px;}
+.entry-welcome .entry-signin {min-height:42px;padding:8px 0 8px 16px;font-size:13px;box-shadow:none;background:transparent;border:0;}
+.entry-welcome .entry-portrait {flex:1 1 280px;min-height:190px;max-height:350px;margin:20px -8px 8px;display:flex;align-items:center;justify-content:center;}
+.entry-welcome .entry-guide {width:100%;max-width:400px;height:100%;max-height:330px;object-fit:contain;object-position:center;margin:0;animation:none;filter:none;}
+.entry-welcome .entry-heading {text-align:center;margin:8px 0 22px;}
+.entry-welcome .entry-heading h1 {max-width:none;font-size:34px;line-height:1.13;letter-spacing:-1.25px;}
+.entry-welcome .entry-heading p {margin-top:11px;font-size:13px;line-height:1.5;font-weight:450;color:#63738c;letter-spacing:0;text-transform:none;}
+.entry-role-group {margin-top:auto;}
+.entry-role-label {text-align:center;font-size:11px;font-weight:600;color:#78869c;margin-bottom:10px;}
+.entry-welcome .entry-options {gap:10px;margin-top:0;}
+.entry-welcome .entry-option {min-height:76px;padding:14px 16px;border-radius:18px;}
+.entry-welcome .entry-option strong {font-size:18px;letter-spacing:-.4px;}
+.entry-welcome .entry-option small {font-size:11px;}
+.entry-welcome .entry-option > svg {width:19px;height:19px;padding:0;background:transparent;border-radius:0;}
+.entry-welcome .owner-entry::before {display:none;}
+@media(max-height:700px){.entry-welcome{padding:16px 22px}.entry-welcome .entry-portrait{min-height:150px;max-height:200px;margin:12px -8px 4px}.entry-welcome .entry-heading{margin:4px 0 16px}.entry-welcome .entry-heading h1{font-size:28px}.entry-welcome .entry-heading p{font-size:12px;margin-top:8px}.entry-welcome .entry-option{min-height:67px;padding:10px 14px}.entry-role-label{margin-bottom:8px}}
 
 .rent-status-summary {padding:20px;border-radius:22px;}
 .rent-status-summary .summary-top svg {width:20px;height:20px;}

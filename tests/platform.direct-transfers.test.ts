@@ -199,9 +199,9 @@ test("actual authenticated HTTP routes keep proof private and issue a split rece
   assert.equal(queue.summary.electricityCollectedPaise,0);
   const photo=await req(`/evidence/${f.proof.id}`,owner.accessToken);assert.equal(photo.status,200);assert.equal(photo.headers.get("content-type"),"image/jpeg");assert.match(photo.headers.get("cache-control")!,/no-store/);
   assert.equal((await req(`/transfers/${transferId}/review`,resident.accessToken,{proofId:proof.id,approve:true,bankChecked:true})).status,403);
-  assert.equal((await req(`/transfers/${transferId}/review`,owner.accessToken,{proofId:proof.id,approve:true,bankChecked:true})).status,400);
+  assert.equal((await req(`/transfers/${transferId}/review`,owner.accessToken,{proofId:proof.id,approve:true})).status,400);
   const reconciliation={year:2026,month:11,amountPaise:915124,bankChecked:true,payments:[
-   {transferId,proofId:proof.id,bankReference:"123456789012"},
+   {transferId,proofId:proof.id},
   ]};
   assert.equal((await req("/owner/reconcile",resident.accessToken,reconciliation)).status,403);
   assert.equal((await req("/owner/reconcile",otherOwner.accessToken,reconciliation)).status,409);

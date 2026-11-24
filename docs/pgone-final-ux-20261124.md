@@ -33,13 +33,25 @@ The migration only removes the approved-proof UTR requirement; it keeps existing
 reviewer/time, state, receipt, allocation and unique-key constraints and does not
 rewrite historical financial records.
 
-The role-selection artwork uses the user-selected man holding a phone, edited
-with the current PGOne logo. The source was generated with the built-in image
-tool, then converted to a bounded WebP retaining alpha. Other screen artwork is
-unchanged. Project asset: mobile/frontend/src/assets/illustrations/pgone-guide.webp.
-Generation direction: one welcoming Indian PG manager in a navy overshirt,
-holding a single front-facing phone; current blue house/bed, golden windows and
-swoosh, PGOne wordmark on white; preserve the character, pose and transparency.
+The original waist-up cutout was rejected in preview. The replacement is a
+complete seated manager-and-phone scene, with feet/base visible and the current
+PGOne logo. The source was generated with the built-in image tool, then converted
+to a bounded WebP retaining alpha. It uses containment rather than a cropped
+portrait. The header offers the existing Sign in route; role actions remain
+direct and grouped. Other screen artwork is unchanged. Project asset:
+mobile/frontend/src/assets/illustrations/pgone-guide.webp.
+Generation direction: one welcoming Indian PG manager in a navy shirt and ivory
+trousers, whole body and feet visible, seated beside a front-facing phone; current
+blue house/bed, golden windows and swoosh, PGOne wordmark on white; compact scene
+on transparency, no fake financial figures.
+
+The welcome composition follows the guidance to show value before actions, avoid
+unnecessary onboarding steps, group related controls, preserve a direct sign-in
+path and account for different screen sizes. The illustration style is a product
+design choice, not a claim that these sources prescribe particular artwork:
+https://developer.android.com/design/ui/mobile/guides/patterns/onboarding
+https://developer.android.com/design/ui/mobile/guides/layout-and-content/layout-basics
+https://www.nngroup.com/articles/mobile-app-onboarding/
 
 The launcher display name is PGOne. Package identity, debug/release identity and
 signing compatibility remain explicit in build metadata. Changing the display
