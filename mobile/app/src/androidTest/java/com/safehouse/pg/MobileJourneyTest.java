@@ -396,11 +396,12 @@ public class MobileJourneyTest {
         await("!document.querySelector('[data-proof-upload]').hidden");screenshot("61-direct-attach-proof");
         assertEquals("Manual direct rent must never start a UPI intent",0,upiMonitor.getHits());
         instrumentation.removeMonitor(upiMonitor);
-        js("document.querySelector('[name=reference]').value='123456789012'");
+        assertEquals("Screenshot upload has no resident transaction-reference input", "false",
+                js("Boolean(document.querySelector('[data-form=transferProof] [name=reference]'))"));
         tapFileInput("[name=proof]");
         await("document.querySelector('[name=proof]').files.length===1");
         js("document.querySelector('[data-form=transferProof]').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))");
-        await("document.querySelector('#main h1')?.textContent==='Proof submitted'");screenshot("62-direct-owner-review-pending");
+        await("document.querySelector('#main h1')?.textContent==='Payment submitted'");screenshot("62-direct-owner-review-pending");
         assertTrue("The native image picker must service both uploads",photoMonitor.getHits()>=2);
         assertEquals("A screenshot must never confirm a bank credit","false",js("Boolean(document.querySelector('[data-action=transferReceipt]'))"));
         instrumentation.removeMonitor(photoMonitor);

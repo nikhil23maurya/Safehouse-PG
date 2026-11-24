@@ -10,7 +10,7 @@ import {pendingDirect,saveDirect} from "../payments/direct-return.js";
 const base="/api/platform/direct-payments";
 const image=(id,label)=>id?`<figure class="evidence-photo"><figcaption>${esc(label)}</figcaption><img data-evidence-id="${esc(id)}" alt="${esc(label)}" hidden></figure>`:"";
 const split=(t,showTotal=true)=>`<dl class="transfer-breakdown">${t.rentPaise?`<div><dt>Rent / invoice charges</dt><dd>${money(t.rentPaise)}</dd></div>`:""}${t.electricityPaise?`<div><dt>Electricity</dt><dd>${money(t.electricityPaise)}</dd></div>`:""}${showTotal?`<div class="transfer-total"><dt>Total</dt><dd>${money(t.amountPaise)}</dd></div>`:""}</dl>`;
-const labels={READY:"Proof not uploaded",SUBMITTED:"Owner confirmation pending",REJECTED:"Correction requested",CONFIRMED:"Owner confirmed",CANCELLED:"Cancelled — no debit"};
+const labels={READY:"Proof not uploaded",SUBMITTED:"Awaiting bank confirmation",REJECTED:"Correction requested",CONFIRMED:"Paid",CANCELLED:"Cancelled — no debit"};
 const proofStatus = t => badge(labels[t.status], t.status === "CONFIRMED" ? "green" : t.status === "READY" ? "" : "amber");
 const imageTypes = 'accept="image/jpeg,image/png,image/webp"';
 const payee = t => `<div class="transfer-payee"><span class="transfer-icon">${icon("wallet")}</span><div><small>Pay directly to</small><strong>${esc(t.payeeName)}</strong><span class="payee-address">${esc(t.payeeAddress || t.upiAddress)}</span></div></div>`;
@@ -57,7 +57,7 @@ export async function transferProofScreen(ctx){
   document.querySelector("[data-proof-title]")?.focus();
  }
 
- const pageTitle = t.status==="CONFIRMED"?"Payment confirmed":t.status==="SUBMITTED"?"Proof submitted":returned||t.status==="REJECTED"?"Attach payment proof":"Rent payment";
+ const pageTitle = t.status==="CONFIRMED"?"Payment confirmed":t.status==="SUBMITTED"?"Payment submitted":returned||t.status==="REJECTED"?"Attach payment proof":"Rent payment";
  const amountLabel = t.status==="READY"&&intent&&!returned?"Amount due":"Payment amount";
  return {title:"Rent payment",back:true,nav:false,guardForm:true,contentClass:"direct-payment rent-payment-review",
  content:`<section class="rent-payment-hero">
@@ -73,23 +73,21 @@ export async function transferProofScreen(ctx){
     ${intent?card(manualUpiInstructions(t,ctx.native.has("chooseUpiApp")),"transfer-card rent-upi-card"):""}
     <section class="card transfer-card rent-upload-action">
       <span class="transfer-icon">${icon("image")}</span>
-      <div><h2>Already paid?</h2><p>Screenshot and UTR</p></div>
+      <div><h2>Already paid?</h2><p>Payment screenshot</p></div>
       ${button("Upload payment proof",{action:"attachTransferProof",kind:"primary block",glyph:"arrow"})}
     </section>
   </div>`:"")+
   (["READY","REJECTED"].includes(t.status)?`<section class="card transfer-card proof-card" data-proof-upload ${t.status==="READY"&&!returned?"hidden":""}>
     <span class="transfer-icon">${icon("image")}</span><h2 data-proof-title tabindex="-1">Attach your payment proof</h2>
     ${proof?.reason?notice(proof.reason):""}
-    <p class="transfer-note">If money was debited, check the transaction in your UPI app and attach its screenshot and UTR here.</p>
     <form data-form="transferProof" novalidate><div class="form-error" role="alert"></div>
-      ${field("reference","UTR / transaction reference",{required:true,value:proof?.bankReference||"",attrs:'minlength="6" maxlength="40" autocomplete="off"',help:"Find this under the completed transaction in your UPI app."})}
-      ${field("proof","Payment screenshot",{type:"file",required:true,attrs:imageTypes,help:"Choose your screenshot from Photos or Files."})}
+      ${field("proof","Payment screenshot",{type:"file",required:true,attrs:imageTypes,help:"Attach the completed payment from your UPI app."})}
       ${button("Submit payment proof",{type:"submit",kind:"primary block",glyph:"send"})}
     </form>
     ${t.status==="READY"&&intent?button("View payment instructions",{action:"showPaymentInstructions",kind:"text-button block"}):""}
   </section>`:"")+
   (t.status==="SUBMITTED"?notice("Your owner will check the bank credit before confirming payment."):"")+
-  (proof?card(`<h2>Submitted evidence</h2><p class="transfer-note">Bank reference: ${esc(proof.bankReference)}</p>${image(proof.evidenceId,"Payment screenshot")}`,"transfer-card"):"")+
+  (proof?card(`<h2>Submitted evidence</h2>${proof.bankReference?`<p class="transfer-note">Bank reference: ${esc(proof.bankReference)}</p>`:""}${image(proof.evidenceId,"Payment screenshot")}`,"transfer-card"):"")+
   (t.status==="CONFIRMED"?button("Download receipt",{action:"transferReceipt",kind:"primary block",glyph:"download"}):"")+
   `<details class="disclosure rent-payment-help"><summary>${icon("shield")} Payment help</summary>
     <p>If money was debited or the transaction is pending, check its status in your UPI app before taking any further action.</p>
@@ -131,7 +129,7 @@ export async function transferProofScreen(ctx){
    return copyPaymentDetail(ctx, name, fresh.transfer);
   }
  },
- async submit(name,form){if(name!=="transferProof")return;const v=formValues(form),saved=await uploadEvidence(ctx,form.elements.proof.files[0],"PAYMENT");await ctx.api(`${base}/transfers/${t.id}/proof`,{method:"POST",body:{evidenceId:saved.id,bankReference:v.reference.trim(),key:proofKey}});ctx.markSaved();ctx.invalidate();return ctx.reload();}
+ async submit(name,form){if(name!=="transferProof")return;const saved=await uploadEvidence(ctx,form.elements.proof.files[0],"PAYMENT");await ctx.api(`${base}/transfers/${t.id}/proof`,{method:"POST",body:{evidenceId:saved.id,key:proofKey}});ctx.markSaved();ctx.invalidate();return ctx.reload();}
  };
 }
 export async function ownerTransferReviewScreen(ctx){
@@ -139,12 +137,28 @@ export async function ownerTransferReviewScreen(ctx){
  return {title:"Review payment",back:true,nav:false,guardForm:true,financialMutation:true,contentClass:"direct-payment",
  content:heading("",resident.name,`${resident.room?`Room ${resident.room} · `:""}${month(invoice.year,invoice.month)}`)+card(`${proofStatus(t)}${split(t)}${payee(t)}`,"transfer-card transfer-receipt")+
   (bill?card(`<h2>Electricity bill</h2><p class="transfer-note">Resident-entered amount: ${money(bill.amountPaise)}</p>${image(bill.meterEvidenceId,"Meter photo")}`):"")+
-  t.proofs.map(p=>card(`<h2>Payment proof</h2><p>UTR: ${esc(p.bankReference)}</p>${badge(p.status)}${p.reason?`<p>${esc(p.reason)}</p>`:""}${image(p.evidenceId,"Payment screenshot")}`)).join("")+
-  (proof?`<form class="card transfer-card" data-form="reviewTransfer" novalidate><h2>Confirm bank credit</h2><div class="form-error" role="alert"></div><label class="bank-check"><input name="bankChecked" type="checkbox" required>I checked the bank credit, payee and full amount${t.electricityPaise?", and reviewed the electricity amount and meter photo":""}.</label>${t.rentPaise?`<details class="disclosure"><summary>Already recorded this rent?</summary>${field("existingRentReceipt","Existing rent receipt number",{help:"Only if this exact rent portion was already recorded manually. It will be linked without another credit.",attrs:'maxlength="100"'})}</details>`:""}${button("Confirm received payment",{type:"submit",kind:"primary block"})}</form><details class="disclosure"><summary>Request a correction</summary><form data-form="rejectTransfer" novalidate><div class="form-error" role="alert"></div>${field("reason","What needs correcting?",{type:"textarea",required:true,attrs:'maxlength="500"'})}${button("Return proof for correction",{type:"submit",kind:"secondary block"})}</form></details>`:"")+
+  t.proofs.map(p=>card(`<h2>Payment proof</h2>${p.bankReference?`<p>Bank reference: ${esc(p.bankReference)}</p>`:""}${badge(p.status)}${p.reason?`<p>${esc(p.reason)}</p>`:""}${image(p.evidenceId,"Payment screenshot")}`)).join("")+
+  (proof?`<form class="card transfer-card" data-form="reviewTransfer" novalidate>
+    <h2>Confirm bank credit</h2><div class="form-error" role="alert"></div>
+    ${proof.bankReference?"":field("bankReference","Bank transaction reference",{required:true,attrs:'minlength="6" maxlength="40" autocomplete="off"'})}
+    <label class="bank-check"><input name="bankChecked" type="checkbox" required>I checked the bank credit, payee and full amount${t.electricityPaise?", and reviewed the electricity bill":""}.</label>
+    ${t.rentPaise?`<details class="disclosure"><summary>Already recorded this rent?</summary>${field("existingRentReceipt","Existing rent receipt number",{help:"Only if this exact rent portion was already recorded manually. It will be linked without another credit.",attrs:'maxlength="100"'})}</details>`:""}
+    ${button("Confirm received payment",{type:"submit",kind:"primary block"})}</form>
+    <details class="disclosure"><summary>Request a correction</summary><form data-form="rejectTransfer" novalidate><div class="form-error" role="alert"></div>${field("reason","What needs correcting?",{type:"textarea",required:true,attrs:'maxlength="500"'})}${button("Return proof for correction",{type:"submit",kind:"secondary block"})}</form></details>`:"")+
   (t.status==="CONFIRMED"?button("Download receipt",{action:"transferReceipt",kind:"primary block"}):""),
  mount(){void images.mount();},unmount(){images.unmount();},
  async action(name){if(name==="transferReceipt")return ctx.downloadAccountReceipt(`${base}/transfers/${t.id}/receipt.pdf`,t.receiptNumber);},
- async submit(name,form){const v=formValues(form),approve=name==="reviewTransfer";if(approve&&!await ctx.confirm({title:"Confirm bank credit?",message:`Record ${money(t.amountPaise)} received from ${resident.name}. Rent ${money(t.rentPaise)}; electricity ${money(t.electricityPaise)}.`,confirmLabel:"Confirm received"}))return;await ctx.api(`${base}/transfers/${t.id}/review`,{method:"POST",body:{proofId:proof.id,approve,...(approve?{bankChecked:v.bankChecked==="on",...(v.existingRentReceipt?.trim()?{existingRentReceipt:v.existingRentReceipt.trim()}:{})}:{reason:v.reason.trim()})}});ctx.markSaved();ctx.invalidate();ctx.toast(approve?"Payment confirmed. Receipt created.":"Correction requested. No money was credited.");return ctx.reload();}
+ async submit(name,form){
+  if(name!=="reviewTransfer"&&name!=="rejectTransfer")return;
+  const v=formValues(form),approve=name==="reviewTransfer";
+  if(approve&&v.bankChecked!=="on")throw new Error("Check the bank credit before confirming this payment.");
+  await ctx.api(`${base}/transfers/${t.id}/review`,{method:"POST",body:{proofId:proof.id,approve,...(approve?{bankChecked:true,
+    ...(v.bankReference?.trim()?{bankReference:v.bankReference.trim()}:{}),
+    ...(v.existingRentReceipt?.trim()?{existingRentReceipt:v.existingRentReceipt.trim()}:{})}:{reason:v.reason.trim()})}});
+  ctx.markSaved();ctx.invalidate();
+  ctx.toast(approve?"Payment confirmed. Receipt created.":"Correction requested.");
+  return ctx.reload();
+ }
  };
 }
 export function transferList(rows,owner=false){return rows.map(t=>card(`<div class="campaign-head"><div><h3>${esc(owner?t.resident||"Resident":t.electricityPaise?"Rent & electricity":"Rent payment")}</h3><p>${date(t.confirmedAt||t.createdAt)}</p></div>${badge(labels[t.status]||"Owner confirmed",t.status==="CONFIRMED"?"green":"amber")}</div>${split(t)}${button(owner?"Review payment":"View payment",{route:owner?"ownerTransferReview":"transferProof",params:{id:t.id,invoiceId:t.invoiceId},kind:"secondary block"})}`)).join("");}

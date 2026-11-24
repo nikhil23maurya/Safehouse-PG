@@ -9,7 +9,7 @@ const {prisma}=await import("../src/db.js");
 const {registerEmail}=await import("../src/platform/email-auth.js");
 const {saveProfile,createProperty}=await import("../src/platform/service.js");
 const {storeEvidence,readEvidence,evidenceImage}=await import("../src/platform/rent-evidence.js");
-const {saveElectricity,prepareTransfer,submitProof,reviewTransfer,cancelTransfer,transferPage,transferDetail,ownerTransfers}=await import("../src/platform/direct-transfers.js");
+const {saveElectricity,prepareTransfer,submitProof,reviewTransfer,cancelTransfer,transferPage,transferDetail,ownerTransfers,reconcileTransfers}=await import("../src/platform/direct-transfers.js");
 after(async()=>{await prisma.$disconnect();});
 // A minimal JPEG structure used only for byte/size/metadata validation; browser
 // and native tests use real decodable images from the browser's JPEG encoder.
@@ -57,6 +57,33 @@ test("separate electricity payment does not wait for the rent proof to be approv
  const e=await f.prepare(false,true),ep=await f.submit(e.id);await f.confirm(e.id,ep.id);
  assert.equal((await prisma.rentInvoice.findUniqueOrThrow({where:{id:f.invoice.id}})).paidPaise,0);await f.confirm(r.id,rp.id);
  assert.equal((await prisma.pgElectricityBill.findUniqueOrThrow({where:{invoiceId:f.invoice.id}})).status,"PAID");
+});
+test("screenshot-only payments reconcile atomically against an exact bank total and individual references",async()=>{
+ const f=await fixture();
+ await f.electricity();
+ const rent=await f.prepare(),electricity=await f.prepare(false,true);
+ const proof=async(transferId:string)=>submitProof(f.resident.id,f.member.id,transferId,{evidenceId:f.proof.id,key:crypto.randomUUID()});
+ const rentProof=await proof(rent.id),electricityProof=await proof(electricity.id);
+ assert.equal(rentProof.bankReference,null);
+ await assert.rejects(()=>f.confirm(rent.id,rentProof.id),{code:"BANK_REFERENCE_REQUIRED"});
+ const input={year:2026,month:11,amountPaise:915124,bankChecked:true as const,payments:[
+  {transferId:rent.id,proofId:rentProof.id,bankReference:"111111111111"},
+  {transferId:electricity.id,proofId:electricityProof.id,bankReference:"222222222222"},
+ ]};
+ const reconcile=(value=input)=>reconcileTransfers(f.owner.id,f.pg.propertyId,value);
+ await assert.rejects(()=>reconcile({...input,month:10}),{code:"RECONCILIATION_CHANGED"});
+ await assert.rejects(()=>reconcile({...input,amountPaise:915123}),{code:"RECONCILIATION_TOTAL_MISMATCH"});
+ await assert.rejects(()=>reconcile({...input,payments:[input.payments[0]!,{...input.payments[1]!,proofId:"wrong-proof"}]}),{code:"PROOF_NOT_FOUND"});
+ assert.equal(await prisma.payment.count({where:{invoiceId:f.invoice.id}}),0);
+ assert.equal((await prisma.pgElectricityBill.findUniqueOrThrow({where:{invoiceId:f.invoice.id}})).status,"DUE");
+ await assert.rejects(()=>reconcile({...input,payments:[input.payments[0]!,{...input.payments[1]!,bankReference:"111111-111111"}]}),{code:"DUPLICATE_BANK_REFERENCE"});
+ const result=await reconcile();
+ assert.deepEqual(result,{confirmedCount:2,amountPaise:915124});
+ assert.deepEqual(await reconcile(),result);
+ assert.equal(await prisma.payment.count({where:{invoiceId:f.invoice.id}}),1);
+ assert.equal((await prisma.pgElectricityBill.findUniqueOrThrow({where:{invoiceId:f.invoice.id}})).status,"PAID");
+ assert.equal((await prisma.pgTransferProof.findUniqueOrThrow({where:{id:rentProof.id}})).bankReference,"111111111111");
+ assert.equal(await prisma.pgAudit.count({where:{action:"DIRECT_TRANSFERS_RECONCILED",entityId:rent.id}}),1);
 });
 test("evidence, bill, proof and owner review are tenant/resident scoped; unattached uploads stay private",async()=>{
  const f=await fixture(),g=await fixture();
@@ -119,7 +146,9 @@ test("electricity amounts reject negative, fractional-paise and excessive values
 test("actual authenticated HTTP routes keep proof private and issue a split receipt only after owner confirmation",async()=>{
  const f=await fixture(),g=await fixture();await prisma.pgOrganisation.update({where:{id:f.pg.organisationId},data:{legacyAccess:true}});
  const {membershipTokens}=await import("../src/platform/service.js");const {directTransferRouter}=await import("../src/platform/direct-transfer-router.js");
- const resident=await membershipTokens(f.resident.id,f.member.id),owner=await membershipTokens(f.owner.id,f.own.id),other=await membershipTokens(g.resident.id,g.member.id);
+ await prisma.pgOrganisation.update({where:{id:g.pg.organisationId},data:{legacyAccess:true}});
+ const resident=await membershipTokens(f.resident.id,f.member.id),owner=await membershipTokens(f.owner.id,f.own.id),
+  other=await membershipTokens(g.resident.id,g.member.id),otherOwner=await membershipTokens(g.owner.id,g.own.id);
  const app=express();app.use(express.json({limit:"1mb"}));app.use("/api/platform/direct-payments",directTransferRouter);
  app.use((e:any,_req:any,res:any,_next:any)=>res.status(e instanceof ZodError?400:e.statusCode||500).json({error:{code:e.code,message:e.message}}));
  const server=app.listen(0,"127.0.0.1");await new Promise<void>(r=>server.on("listening",r));const origin=`http://127.0.0.1:${(server.address() as any).port}/api/platform/direct-payments`;
@@ -127,13 +156,26 @@ test("actual authenticated HTTP routes keep proof private and issue a split rece
  try{
   assert.equal((await req(`/evidence/${f.meter.id}`)).status,401);assert.equal((await req(`/evidence/${f.meter.id}`,other.accessToken)).status,404);
   const bill=await req(`/invoices/${f.invoice.id}/electricity`,resident.accessToken,{amountPaise:65025,meterEvidenceId:f.meter.id});assert.equal(bill.status,200);
+  const overview=`/owner/overview?year=2026&month=11&due=${f.invoice.id}`;
+  assert.equal((await req(overview,resident.accessToken)).status,403);
+  const electricity=await req(`${overview}&view=electricity`,owner.accessToken);assert.equal(electricity.status,200);
+  const unpaid:any=await electricity.json();assert.equal(unpaid.bills[0].amountPaise,65025);assert.equal(unpaid.bills[0].meterEvidenceId,f.meter.id);assert.equal(unpaid.summary.electricityCollectedPaise,0);
+  const outside:any=await (await req(overview,otherOwner.accessToken)).json();assert.equal(outside.summary.electricityBilledPaise,0);
   const spoof=await req(`/invoices/${f.invoice.id}/transfers`,resident.accessToken,{rent:true,electricity:true,key:crypto.randomUUID(),amountPaise:1,payeeAddress:"attacker@invalid"});assert.equal(spoof.status,400);
   const prepare=await req(`/invoices/${f.invoice.id}/transfers`,resident.accessToken,{rent:true,electricity:true,key:crypto.randomUUID()});assert.equal(prepare.status,200);const {transferId}=await prepare.json() as any;
   assert.equal((await req(`/transfers/${transferId}/receipt.pdf`,resident.accessToken)).status,409);
-  const submitted=await req(`/transfers/${transferId}/proof`,resident.accessToken,{bankReference:"123456789012",evidenceId:f.proof.id,key:crypto.randomUUID()});assert.equal(submitted.status,200);const {proof}=await submitted.json() as any;
+  const submitted=await req(`/transfers/${transferId}/proof`,resident.accessToken,{evidenceId:f.proof.id,key:crypto.randomUUID()});assert.equal(submitted.status,200);const {proof}=await submitted.json() as any;assert.equal(proof.bankReference,null);
+  const queueResponse=await req(overview,owner.accessToken);assert.equal(queueResponse.status,200);
+  const queue:any=await queueResponse.json();assert.deepEqual(queue.rentProofInvoiceIds,[f.invoice.id]);
+  assert.equal(queue.proofs[0].id,transferId);assert.equal(queue.proofs[0].evidenceId,f.proof.id);
+  assert.equal(queue.summary.rentSubmittedPaise,850099);assert.equal(queue.summary.electricitySubmittedPaise,65025);
+  assert.equal(queue.summary.electricityCollectedPaise,0);
   const photo=await req(`/evidence/${f.proof.id}`,owner.accessToken);assert.equal(photo.status,200);assert.equal(photo.headers.get("content-type"),"image/jpeg");assert.match(photo.headers.get("cache-control")!,/no-store/);
   assert.equal((await req(`/transfers/${transferId}/review`,resident.accessToken,{proofId:proof.id,approve:true,bankChecked:true})).status,403);
-  assert.equal((await req(`/transfers/${transferId}/review`,owner.accessToken,{proofId:proof.id,approve:true,bankChecked:true})).status,200);
+  assert.equal((await req(`/transfers/${transferId}/review`,owner.accessToken,{proofId:proof.id,approve:true,bankChecked:true})).status,400);
+  assert.equal((await req(`/transfers/${transferId}/review`,owner.accessToken,{proofId:proof.id,approve:true,bankChecked:true,bankReference:"123456789012"})).status,200);
+  const confirmed:any=await (await req(overview,owner.accessToken)).json();
+  assert.equal(confirmed.summary.proofCount,0);assert.equal(confirmed.summary.electricityCollectedPaise,65025);
   const receipt=await req(`/transfers/${transferId}/receipt.pdf`,resident.accessToken);assert.equal(receipt.status,200);assert.equal(receipt.headers.get("content-type"),"application/pdf");assert.ok(Buffer.from(await receipt.arrayBuffer()).subarray(0,5).equals(Buffer.from("%PDF-")));
  }finally{server.closeAllConnections();await new Promise<void>(r=>server.close(()=>r()));}
 });

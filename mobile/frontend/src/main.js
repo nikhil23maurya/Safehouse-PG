@@ -11,6 +11,7 @@ import {rentCheckout} from "./payments/rent.js";
 import {enhanceExperience} from "./components/experience.js";
 import {rentPaymentEntry} from "./screens/owner-rent.js";
 import {ownerCollectionsScreen} from "./screens/owner-collections.js";
+import {ownerDirectOverviewScreen} from "./screens/owner-direct-overview.js";
 import {rentVerificationScreen,rentSuccessScreen,rentVerificationMarkup} from "./screens/rent-verification.js";
 import {
   state,
@@ -128,6 +129,7 @@ const routes = {
   transferProof:[transferProofScreen,"STUDENT"],
   ownerTransferReview:[ownerTransferReviewScreen,"OWNER"],
   ownerDirectRent: [ownerDirectRentScreen,"OWNER"],
+  ownerDirectOverview: [ownerDirectOverviewScreen,"OWNER"],
   invoice: [invoiceScreen, "BOTH"],
   profile: [ctx=>unassignedResident(ctx.snapshot)?unassignedProfileScreen(ctx):profileScreen(ctx), "BOTH"],
   notifications: [notificationsScreen, "BOTH"],

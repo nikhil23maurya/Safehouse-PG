@@ -6,6 +6,7 @@ import {atomic,audit} from "./service.js";
 import {directIntent,directClaimIssue} from "./direct-rent.js";
 import {residentContext,ownerContext} from "./rent-evidence.js";
 import {randomCode} from "./tokens.js";
+import type {Prisma} from "../generated/prisma/client.js";
 
 const transferSelect={id:true,invoiceId:true,billId:true,rentClaimId:true,rentPaise:true,electricityPaise:true,amountPaise:true,payeeAddress:true,payeeName:true,payeeRevision:true,reference:true,status:true,receiptNumber:true,rentPaymentId:true,createdAt:true,confirmedAt:true};
 const proofSelect={id:true,bankReference:true,evidenceId:true,status:true,reason:true,createdAt:true};
@@ -64,14 +65,24 @@ export async function prepareTransfer(accountId:string,membershipId:string,invoi
     await audit(tx,accountId,member.organisationId,"DIRECT_TRANSFER_PREPARED",transfer.id,{rentPaise,electricityPaise:transfer.electricityPaise,invoiceId});return transfer;
   });
 }
-export async function submitProof(accountId:string,membershipId:string,transferId:string,input:{bankReference:string;evidenceId:string;key:string}){
-  const reference=input.bankReference.trim().toUpperCase();assert(/^[A-Z0-9-]{6,40}$/.test(reference)&&reference.replaceAll("-","").length>=6,400,"INVALID_BANK_REFERENCE","Enter the UTR/transaction reference from your UPI app.");
+function normalizeBankReference(input: string | null | undefined) {
+  if (input == null) return null;
+  const reference = input.trim().toUpperCase();
+  assert(/^[A-Z0-9-]{6,40}$/.test(reference) && reference.replaceAll("-", "").length >= 6,
+    400, "INVALID_BANK_REFERENCE", "Enter a valid bank transaction reference.");
+  return reference;
+}
+
+export async function submitProof(accountId:string,membershipId:string,transferId:string,input:{bankReference?:string;evidenceId:string;key:string}){
+  const reference=normalizeBankReference(input.bankReference);
   return atomic(async tx=>{
     const {member}=await residentContext(tx,accountId,membershipId);
     const transfer=await tx.pgDirectTransfer.findFirst({where:{id:transferId,accountId,propertyId:member.propertyId}});
     assert(transfer,404,"TRANSFER_NOT_FOUND","Payment not found in your residency.");
     const prior=await tx.pgTransferProof.findUnique({where:{transferId_requestKey:{transferId,requestKey:input.key}}});
-    if(prior){assert(prior.bankReference===reference&&prior.evidenceId===input.evidenceId,409,"IDEMPOTENCY_CONFLICT","This submission key was already used for different evidence.");return prior;}
+    if(prior){assert(prior.evidenceId===input.evidenceId&&
+      (prior.bankReference===reference||(reference===null&&prior.status==="APPROVED")),
+      409,"IDEMPOTENCY_CONFLICT","This submission key was already used for different evidence.");return prior;}
     assert(["READY","REJECTED"].includes(transfer.status),409,"PROOF_ALREADY_SUBMITTED","Your proof is already submitted or confirmed. Refresh its status.");
     const image=await tx.pgRentEvidence.findFirst({where:{id:input.evidenceId,accountId,propertyId:member.propertyId,purpose:"PAYMENT"}});
     assert(image,400,"PAYMENT_PROOF_REQUIRED","Attach your payment screenshot.");
@@ -80,13 +91,35 @@ export async function submitProof(accountId:string,membershipId:string,transferI
     await audit(tx,accountId,member.organisationId,"DIRECT_TRANSFER_PROOF_SUBMITTED",proof.id,{transferId,providerVerified:false});return proof;
   });
 }
-export async function reviewTransfer(accountId:string,propertyId:string,transferId:string,input:{proofId:string;approve:boolean;bankChecked?:boolean;reason?:string;existingRentReceipt?:string}){
-  return atomic(async tx=>{
-    const member=await ownerContext(tx,accountId,propertyId);
+type TransferReview = {
+  proofId: string;
+  approve: boolean;
+  bankChecked?: boolean;
+  bankReference?: string;
+  reason?: string;
+  existingRentReceipt?: string;
+};
+
+export async function reviewTransfer(accountId:string,propertyId:string,transferId:string,input:TransferReview){
+  return atomic(async tx => {
+    const member = await ownerContext(tx, accountId, propertyId);
+    return reviewTransferInTransaction(tx, member, accountId, propertyId, transferId, input);
+  });
+}
+
+async function reviewTransferInTransaction(
+  tx: Prisma.TransactionClient, member: Awaited<ReturnType<typeof ownerContext>>,
+  accountId: string, propertyId: string, transferId: string, input: TransferReview,
+) {
     const transfer=await tx.pgDirectTransfer.findFirst({where:{id:transferId,propertyId}});
     assert(transfer,404,"TRANSFER_NOT_FOUND","Payment not found in this property.");
     const proof=await tx.pgTransferProof.findFirst({where:{id:input.proofId,transferId}});
     assert(proof,404,"PROOF_NOT_FOUND","Payment proof not found.");
+    const reference = input.approve ? normalizeBankReference(input.bankReference ?? proof.bankReference) : null;
+    if (input.approve && proof.bankReference && reference) {
+      assert(reference.replaceAll("-", "") === proof.bankReference.replaceAll("-", ""),
+        409, "BANK_REFERENCE_MISMATCH", "The bank reference differs from this proof. Review the payment.");
+    }
     if(transfer.status==="CONFIRMED"){assert(input.approve&&proof.status==="APPROVED",409,"REVIEW_CONFLICT","This payment already has a final confirmation.");return transfer;}
     if(proof.status==="REJECTED"&&!input.approve)return transfer;
     assert(transfer.status==="SUBMITTED"&&proof.status==="PENDING",409,"PROOF_CHANGED","Refresh the latest submitted proof.");
@@ -97,7 +130,8 @@ export async function reviewTransfer(accountId:string,propertyId:string,transfer
       await audit(tx,accountId,member.organisationId,"DIRECT_TRANSFER_PROOF_REJECTED",proof.id,{transferId});return updated;
     }
     assert(input.bankChecked===true,400,"BANK_CHECK_REQUIRED","Confirm the actual bank credit, payee, amount and meter bill before approving.");
-    const bankKey=createHash("sha256").update(`${transfer.payeeAddress.toLowerCase()}\n${proof.bankReference.replaceAll("-","")}`).digest("hex");
+    assert(reference,400,"BANK_REFERENCE_REQUIRED","Enter the transaction reference from the bank before confirming.");
+    const bankKey=createHash("sha256").update(`${transfer.payeeAddress.toLowerCase()}\n${reference.replaceAll("-","")}`).digest("hex");
     assert(!await tx.pgDirectTransfer.findUnique({where:{bankKey}}),409,"BANK_REFERENCE_USED","This bank reference already confirmed another payment to this payee.");
     const invoice=await tx.rentInvoice.findFirst({where:{id:transfer.invoiceId,propertyId,studentId:transfer.studentId}});
     assert(invoice,409,"INVOICE_CHANGED","The original invoice needs review.");
@@ -111,11 +145,11 @@ export async function reviewTransfer(accountId:string,propertyId:string,transfer
         assert(payment&&!await tx.pgDirectRentClaim.findUnique({where:{confirmedPaymentId:payment.id}}),409,"RECEIPT_MISMATCH","Select an unlinked bank receipt for this exact resident, month and rent amount.");
       }else{
         assert(invoice.status==="DUE"&&invoice.totalPaise-invoice.paidPaise===transfer.rentPaise,409,"RENT_BALANCE_CHANGED","Rent balance changed. If you already recorded it manually, enter that receipt number instead of posting again.");
-        payment=await tx.payment.create({data:{propertyId,studentId:transfer.studentId,invoiceId:invoice.id,amountPaise:transfer.rentPaise,source:"MANUAL",method:"BANK_TRANSFER",receiptNumber:receiptNumber(now),paidAt:now,metadata:{directTransferId:transferId,bankKey,bankReference:proof.bankReference,ownerConfirmed:true}}});
+        payment=await tx.payment.create({data:{propertyId,studentId:transfer.studentId,invoiceId:invoice.id,amountPaise:transfer.rentPaise,source:"MANUAL",method:"BANK_TRANSFER",receiptNumber:receiptNumber(now),paidAt:now,metadata:{directTransferId:transferId,bankKey,bankReference:reference,ownerConfirmed:true}}});
         await tx.rentInvoice.update({where:{id:invoice.id},data:{paidPaise:invoice.paidPaise+transfer.rentPaise,status:"PAID"}});
         await tx.auditLog.create({data:{propertyId,actorUserId:member.actorUserId,action:"MANUAL_PAYMENT",entityType:"RentInvoice",entityId:invoice.id,metadata:{amountPaise:transfer.rentPaise,method:"BANK_TRANSFER",directTransferId:transferId}}});
       }
-      await tx.pgDirectRentClaim.update({where:{id:claim.id},data:{status:"OWNER_CONFIRMED",bankReference:proof.bankReference,confirmedPaymentId:payment.id,confirmedAt:now}});
+      await tx.pgDirectRentClaim.update({where:{id:claim.id},data:{status:"OWNER_CONFIRMED",bankReference:reference,confirmedPaymentId:payment.id,confirmedAt:now}});
     }
     if(transfer.electricityPaise){
       const bill=await tx.pgElectricityBill.findFirst({where:{id:transfer.billId!,invoiceId:invoice.id,propertyId,status:"DUE",amountPaise:transfer.electricityPaise}});
@@ -123,9 +157,47 @@ export async function reviewTransfer(accountId:string,propertyId:string,transfer
       assert(invoice.electricityPaise===0,409,"ELECTRICITY_ALREADY_BILLED","Electricity was also added to the rent invoice. Resolve the duplicate charge before confirming.");
       await tx.pgElectricityBill.update({where:{id:bill.id},data:{status:"PAID",paidAt:now}});
     }
-    await tx.pgTransferProof.update({where:{id:proof.id},data:{status:"APPROVED",reviewerAccountId:accountId,reviewedAt:now}});
+    await tx.pgTransferProof.update({where:{id:proof.id},data:{status:"APPROVED",bankReference:reference,reviewerAccountId:accountId,reviewedAt:now}});
     const confirmed=await tx.pgDirectTransfer.update({where:{id:transferId},data:{status:"CONFIRMED",bankKey,rentPaymentId:payment?.id,receiptNumber:`PGT-${randomCode().slice(0,20)}`,confirmedAt:now}});
     await audit(tx,accountId,member.organisationId,"DIRECT_TRANSFER_BANK_CONFIRMED",transferId,{rentPaise:transfer.rentPaise,electricityPaise:transfer.electricityPaise,proofId:proof.id,rentPaymentId:payment?.id||null,providerVerified:false});return confirmed;
+}
+
+export async function reconcileTransfers(
+  accountId: string,
+  propertyId: string,
+  input: { year: number; month: number; amountPaise: number; bankChecked: true;
+    payments: { transferId: string; proofId: string; bankReference: string }[] },
+) {
+  const ids = input.payments.map(payment => payment.transferId);
+  const references = input.payments.map(payment => normalizeBankReference(payment.bankReference));
+  assert(ids.length > 0 && ids.length <= 10 && new Set(ids).size === ids.length,
+    400, "INVALID_RECONCILIATION", "Select up to 10 different payments to reconcile.");
+  assert(references.every(Boolean) && new Set(references.map(reference => reference?.replaceAll("-", ""))).size === ids.length,
+    400, "DUPLICATE_BANK_REFERENCE", "Use a different bank reference for each payment.");
+  assert(input.bankChecked === true,400,"BANK_CHECK_REQUIRED","Match the selected credits in your bank before confirming.");
+  return atomic(async tx => {
+    const member = await ownerContext(tx, accountId, propertyId);
+    const transfers = await tx.pgDirectTransfer.findMany({
+      where: { id: {in: ids}, propertyId },
+      select: { id: true, invoiceId: true, status: true, amountPaise: true },
+    });
+    const invoices = await tx.rentInvoice.count({
+      where: { id: {in: [...new Set(transfers.map(t => t.invoiceId))]}, propertyId, year: input.year, month: input.month },
+    });
+    const allConfirmed = transfers.every(t => t.status === "CONFIRMED");
+    assert(transfers.length === ids.length && invoices === new Set(transfers.map(t => t.invoiceId)).size &&
+      (allConfirmed || transfers.every(t => t.status === "SUBMITTED")),
+      409, "RECONCILIATION_CHANGED", "The selected payments changed. Refresh the queue and check the bank again.");
+    const amountPaise = transfers.reduce((sum, transfer) => sum + transfer.amountPaise, 0);
+    assert(amountPaise === input.amountPaise, 409, "RECONCILIATION_TOTAL_MISMATCH",
+      "The bank total must match the selected payments.");
+    for (const payment of input.payments) {
+      await reviewTransferInTransaction(tx, member, accountId, propertyId, payment.transferId,
+        { proofId: payment.proofId, bankReference: payment.bankReference, approve: true, bankChecked: true });
+    }
+    if (!allConfirmed) await audit(tx, accountId, member.organisationId, "DIRECT_TRANSFERS_RECONCILED",
+      ids[0]!, { transferIds: ids, amountPaise, year: input.year, month: input.month });
+    return { confirmedCount: ids.length, amountPaise };
   });
 }
 export async function cancelTransfer(accountId:string,membershipId:string,id:string){

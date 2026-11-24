@@ -13,6 +13,30 @@ export async function encodeEvidence(file){
 }
 export async function uploadEvidence(ctx,file,purpose){const image=await encodeEvidence(file);return ctx.api("/api/platform/direct-payments/evidence",{method:"POST",body:{purpose,image}});}
 export function evidenceImages(ctx){
- const urls=[];let stopped=false;
- return {async mount(){for(const el of document.querySelectorAll("[data-evidence-id]")){try{const blob=await ctx.api(`/api/platform/direct-payments/evidence/${encodeURIComponent(el.dataset.evidenceId)}`,{response:"blob"});if(stopped)return;const url=URL.createObjectURL(blob);urls.push(url);el.src=url;el.hidden=false;}catch{if(!stopped){el.alt="Image unavailable — refresh to retry";el.hidden=false;}}}},unmount(){stopped=true;for(const url of urls)URL.revokeObjectURL(url);}};
+ const urls=[],listeners=[];let stopped=false;
+ async function load(el){
+  try{
+   const blob=await ctx.api(`/api/platform/direct-payments/evidence/${encodeURIComponent(el.dataset.evidenceId)}`,{response:"blob"});
+   if(stopped||!el.isConnected)return;
+   const url=URL.createObjectURL(blob);urls.push(url);el.src=url;el.hidden=false;
+  }catch{if(!stopped&&el.isConnected){el.alt="Image unavailable — refresh to retry";el.hidden=false;}}
+ }
+ return {
+  async mount(){
+   for(const el of document.querySelectorAll("[data-evidence-id]")){
+    if(stopped)return;
+    const disclosure=el.closest("details[data-defer-evidence]");
+    if(disclosure&&!disclosure.open){
+     const onOpen=()=>{if(disclosure.open){disclosure.removeEventListener("toggle",onOpen);void load(el);}};
+     disclosure.addEventListener("toggle",onOpen);
+     listeners.push(()=>disclosure.removeEventListener("toggle",onOpen));
+    }else await load(el);
+   }
+  },
+  unmount(){
+   stopped=true;
+   for(const remove of listeners)remove();
+   for(const url of urls)URL.revokeObjectURL(url);
+  },
+ };
 }
