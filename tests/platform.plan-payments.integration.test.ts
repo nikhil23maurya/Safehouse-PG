@@ -35,7 +35,7 @@ function manualProvider() {
     let data;
     if (parsed.pathname === "/v1/orders" && options?.method === "POST") {
       const input = JSON.parse(String(options.body));
-      assert.equal(input.amount, 15900);assert.equal(input.partial_payment, false);
+      assert.equal(input.amount, 100);assert.equal(input.partial_payment, false);
       assert.equal(input.subscription_id, undefined);
       const id = `order_Manual${++creations}${crypto.randomUUID().replaceAll("-", "")}`;
       data = { ...input, id, status: "created", amount_paid: 0, amount_due: input.amount };
@@ -67,12 +67,13 @@ async function manualOwner() {
   const property=await createProperty(account.id,{name:"Manual Billing House",city:"Pune",key:suffix});
   return {account,organisationId:property.organisationId};
 }
-test("current INR159 checkout is advertised only to native versions that can submit its exact amount",async()=>{
+test("current INR1 checkout is advertised only to native versions that can submit its exact amount",async()=>{
  const path=`${base}/api/platform/config?package=com.safehouse.pg.testing`;
- const old:any=await (await fetch(path)).json();assert.equal(old.plan.amountPaise,15900);assert.equal(old.androidBilling,"UPGRADE_REQUIRED");
+ const old:any=await (await fetch(path)).json();assert.equal(old.plan.amountPaise,100);assert.equal(old.androidBilling,"CUSTOM_UPI_INTENT");
  const supported=encodeURIComponent(JSON.stringify([100,15900,24900]));
  const current:any=await (await fetch(`${path}&nativePlanAmounts=${supported}`)).json();assert.equal(current.androidBilling,"CUSTOM_UPI_INTENT");
- const malformed:any=await (await fetch(`${path}&nativePlanAmounts=invalid`)).json();assert.equal(malformed.androidBilling,"UPGRADE_REQUIRED");
+ const unsupported=encodeURIComponent(JSON.stringify([15900,24900]));
+ const incompatible:any=await (await fetch(`${path}&nativePlanAmounts=${unsupported}`)).json();assert.equal(incompatible.androidBilling,"UPGRADE_REQUIRED");
 });
 
 test("production blocks order creation and capture reconciliation using non-live credentials",async()=>{
@@ -94,7 +95,7 @@ test("production blocks order creation and capture reconciliation using non-live
 test("one capture grants a calendar month once; early renewal, immutable periods, signatures and refunds reconcile",async()=>{
   const {account,organisationId}=await manualOwner(),mock=manualProvider(),key=crypto.randomUUID();
   const first=await createPlanOrder(account.id,organisationId,key,mock.provider);
-  assert.equal(first.amountPaise,15900);assert.equal(first.recurring,false);assert.equal(first.payable,true);
+  assert.equal(first.amountPaise,100);assert.equal(first.recurring,false);assert.equal(first.payable,true);
   assert.equal((await createPlanOrder(account.id,organisationId,key,mock.provider)).orderId,first.orderId);
   assert.equal(mock.creations,1);
   const auth=mock.pay(first.orderId!,"authorized");
@@ -103,11 +104,11 @@ test("one capture grants a calendar month once; early renewal, immutable periods
   assert.equal(pending.entitled,false,"signed but uncaptured payment must not grant access");
   await assert.rejects(()=>verifyPlanPayment(account.id,organisationId,first.id,{paymentId:auth.id,signature:"0".repeat(64)},mock.provider),{code:"INVALID_PLAN_SIGNATURE"});
   Object.assign(auth,{status:"captured",captured:true});
-  Object.assign(mock.orders.get(first.orderId!),{status:"paid",amount_paid:15900,amount_due:0});
+  Object.assign(mock.orders.get(first.orderId!),{status:"paid",amount_paid:100,amount_due:0});
   const now=new Date();
   await Promise.all([reconcilePlanOrder(first.id,mock.provider,now),reconcilePlanOrder(first.id,mock.provider,now)]);
   const receipt=await prisma.pgPlanReceipt.findUniqueOrThrow({where:{orderId:first.id}});
-  assert.equal(receipt.amountPaise,15900);assert.equal(receipt.taxPaise,0);
+  assert.equal(receipt.amountPaise,100);assert.equal(receipt.taxPaise,0);
   assert.equal(await entitlement(organisationId),true);
   assert.equal(await prisma.pgPlanReceipt.count({where:{orderId:first.id}}),1);
   const second=await createPlanOrder(account.id,organisationId,crypto.randomUUID(),mock.provider);
@@ -123,8 +124,8 @@ test("one capture grants a calendar month once; early renewal, immutable periods
   assert.equal(new Date(status.accessEnd!).toISOString(),renewal.periodEnd.toISOString());
   assert.equal(status.subscription.payments.length,2);
   auth.amount=25000;
-  await assert.rejects(()=>reconcilePlanOrder(first.id,mock.provider),{code:"PLAN_PAYMENT_MISMATCH"});auth.amount=15900;
-  auth.amount_refunded=15900;
+  await assert.rejects(()=>reconcilePlanOrder(first.id,mock.provider),{code:"PLAN_PAYMENT_MISMATCH"});auth.amount=100;
+  auth.amount_refunded=100;
   const raw=Buffer.from(JSON.stringify({event:"refund.processed",payload:{refund:{entity:{payment_id:auth.id}}}}));
   const sig=crypto.createHmac("sha256","test-unit-webhook").update(raw).digest("hex"),eventId=crypto.randomUUID();
   await processPlanWebhook(raw,sig,eventId,mock.provider);await processPlanWebhook(raw,sig,eventId,mock.provider);
@@ -132,7 +133,7 @@ test("one capture grants a calendar month once; early renewal, immutable periods
   await assert.rejects(()=>createPlanOrder(account.id,organisationId,crypto.randomUUID(),mock.provider),{code:"PLAN_PERIOD_REVIEW_REQUIRED"});
   assert.equal(await prisma.pgProviderEvent.count({where:{provider:"RAZORPAY_PLAN",eventKey:eventId}}),1);
   auth.amount_refunded=0;await reconcilePlanOrder(first.id,mock.provider);
-  assert.equal((await prisma.pgPlanReceipt.findUniqueOrThrow({where:{orderId:first.id}})).refundedPaise,15900,"a stale snapshot cannot reverse a refund");
+  assert.equal((await prisma.pgPlanReceipt.findUniqueOrThrow({where:{orderId:first.id}})).refundedPaise,100,"a stale snapshot cannot reverse a refund");
   await assert.rejects(()=>processPlanWebhook(raw,"0".repeat(64),crypto.randomUUID(),mock.provider),{code:"INVALID_WEBHOOK_SIGNATURE"});
   const altered=Buffer.from(`${raw} `),alteredSig=crypto.createHmac("sha256","test-unit-webhook").update(altered).digest("hex");
   await assert.rejects(()=>processPlanWebhook(altered,alteredSig,eventId,mock.provider),{code:"EVENT_CONFLICT"});
@@ -148,7 +149,7 @@ test("lost order responses recover without duplicates; cross-owner and unapprove
   await assert.rejects(()=>verifyPlanPayment(foreign.account.id,foreign.organisationId,recovered.id,{paymentId:"pay_Foreign",signature:"0".repeat(64)},mock.provider),{code:"PLAN_ORDER_NOT_FOUND"});
   await assert.rejects(()=>manualPlanStatus(foreign.account.id,organisationId),{code:"FORBIDDEN"});
   const headers={authorization:`Bearer ${platformPair(foreign.account).accessToken}`,origin:"https://billing.example.test","content-type":"application/json"};
-  const body=JSON.stringify({accepted:true,recurring:false,amountPaise:15900,requestKey:crypto.randomUUID()});
+  const body=JSON.stringify({accepted:true,recurring:false,amountPaise:100,requestKey:crypto.randomUUID()});
   assert.equal((await fetch(`${base}/api/platform/organisations/${organisationId}/plan/orders`,{method:"POST",headers,body})).status,403);
   assert.equal((await fetch(`${base}/api/platform/organisations/${organisationId}/plan/orders`,{method:"POST",headers:{authorization:`Bearer ${platformPair(account).accessToken}`,"content-type":"application/json"},body})).status,403);
   const ownHeaders={...headers,authorization:`Bearer ${platformPair(account).accessToken}`};
@@ -156,20 +157,20 @@ test("lost order responses recover without duplicates; cross-owner and unapprove
   assert.equal((await fetch(`${base}/api/platform/organisations/${organisationId}/plan/orders`,{method:"POST",headers:ownHeaders,body:JSON.stringify({accepted:true,recurring:true,amountPaise:24900,requestKey:crypto.randomUUID()})})).status,400,"schema rejects recurring consent before any provider call");
   assert.equal(await prisma.pgSubscription.count({where:{organisationId}}),0,"manual purchases never create a recurring subscription");
   assert.equal((await fetch(`${base}/api/platform/organisations/${organisationId}/plan/orders`,{method:"POST",headers:ownHeaders,body:JSON.stringify({accepted:true,recurring:false,amountPaise:24900,requestKey:crypto.randomUUID()})})).status,400,"old displayed price must be reviewed before creating a new purchase");
-  assert.equal((await fetch(`${base}/api/platform/organisations/${organisationId}/plan/orders`,{method:"POST",headers:ownHeaders,body:JSON.stringify({accepted:true,recurring:false,amountPaise:100,requestKey:crypto.randomUUID()})})).status,400,"retired one-rupee display cannot create a new order at the old amount");
+  assert.equal((await fetch(`${base}/api/platform/organisations/${organisationId}/plan/orders`,{method:"POST",headers:ownHeaders,body:JSON.stringify({accepted:true,recurring:false,amountPaise:15900,requestKey:crypto.randomUUID()})})).status,400,"stale INR159 display must be refreshed before creating a new purchase");
   assert.ok(await prisma.pgAudit.count({where:{organisationId,action:"PLAN_ORDER_RECOVERED"}}));
 });
 
-for(const historicalAmount of [100,24900])test(`historical ${historicalAmount/100} orders retain original amount, access, receipt and refund semantics at current 159 price`,async()=>{
+for(const historicalAmount of [15900,24900])test(`historical ${historicalAmount/100} orders retain original amount, access, receipt and refund semantics at current INR1 price`,async()=>{
   const {account,organisationId}=await manualOwner(),mock=manualProvider();
   const local=await prisma.pgPlanOrder.create({data:{organisationId,requestKey:crypto.randomUUID(),receiptReference:`old${crypto.randomUUID().replaceAll("-","")}`,providerKeyId:"test-unit-key",providerOrderId:`order_Old${crypto.randomUUID().replaceAll("-","")}`,amountPaise:historicalAmount,taxPaise:0,status:"PENDING"}});
   mock.orders.set(local.providerOrderId!,{id:local.providerOrderId,receipt:local.receiptReference,amount:historicalAmount,currency:"INR",partial_payment:false,status:"created",amount_paid:0,amount_due:historicalAmount,notes:{pgone_plan_order:local.id,pgone_organisation_id:organisationId}});
   const pending=await manualPlanStatus(account.id,organisationId);
-  assert.equal(pending.plan.amountPaise,15900);assert.equal(pending.pendingOrder?.amountPaise,historicalAmount);
+  assert.equal(pending.plan.amountPaise,100);assert.equal(pending.pendingOrder?.amountPaise,historicalAmount);
   const reused=await createPlanOrder(account.id,organisationId,crypto.randomUUID(),mock.provider);
   assert.equal(reused.id,local.id);assert.equal(reused.amountPaise,historicalAmount);assert.equal(mock.creations,0,"pending historical order is preserved without a duplicate charge");
   const payment=mock.pay(local.providerOrderId!);
-  payment.amount=15900;
+  payment.amount=100;
   await assert.rejects(()=>reconcilePlanOrder(local.id,mock.provider),{code:"PLAN_PAYMENT_MISMATCH"});
   assert.equal(await prisma.pgPlanReceipt.count({where:{orderId:local.id}}),0);
   payment.amount=historicalAmount;
@@ -178,9 +179,9 @@ for(const historicalAmount of [100,24900])test(`historical ${historicalAmount/10
   const oldReceipt=await prisma.pgPlanReceipt.findUniqueOrThrow({where:{orderId:local.id}});
   assert.equal(oldReceipt.amountPaise,historicalAmount);assert.equal(await entitlement(organisationId),true);
   const renewal=await createPlanOrder(account.id,organisationId,crypto.randomUUID(),mock.provider);
-  assert.equal(renewal.amountPaise,15900);mock.pay(renewal.orderId!);await reconcilePlanOrder(renewal.id,mock.provider);
+  assert.equal(renewal.amountPaise,100);mock.pay(renewal.orderId!);await reconcilePlanOrder(renewal.id,mock.provider);
   const newReceipt=await prisma.pgPlanReceipt.findUniqueOrThrow({where:{orderId:renewal.id}});
-  assert.equal(newReceipt.amountPaise,15900);assert.equal(newReceipt.periodStart.toISOString(),oldReceipt.periodEnd.toISOString());assert.equal(newReceipt.anchorDay,oldReceipt.anchorDay);
+  assert.equal(newReceipt.amountPaise,100);assert.equal(newReceipt.periodStart.toISOString(),oldReceipt.periodEnd.toISOString());assert.equal(newReceipt.anchorDay,oldReceipt.anchorDay);
   Object.assign(payment,{status:"refunded",captured:false,amount_refunded:historicalAmount});
   await reconcilePlanOrder(local.id,mock.provider);
   const refunded=await prisma.pgPlanReceipt.findUniqueOrThrow({where:{orderId:local.id}});
