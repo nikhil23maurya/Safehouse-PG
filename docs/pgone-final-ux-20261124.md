@@ -44,6 +44,9 @@ Generation direction: one welcoming Indian PG manager in a navy shirt and ivory
 trousers, whole body and feet visible, seated beside a front-facing phone; current
 blue house/bed, golden windows and swoosh, PGOne wordmark on white; compact scene
 on transparency, no fake financial figures.
+Final precise-object edit (built-in image tool): remove only the extra hand on
+the outer right edge of the phone; preserve both legitimate hands, the current
+PGOne logo, whole seated figure, phone frame, base and transparent background.
 
 The welcome composition follows the guidance to show value before actions, avoid
 unnecessary onboarding steps, group related controls, preserve a direct sign-in
