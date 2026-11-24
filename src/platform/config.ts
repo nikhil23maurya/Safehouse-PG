@@ -37,7 +37,7 @@ export const subscriptionCredentials = () =>
 export const PLAN = Object.freeze({
   code: "PGONE_MONTHLY",
   name: "PGOne",
-  amountPaise: 15900,
+  amountPaise: 100,
   currency: "INR",
   interval: "month",
 });

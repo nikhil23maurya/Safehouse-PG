@@ -1,15 +1,15 @@
 # Direct owner UPI and independent electricity bills
 
-PGOne's software fee is INR159 per calendar month, paid manually. Historical
-INR1/INR249 orders and receipts retain their original amounts. The software fee
+PGOne's software fee is INR1 per calendar month, paid manually. Earlier
+orders and receipts retain their original amounts. The software fee
 remains separate from rent. Owners save their own receiving UPI ID;
 no new owner gateway account, KYC screen, pooled rent or split settlement is
 introduced. The backend advertises `directRentProof:true` after its compatible
 migration. New Android builds use that flow; older backends retain their earlier
 behaviour until upgraded. Existing provider reconciliation and old records remain.
 New Android builds also advertise supported native plan amounts. Older SDKs
-that cannot submit INR159 receive UPGRADE_REQUIRED instead of being offered an
-incompatible checkout. Existing access, receipt history and web billing remain.
+that cannot submit the current price receive UPGRADE_REQUIRED instead of being
+offered an incompatible checkout. Existing access, receipt history and web billing remain.
 
 ## Resident flow
 
