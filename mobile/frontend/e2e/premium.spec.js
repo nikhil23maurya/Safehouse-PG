@@ -87,10 +87,10 @@ test('button loading keeps geometry and uses three circular reduced-motion dots'
  const button=page.getByRole('button',{name:'Sign in',exact:true}),before=await button.boundingBox();await button.click();
  const loading=page.locator('[aria-busy=true]');
  await expect(loading).toBeVisible();
- await expect(loading.locator('.loading-dots i')).toHaveCount(3);
+ await expect(loading.locator('.pgone-loader span')).toHaveCount(3);
  const after=await loading.boundingBox();expect(after.width).toBe(before.width);expect(after.height).toBe(before.height);
- const dots=await loading.locator('.loading-dots i').evaluateAll(nodes=>nodes.map(n=>{const s=getComputedStyle(n);return {width:s.width,height:s.height,round:s.borderRadius,animation:s.animationName};}));
- expect(dots).toHaveLength(3);for(const d of dots){expect(d.width).toBe(d.height);expect(d.round).toBe('50%');expect(d.animation).toBe('dot-pulse');}
+ const dots=await loading.locator('.pgone-loader span').evaluateAll(nodes=>nodes.map(n=>{const s=getComputedStyle(n);return {width:s.width,height:s.height,round:s.borderRadius,animation:s.animationName};}));
+ expect(dots).toHaveLength(3);for(const d of dots){expect(d.width).toBe('25px');expect(d.height).toBe('25px');expect(d.round).toBe('50%');expect(d.animation).toBe('none');}
  release();await expect(page.locator('[aria-busy=true]')).toHaveCount(0);await expect(button).toBeEnabled();
 });
 test('owner UPI password rejection preserves the form and saved details survive restart',async({page})=>{

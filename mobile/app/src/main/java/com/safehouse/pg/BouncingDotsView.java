@@ -7,29 +7,32 @@ import android.os.SystemClock;
 import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
+import android.view.animation.PathInterpolator;
 import android.widget.LinearLayout;
 
-/** Staggered bounce, with an opacity-only reduced-motion variant. */
+/** Native equivalent of PGOne's 25px, 1.65s breathing loader. */
 final class BouncingDotsView extends LinearLayout {
     private final float density;
     private boolean running;
     private boolean reducedMotion;
+    private long startedAt;
+    private final PathInterpolator easing=new PathInterpolator(.42f,0f,.58f,1f);
     private final Runnable frame = new Runnable() {
         @Override public void run() {
             if (!running) return;
             long now = SystemClock.uptimeMillis();
-            int duration = reducedMotion ? 1200 : 920;
+            int duration = 1650;
             for (int i = 0; i < getChildCount(); i++) {
-                float phase = ((now - i * 125) % duration + duration) % duration / (float) duration;
-                float wave = phase < .65f ? (float) Math.pow(Math.sin(Math.PI * phase / .65f), 2) : 0f;
+                float phase = ((now-startedAt+440-i*220)%duration+duration)%duration/(float)duration;
+                float wave = phase<.45f?easing.getInterpolation(phase/.45f):phase<=.55f?1f:1f-easing.getInterpolation((phase-.55f)/.45f);
                 View dot = getChildAt(i);
-                dot.setAlpha(.55f + .45f * wave);
-                dot.setTranslationY(reducedMotion ? 0f : -13 * density * wave);
-                float scale = reducedMotion ? 1f : .84f + .16f * wave;
+                dot.setAlpha(reducedMotion?1f:.55f + .45f * wave);
+                dot.setTranslationY(0f);
+                float scale = reducedMotion ? 1f : .2f + .88f * wave;
                 dot.setScaleX(scale);
                 dot.setScaleY(scale);
             }
-            postOnAnimation(this);
+            if(!reducedMotion)postOnAnimation(this);
         }
     };
 
@@ -41,15 +44,14 @@ final class BouncingDotsView extends LinearLayout {
         setPadding(0, dp(24), 0, dp(24));
         setContentDescription("Loading");
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
-        int[] colors = { Color.rgb(22, 71, 207), Color.rgb(55, 104, 223), Color.rgb(169, 112, 4) };
-        for (int color : colors) {
+        for (int i=0;i<3;i++) {
             View dot = new View(context);
             GradientDrawable circle = new GradientDrawable();
             circle.setShape(GradientDrawable.OVAL);
-            circle.setColor(color);
+            circle.setColor(Color.rgb(65,105,225));
             dot.setBackground(circle);
-            LayoutParams bounds = new LayoutParams(dp(15), dp(15));
-            bounds.setMargins(dp(5.5f), 0, dp(5.5f), 0);
+            LayoutParams bounds = new LayoutParams(dp(25), dp(25));
+            bounds.setMarginStart(i==0?0:dp(12));
             addView(dot, bounds);
         }
     }
@@ -64,7 +66,7 @@ final class BouncingDotsView extends LinearLayout {
         if (running) {
             reducedMotion = Settings.Global.getFloat(getContext().getContentResolver(),
                     Settings.Global.ANIMATOR_DURATION_SCALE, 1f) == 0f;
-            postOnAnimation(frame);
+            startedAt=SystemClock.uptimeMillis();postOnAnimation(frame);
         }
     }
 

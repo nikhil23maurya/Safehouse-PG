@@ -134,13 +134,15 @@ export async function transferProofScreen(ctx){
 }
 export async function ownerTransferReviewScreen(ctx){
  const {transfer:t,bill,invoice,resident}=await ctx.api(`${base}/transfers/${encodeURIComponent(ctx.params.id)}`),proof=t.proofs.find(p=>p.status==="PENDING"),images=evidenceImages(ctx);
+ const photo=(id,label)=>`<details class="disclosure collection-meter" data-defer-evidence><summary>View ${esc(label.toLowerCase())}</summary>${image(id,label)}</details>`;
+ const proofCard=p=>card(`<div class="collection-row-head"><h2>Payment proof</h2>${badge(p.status)}</div>${p.reason?`<p>${esc(p.reason)}</p>`:""}${photo(p.evidenceId,"Payment screenshot")}`);
  return {title:"Review payment",back:true,nav:false,guardForm:true,financialMutation:true,contentClass:"direct-payment",
  content:heading("",resident.name,`${resident.room?`Room ${resident.room} · `:""}${month(invoice.year,invoice.month)}`)+card(`${proofStatus(t)}${split(t)}${payee(t)}`,"transfer-card transfer-receipt")+
-  (bill?card(`<h2>Electricity bill</h2><p class="transfer-note">Resident-entered amount: ${money(bill.amountPaise)}</p>${image(bill.meterEvidenceId,"Meter photo")}`):"")+
-  t.proofs.map(p=>card(`<h2>Payment proof</h2>${p.bankReference?`<p>Bank reference: ${esc(p.bankReference)}</p>`:""}${badge(p.status)}${p.reason?`<p>${esc(p.reason)}</p>`:""}${image(p.evidenceId,"Payment screenshot")}`)).join("")+
+  (bill?card(`<h2>Electricity bill</h2><p class="transfer-note">Resident-entered amount: ${money(bill.amountPaise)}</p>${photo(bill.meterEvidenceId,"Meter photo")}`):"")+
+  (t.proofs[0]?proofCard(t.proofs[0]):"")+
+  (t.proofs.length>1?`<details class="disclosure"><summary>Earlier submissions (${t.proofs.length-1})</summary>${t.proofs.slice(1).map(proofCard).join("")}</details>`:"")+
   (proof?`<form class="card transfer-card" data-form="reviewTransfer" novalidate>
     <h2>Confirm bank credit</h2><div class="form-error" role="alert"></div>
-    ${proof.bankReference?"":field("bankReference","Bank transaction reference",{required:true,attrs:'minlength="6" maxlength="40" autocomplete="off"'})}
     <label class="bank-check"><input name="bankChecked" type="checkbox" required>I checked the bank credit, payee and full amount${t.electricityPaise?", and reviewed the electricity bill":""}.</label>
     ${t.rentPaise?`<details class="disclosure"><summary>Already recorded this rent?</summary>${field("existingRentReceipt","Existing rent receipt number",{help:"Only if this exact rent portion was already recorded manually. It will be linked without another credit.",attrs:'maxlength="100"'})}</details>`:""}
     ${button("Confirm received payment",{type:"submit",kind:"primary block"})}</form>
@@ -153,7 +155,6 @@ export async function ownerTransferReviewScreen(ctx){
   const v=formValues(form),approve=name==="reviewTransfer";
   if(approve&&v.bankChecked!=="on")throw new Error("Check the bank credit before confirming this payment.");
   await ctx.api(`${base}/transfers/${t.id}/review`,{method:"POST",body:{proofId:proof.id,approve,...(approve?{bankChecked:true,
-    ...(v.bankReference?.trim()?{bankReference:v.bankReference.trim()}:{}),
     ...(v.existingRentReceipt?.trim()?{existingRentReceipt:v.existingRentReceipt.trim()}:{})}:{reason:v.reason.trim()})}});
   ctx.markSaved();ctx.invalidate();
   ctx.toast(approve?"Payment confirmed. Receipt created.":"Correction requested.");

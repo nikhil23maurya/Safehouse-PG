@@ -5,8 +5,8 @@ import {setup,go,noOverflow} from "./helpers.js";
 test("royal artwork loads locally across entry and authentication without losing form input",async({page})=>{
   await setup(page);await go(page,"welcome");
   const hero=page.locator(".entry-residence");
-  await expect.poll(()=>hero.evaluate(image=>image.complete&&image.naturalWidth>=1200)).toBe(true);
-  expect(await hero.getAttribute("src")).toBe("illustration-royal-residence.webp");
+  await expect.poll(()=>hero.evaluate(image=>image.complete&&image.naturalWidth>=1000)).toBe(true);
+  expect(await hero.getAttribute("src")).toBe("illustration-pgone-guide.webp");
   await page.locator('[data-action=entry][data-role=OWNER]').click();
   await page.getByLabel("Email address").fill("visual@example.test");
   const art=page.locator(".auth-art img");

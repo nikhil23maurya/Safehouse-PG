@@ -1,8 +1,7 @@
-import { badge, button, card, date, esc, heading, month, section } from "../components/ui.js";
+import { badge, button, card, date, esc, heading, month, section,routeAttrs } from "../components/ui.js";
 import { evidenceImages } from "../components/evidence.js";
 import { icon } from "../components/icons.js";
-import { field } from "../components/forms.js";
-import { money, parseRupees } from "../domain/finance.js";
+import { money } from "../domain/finance.js";
 
 const overviewPath = "/api/platform/direct-payments/owner/overview";
 
@@ -43,39 +42,26 @@ function electricitySummary(summary) {
     ["Proof submitted", summary.electricitySubmittedPaise],
   ];
   return `<dl class="collection-metrics">${values.map(([label, amount]) =>
-    `<div><dt>${esc(label)}</dt><dd>${money(amount)}</dd></div>`
+    `<div class="${label==="Proof submitted"?"collection-submitted":label==="Collected"?"collection-confirmed":""}"><dt>${esc(label)}</dt><dd>${amount?money(amount):"—"}</dd></div>`
   ).join("")}</dl>`;
 }
 
-export function ownerDirectOverview(overview, period, timeZone) {
-  const { summary, proofs } = overview;
-  const path = (view, label) => button(label, {
-    route: "ownerDirectOverview", params: { view }, kind: "text-button", glyph: "arrow",
-  });
-  return section(
-    `Payment proofs${summary.proofCount ? ` (${summary.proofCount})` : ""}`,
-    `<p class="collection-summary-copy">${summary.rentSubmittedPaise
-      ? `${money(summary.rentSubmittedPaise)} rent awaiting bank confirmation`
-      : summary.proofCount ? "Awaiting bank confirmation" : "No proofs awaiting confirmation this month."}</p>` +
-      (summary.proofCount > 0 ? button("Reconcile payments", {
-        route: "ownerDirectOverview", params: { view: "proofs", mode: "reconcile" }, kind: "primary block",
-      }) : "") +
-      proofs.map(proof => proofRow(proof, timeZone)).join(""),
-    summary.proofCount > 0 ? path("proofs", "View all proofs") : "",
-  ) + section(
-    "Separate electricity",
-    card(
-      `<div class="collection-card-title">${icon("bolt")}<span>${esc(month(period.year, period.month))} · ${summary.electricityBillCount} ${summary.electricityBillCount === 1 ? "bill" : "bills"}</span></div>` +
-      electricitySummary(summary),
-      "direct-collection-totals",
-    ),
-    path("electricity", "View bills"),
-  );
+export function ownerRentSummary(metrics,summary){
+ if(!summary){const rate=Number.isFinite(metrics.collectionRate)?Math.max(0,Math.min(100,metrics.collectionRate)):0;return `<section class="financial-summary" aria-label="Monthly collection"><div class="summary-top"><span>Rent collected</span>${icon("wallet")}</div><div class="financial-amount">${money(metrics.totalCollectedPaise)}</div><p>of ${money(metrics.totalExpectedPaise)} expected</p><div class="collection-track" role="progressbar" aria-label="Rent collection" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${rate}"><span style="width:${rate}%"></span></div><div class="summary-bottom"><span><small>Outstanding</small><strong>${money(metrics.pendingTotalPaise)}</strong></span><span><small>Collected</small><strong>${rate}%</strong></span></div></section>`;}
+ const submitted=summary?.rentSubmittedPaise||0,confirmed=metrics.totalCollectedPaise;
+ const state=submitted?"submitted":confirmed?"confirmed":"empty";
+ const progress=Math.max(0,Math.min(100,metrics.collectionRate||0));
+ const awaiting=metrics.totalExpectedPaise?Math.min(100-progress,submitted/metrics.totalExpectedPaise*100):0;
+ return `<section class="financial-summary rent-status-summary" aria-label="Monthly collection" data-collection-state="${state}"><div class="summary-top"><span>${submitted?"Rent submitted":confirmed?"Rent received":"Rent collection"}</span>${icon("wallet")}</div><div class="financial-amount">${submitted?money(submitted):confirmed?money(confirmed):'<span class="collection-empty-amount">Awaiting payments</span>'}</div><p>of ${money(metrics.totalExpectedPaise)} billed</p><div class="collection-track" role="progressbar" aria-label="Confirmed rent collection" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${progress}"><span class="confirmed-progress" style="width:${progress}%"></span><span class="submitted-progress" style="width:${awaiting}%"></span></div><div class="collection-state-values"><div class="collection-submitted"><span>Submitted · to review</span><strong>${submitted?money(submitted):"—"}</strong></div><div class="collection-confirmed"><span>Confirmed received</span><strong>${confirmed?money(confirmed):"—"}</strong></div></div><div class="collection-outstanding"><span>Outstanding until confirmed</span><strong>${money(metrics.pendingTotalPaise)}</strong></div></section>`;
+}
+export function ownerDirectOverview(overview,period){
+ const s=overview.summary;
+ return `<section class="electricity-collection" aria-label="Electricity collection"><div class="collection-electricity-head"><div>${icon("bolt")}<h2>Electricity</h2></div>${button("View bills",{route:"ownerDirectOverview",params:{view:"electricity"},kind:"text-button",glyph:"arrow"})}</div><p class="collection-summary-copy">${esc(month(period.year,period.month))} · ${s.electricityBillCount} ${s.electricityBillCount===1?"bill":"bills"}</p><div class="direct-collection-totals">${electricitySummary(s)}</div></section><button class="collection-proof-inbox" ${routeAttrs("ownerDirectOverview",{view:"proofs",...(s.proofCount?{mode:"reconcile"}:{})})} aria-label="${s.proofCount?"Reconcile payments":"View payment proofs"}"><span class="row-icon">${icon("receipt")}</span><span><strong>Payment proofs</strong><small>${s.proofCount?`${s.proofCount} awaiting bank confirmation`:"No proofs waiting"}</small></span>${s.proofCount?badge(String(s.proofCount),"amber"):""}${icon("arrow")}</button>`;
 }
 
 function reconciliationForm(proofs) {
   return `<form data-form="reconcileTransfers" novalidate>
-    <p class="collection-summary-copy">Select up to 10 proofs. Match each credit in your bank and enter the combined total.</p>
+    <p class="collection-summary-copy">Select up to 10 payments after checking each screenshot and bank credit.</p>
     <div class="form-error" role="alert"></div>
     ${proofs.map(proof => card(
       `<label class="collection-selection"><input name="selectedTransfer" type="checkbox" value="${esc(proof.id)}">${identity(proof)}<strong>${money(proof.amountPaise)}</strong></label>
@@ -85,14 +71,9 @@ function reconciliationForm(proofs) {
       </details>
       ${proof.meterEvidenceId ? `<details class="disclosure collection-meter" data-defer-evidence><summary>Meter photo</summary>
         <img data-evidence-id="${esc(proof.meterEvidenceId)}" alt="Meter photo" hidden></details>` : ""}
-      <fieldset data-bank-reference="${esc(proof.id)}" hidden disabled>
-        ${field(`bank-${proof.id}`, "Bank transaction reference", {
-          required: true, value: proof.bankReference || "", attrs: 'minlength="6" maxlength="40" autocomplete="off"',
-        })}
-      </fieldset>`, "direct-collection-row",
+      `, "direct-collection-row",
     )).join("")}
     ${card(`<div class="collection-row-head"><strong>Selected total</strong><output data-reconcile-total aria-live="polite">${money(0)}</output></div>
-      ${field("bankTotal", "Matched bank total (₹)", { required: true, attrs: 'inputmode="decimal" autocomplete="off"' })}
       <label class="bank-check"><input name="bankChecked" type="checkbox" required>I matched each selected credit, payee and amount in my bank and checked the electricity bills.</label>
       ${button("Confirm selected payments", { type: "submit", kind: "primary block" })}`, "direct-collection-row")}
   </form>`;
@@ -133,10 +114,6 @@ export async function ownerDirectOverviewScreen(ctx) {
   }
   function updateSelection() {
     const selected = selectedProofs(reconciliation);
-    const ids = new Set(selected.map(proof => proof.id));
-    for (const fields of reconciliation.querySelectorAll("[data-bank-reference]")) {
-      fields.disabled = fields.hidden = !ids.has(fields.dataset.bankReference);
-    }
     reconciliation.querySelector("[data-reconcile-total]").value =
       money(selected.reduce((total, proof) => total + proof.amountPaise, 0));
   }
@@ -171,16 +148,15 @@ export async function ownerDirectOverviewScreen(ctx) {
       if (name !== "reconcileTransfers") return;
       const selected = selectedProofs(form);
       if (!selected.length || selected.length > 10) throw new Error("Select between 1 and 10 payments.");
-      const amountPaise = Math.round(parseRupees(form.elements.bankTotal.value, { min: 0.01, max: 214748364.7 }) * 100);
-      if (amountPaise !== selected.reduce((sum, proof) => sum + proof.amountPaise, 0)) {
-        throw new Error("The bank total must match the selected payments.");
-      }
+      const amountPaise=selected.reduce((sum,proof)=>sum+proof.amountPaise,0);
+      if(!form.elements.bankChecked.checked)throw new Error("Check each bank credit before confirming.");
+      if(!await ctx.confirm({title:"Confirm received payments?",message:`Record ${money(amountPaise)} received across ${selected.length} ${selected.length===1?"payment":"payments"}. Confirm only after checking the credits in your bank.`,confirmLabel:"Confirm received"}))return;
       const result = await ctx.api("/api/platform/direct-payments/owner/reconcile", {
         method: "POST",
         body: {
           year: period.year, month: period.month, amountPaise, bankChecked: form.elements.bankChecked.checked,
           payments: selected.map(proof => ({
-            transferId: proof.id, proofId: proof.proofId, bankReference: form.elements.namedItem(`bank-${proof.id}`).value.trim(),
+            transferId: proof.id, proofId: proof.proofId,
           })),
         },
       });

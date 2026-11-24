@@ -130,8 +130,13 @@ async function reviewTransferInTransaction(
       await audit(tx,accountId,member.organisationId,"DIRECT_TRANSFER_PROOF_REJECTED",proof.id,{transferId});return updated;
     }
     assert(input.bankChecked===true,400,"BANK_CHECK_REQUIRED","Confirm the actual bank credit, payee, amount and meter bill before approving.");
-    assert(reference,400,"BANK_REFERENCE_REQUIRED","Enter the transaction reference from the bank before confirming.");
-    const bankKey=createHash("sha256").update(`${transfer.payeeAddress.toLowerCase()}\n${reference.replaceAll("-","")}`).digest("hex");
+    const evidence=await tx.pgRentEvidence.findFirst({where:{id:proof.evidenceId,accountId:transfer.accountId,propertyId,purpose:"PAYMENT"},select:{sha256:true}});
+    assert(evidence,409,"PAYMENT_PROOF_REQUIRED","The original payment screenshot needs review.");
+    // Historical references retain their original duplicate guard. New screenshot-
+    // only confirmations use a payee-bound image fingerprint, never a fake UTR.
+    const evidenceKey=createHash("sha256").update(`SCREENSHOT\n${transfer.payeeAddress.toLowerCase()}\n${evidence.sha256}`).digest("hex");
+    const bankKey=reference?createHash("sha256").update(`${transfer.payeeAddress.toLowerCase()}\n${reference.replaceAll("-","")}`).digest("hex"):evidenceKey;
+    assert(!await tx.pgDirectTransfer.findUnique({where:{bankKey:evidenceKey}}),409,"PAYMENT_PROOF_USED","This screenshot already confirmed a payment to this payee. Check the bank before reviewing another payment.");
     assert(!await tx.pgDirectTransfer.findUnique({where:{bankKey}}),409,"BANK_REFERENCE_USED","This bank reference already confirmed another payment to this payee.");
     const invoice=await tx.rentInvoice.findFirst({where:{id:transfer.invoiceId,propertyId,studentId:transfer.studentId}});
     assert(invoice,409,"INVOICE_CHANGED","The original invoice needs review.");
@@ -159,20 +164,20 @@ async function reviewTransferInTransaction(
     }
     await tx.pgTransferProof.update({where:{id:proof.id},data:{status:"APPROVED",bankReference:reference,reviewerAccountId:accountId,reviewedAt:now}});
     const confirmed=await tx.pgDirectTransfer.update({where:{id:transferId},data:{status:"CONFIRMED",bankKey,rentPaymentId:payment?.id,receiptNumber:`PGT-${randomCode().slice(0,20)}`,confirmedAt:now}});
-    await audit(tx,accountId,member.organisationId,"DIRECT_TRANSFER_BANK_CONFIRMED",transferId,{rentPaise:transfer.rentPaise,electricityPaise:transfer.electricityPaise,proofId:proof.id,rentPaymentId:payment?.id||null,providerVerified:false});return confirmed;
+    await audit(tx,accountId,member.organisationId,"DIRECT_TRANSFER_BANK_CONFIRMED",transferId,{rentPaise:transfer.rentPaise,electricityPaise:transfer.electricityPaise,proofId:proof.id,rentPaymentId:payment?.id||null,confirmationBasis:reference?"BANK_REFERENCE_AND_OWNER_CHECK":"SCREENSHOT_AND_OWNER_CHECK",providerVerified:false});return confirmed;
 }
 
 export async function reconcileTransfers(
   accountId: string,
   propertyId: string,
   input: { year: number; month: number; amountPaise: number; bankChecked: true;
-    payments: { transferId: string; proofId: string; bankReference: string }[] },
+    payments: { transferId: string; proofId: string; bankReference?: string }[] },
 ) {
   const ids = input.payments.map(payment => payment.transferId);
-  const references = input.payments.map(payment => normalizeBankReference(payment.bankReference));
+  const references = input.payments.map(payment => normalizeBankReference(payment.bankReference)).filter((v):v is string=>v!==null);
   assert(ids.length > 0 && ids.length <= 10 && new Set(ids).size === ids.length,
     400, "INVALID_RECONCILIATION", "Select up to 10 different payments to reconcile.");
-  assert(references.every(Boolean) && new Set(references.map(reference => reference?.replaceAll("-", ""))).size === ids.length,
+  assert(new Set(references.map(reference => reference.replaceAll("-", ""))).size === references.length,
     400, "DUPLICATE_BANK_REFERENCE", "Use a different bank reference for each payment.");
   assert(input.bankChecked === true,400,"BANK_CHECK_REQUIRED","Match the selected credits in your bank before confirming.");
   return atomic(async tx => {

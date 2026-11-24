@@ -18,17 +18,19 @@ test("reject request closes access and does not expose rent activation",async({p
  const f=await setup(page);await login(page);await go(page,'residentRequest',{id:'request1'});await expect(page.getByLabel('Confirm your PGOne password')).toHaveCount(0);await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Reject request'}).click();await page.getByRole('dialog').getByRole('button',{name:'Reject request'}).click();
  await expect(page.getByText('Rejected',{exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Set up room and rent'})).toHaveCount(0);expect(f.control.requestStatus).toBe('REJECTED');
 });
-test("all three loading bubbles keep moving with a subtle reduced-motion alternative",async({page})=>{
+test("three 25px breathing bubbles match the supplied animation and respect reduced motion",async({page})=>{
  await setup(page);await login(page);await page.emulateMedia({reducedMotion:'reduce'});let release;const hold=new Promise(r=>release=r);
  await page.route('**/resident-requests?**',async route=>{await hold;await route.fulfill({json:{requests:[]}});});
  await page.locator('.quick-actions [data-route=residentRequests]').click();
- await expect(page.locator('.screen-loading .loading-dots i')).toHaveCount(3);
+ await expect(page.locator('.screen-loading .pgone-loader span')).toHaveCount(3);
  await expect(page.locator('.loading-dots')).toHaveCount(1);
- expect(await page.locator('.screen-loading .loading-dots i').first().evaluate(el=>el.getBoundingClientRect().width)).toBeGreaterThanOrEqual(14);
- const sample=()=>page.locator('.screen-loading .loading-dots i').evaluateAll(nodes=>nodes.map(n=>({opacity:getComputedStyle(n).opacity,animation:getComputedStyle(n).animationName,transform:getComputedStyle(n).transform})));
+ const sample=()=>page.locator('.screen-loading .pgone-loader span').evaluateAll(nodes=>nodes.map(n=>{const s=getComputedStyle(n);return {opacity:s.opacity,animation:s.animationName,transform:s.transform,width:s.width,height:s.height,duration:s.animationDuration,delay:s.animationDelay,color:s.backgroundColor};}));
  const frames=[];for(let i=0;i<5;i++){frames.push(await sample());await page.waitForTimeout(130);}
- expect(new Set(frames.map(f=>f.map(n=>n.opacity).join(','))).size).toBeGreaterThan(2);expect(frames.flat().every(n=>n.animation==='dot-pulse'&&n.transform==='none')).toBe(true);
- await page.emulateMedia({reducedMotion:'no-preference'});const moving=[];for(let i=0;i<4;i++){moving.push(await sample());await page.waitForTimeout(130);}expect(moving.flat().some(n=>n.transform!=='none')).toBe(true);release();
+ expect(frames.flat().every(n=>n.animation==='none'&&n.transform==='none'&&n.width==='25px'&&n.height==='25px')).toBe(true);
+ await page.emulateMedia({reducedMotion:'no-preference'});const moving=[];for(let i=0;i<5;i++){moving.push(await sample());await page.waitForTimeout(130);}
+ expect(new Set(moving.map(f=>JSON.stringify(f.map(n=>n.transform)))).size).toBeGreaterThan(2);
+ expect(moving.flat().every(n=>n.animation==='pgone-breathe'&&n.duration==='1.65s'&&n.color==='rgb(65, 105, 225)')).toBe(true);
+ expect(moving[0].map(n=>n.delay)).toEqual(['-0.44s','-0.22s','0s']);release();
 });
 test("payment and subscription remain light; back never initiates another payment",async({page})=>{
  const f=await platform(page,{billing:true});await page.getByRole('button',{name:'New to PGOne? Create account'}).click();await page.getByLabel('Email address').fill('owner@example.test');await page.getByLabel('Password',{exact:true}).fill('Private synthetic password 123!');await page.getByLabel('Confirm password').fill('Private synthetic password 123!');await page.getByRole('button',{name:'Create account',exact:true}).click();await page.getByLabel('Full name').fill('Owner Person');await page.getByRole('button',{name:'Continue',exact:true}).click();await page.getByLabel('PG name').fill('First PG');await page.getByLabel('City',{exact:true}).fill('Pune');await page.getByRole('button',{name:'Create my PG'}).click();

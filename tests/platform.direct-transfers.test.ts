@@ -65,7 +65,7 @@ test("screenshot-only payments reconcile atomically against an exact bank total 
  const proof=async(transferId:string)=>submitProof(f.resident.id,f.member.id,transferId,{evidenceId:f.proof.id,key:crypto.randomUUID()});
  const rentProof=await proof(rent.id),electricityProof=await proof(electricity.id);
  assert.equal(rentProof.bankReference,null);
- await assert.rejects(()=>f.confirm(rent.id,rentProof.id),{code:"BANK_REFERENCE_REQUIRED"});
+ await assert.rejects(()=>reviewTransfer(f.owner.id,f.pg.propertyId,rent.id,{proofId:rentProof.id,approve:true}),{code:"BANK_CHECK_REQUIRED"});
  const input={year:2026,month:11,amountPaise:915124,bankChecked:true as const,payments:[
   {transferId:rent.id,proofId:rentProof.id,bankReference:"111111111111"},
   {transferId:electricity.id,proofId:electricityProof.id,bankReference:"222222222222"},
@@ -84,6 +84,33 @@ test("screenshot-only payments reconcile atomically against an exact bank total 
  assert.equal((await prisma.pgElectricityBill.findUniqueOrThrow({where:{invoiceId:f.invoice.id}})).status,"PAID");
  assert.equal((await prisma.pgTransferProof.findUniqueOrThrow({where:{id:rentProof.id}})).bankReference,"111111111111");
  assert.equal(await prisma.pgAudit.count({where:{action:"DIRECT_TRANSFERS_RECONCILED",entityId:rent.id}}),1);
+});
+test("screenshot-only owner confirmation needs no invented reference and remains idempotent",async()=>{
+ const f=await fixture(),t=await f.prepare();
+ const p=await submitProof(f.resident.id,f.member.id,t.id,{evidenceId:f.proof.id,key:crypto.randomUUID()});
+ await assert.rejects(()=>reviewTransfer(f.owner.id,f.pg.propertyId,t.id,{proofId:p.id,approve:true}),{code:"BANK_CHECK_REQUIRED"});
+ const result=await f.confirm(t.id,p.id);assert.equal(result.status,"CONFIRMED");assert.deepEqual(await f.confirm(t.id,p.id),result);
+ assert.equal((await prisma.pgTransferProof.findUniqueOrThrow({where:{id:p.id}})).bankReference,null);
+ assert.equal(await prisma.payment.count({where:{invoiceId:f.invoice.id}}),1);
+ const audit=await prisma.pgAudit.findFirstOrThrow({where:{entityId:t.id,action:"DIRECT_TRANSFER_BANK_CONFIRMED"}});
+ assert.equal((audit.metadata as any).confirmationBasis,"SCREENSHOT_AND_OWNER_CHECK");
+ await f.electricity();const second=await f.prepare(false,true);
+ const duplicate=await submitProof(f.resident.id,f.member.id,second.id,{evidenceId:f.proof.id,key:crypto.randomUUID()});
+ await assert.rejects(()=>f.confirm(second.id,duplicate.id),{code:"PAYMENT_PROOF_USED"});
+ assert.equal((await prisma.pgElectricityBill.findUniqueOrThrow({where:{invoiceId:f.invoice.id}})).status,"DUE");
+});
+test("reference-free bulk reconciliation rolls back changed proofs and matches the authoritative total",async()=>{
+ const f=await fixture();await f.electricity();const rent=await f.prepare(),electricity=await f.prepare(false,true);
+ const secondImage=await storeEvidence(f.resident.id,f.member.id,"PAYMENT",jpeg(2));
+ const a=await submitProof(f.resident.id,f.member.id,rent.id,{evidenceId:f.proof.id,key:crypto.randomUUID()});
+ const b=await submitProof(f.resident.id,f.member.id,electricity.id,{evidenceId:secondImage.id,key:crypto.randomUUID()});
+ const input={year:2026,month:11,amountPaise:915124,bankChecked:true as const,payments:[{transferId:rent.id,proofId:a.id},{transferId:electricity.id,proofId:b.id}]};
+ await assert.rejects(()=>reconcileTransfers(f.owner.id,f.pg.propertyId,{...input,amountPaise:915123}),{code:"RECONCILIATION_TOTAL_MISMATCH"});
+ await assert.rejects(()=>reconcileTransfers(f.owner.id,f.pg.propertyId,{...input,payments:[input.payments[0]!,{...input.payments[1]!,proofId:"changed-proof"}]}),{code:"PROOF_NOT_FOUND"});
+ assert.equal(await prisma.payment.count({where:{invoiceId:f.invoice.id}}),0);
+ assert.deepEqual(await reconcileTransfers(f.owner.id,f.pg.propertyId,input),{confirmedCount:2,amountPaise:915124});
+ assert.deepEqual(await reconcileTransfers(f.owner.id,f.pg.propertyId,input),{confirmedCount:2,amountPaise:915124});
+ assert.equal((await prisma.pgElectricityBill.findUniqueOrThrow({where:{invoiceId:f.invoice.id}})).status,"PAID");
 });
 test("evidence, bill, proof and owner review are tenant/resident scoped; unattached uploads stay private",async()=>{
  const f=await fixture(),g=await fixture();
