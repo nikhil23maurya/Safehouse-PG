@@ -233,3 +233,4 @@
 .collection-selection { display: grid; grid-template-columns: auto minmax(0,1fr) auto; align-items: center; gap: 9px; overflow-wrap: anywhere; }
 .collection-selection input { width: 18px; height: 18px; }
 .direct-collection-row fieldset { min-width: 0; margin: 8px 0 0; padding: 0; border: 0; }
+.collection-review-link { min-height: 36px; padding: 5px 10px; border-radius: 10px; background: #fff3df; color: #794813; font-size: 12px; }

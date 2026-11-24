@@ -65,6 +65,7 @@ test("owner dashboard shows submitted proof and the electricity bill, then recon
   proofs:[{id:"proof-one",bankReference:null,evidenceId:"proof-image",status:"PENDING"}]}];
  await setup(page,"OWNER",f);
  const photo=(await jpeg(page)).toString("base64");f.evidence={"meter-one":photo,"proof-image":photo};
+ await expect(page.getByRole("button",{name:"1 to review",exact:true})).toBeInViewport();
  await expect(page.getByRole("heading",{name:"Payment proofs (1)",exact:true})).toBeVisible();
  await expect(page.getByRole("heading",{name:"Separate electricity",exact:true})).toBeVisible();
  await expect(page.locator(".direct-collection-totals")).toContainText("Collected₹0");

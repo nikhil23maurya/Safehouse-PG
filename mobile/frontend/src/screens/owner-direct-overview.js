@@ -65,7 +65,7 @@ export function ownerDirectOverview(overview, period, timeZone) {
   ) + section(
     "Separate electricity",
     card(
-      `<div class="collection-card-title">${icon("bolt")}<span>${esc(month(period.year, period.month))} · ${summary.electricityBillCount} bills</span></div>` +
+      `<div class="collection-card-title">${icon("bolt")}<span>${esc(month(period.year, period.month))} · ${summary.electricityBillCount} ${summary.electricityBillCount === 1 ? "bill" : "bills"}</span></div>` +
       electricitySummary(summary),
       "direct-collection-totals",
     ),
@@ -146,7 +146,11 @@ export async function ownerDirectOverviewScreen(ctx) {
     content: heading("", title, month(period.year, period.month)) +
       (electricity
         ? card(electricitySummary(data.summary), "direct-collection-totals")
-        : `<p class="collection-summary-copy">${data.summary.proofCount} awaiting bank confirmation</p>`) +
+        : `<p class="collection-summary-copy">${data.summary.proofCount} awaiting bank confirmation</p>` +
+          (!reconciling && data.proofs.length ? button("Reconcile payments", {
+            route: "ownerDirectOverview", params: { view, mode: "reconcile", ...(ctx.params.cursor ? {cursor: ctx.params.cursor} : {}) },
+            kind: "primary block",
+          }) : "")) +
       (reconciling && data.proofs.length ? reconciliationForm(data.proofs)
         : rows.join("") || `<p class="compact-empty">${electricity ? "No separate electricity bills this month." : "No proofs on this page."}</p>`) +
       (data.nextCursor ? button("Next page", {
