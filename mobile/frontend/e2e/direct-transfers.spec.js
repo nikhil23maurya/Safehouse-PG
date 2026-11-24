@@ -39,9 +39,13 @@ test("copies the exact combined payment details and restores manual proof",async
  await page.getByRole("button",{name:"Upload payment proof",exact:true}).click();
  await expect(page.getByRole("heading",{level:1,name:"Attach payment proof",exact:true})).toBeVisible();
  expect(f.creates).toBe(1);await screenshot(page,"return-attach-proof");
- await page.reload();await expect(page).toHaveURL(/#transferProof$/);await expect(page.getByLabel("UTR / transaction reference")).toBeVisible();expect(f.creates).toBe(1);
+ await page.reload();await expect(page).toHaveURL(/#transferProof$/);await expect(page.getByLabel("Payment screenshot",{exact:true})).toBeVisible();expect(f.creates).toBe(1);
  await go(page,"invoices");await page.evaluate(()=>window.SafeHouseResume());await expect(page).toHaveURL(/#invoices$/);await go(page,"transferProof",{id:f.transfers[0].id,invoiceId:"invoice1"});
- await page.getByLabel("UTR / transaction reference").fill("123456789012");await upload(page,"Payment screenshot",await jpeg(page));await page.getByRole("button",{name:"Submit payment proof",exact:true}).click();await expect(page.getByRole("heading",{name:"Proof submitted",exact:true})).toBeVisible();expect(f.transfers[0].status).toBe("SUBMITTED");await expect(page.getByRole("button",{name:"Download receipt",exact:true})).toHaveCount(0);await expect.poll(()=>page.evaluate(()=>JSON.parse(window.SafeHouseNative.getDirectTransferState()).length)).toBe(0);await screenshot(page,"proof-pending-owner");
+ await expect(page.getByLabel(/UTR|transaction reference/i)).toHaveCount(0);
+ await upload(page,"Payment screenshot",await jpeg(page));await page.getByRole("button",{name:"Submit payment proof",exact:true}).click();await expect(page.getByRole("heading",{name:"Payment submitted",exact:true})).toBeVisible();expect(f.transfers[0].status).toBe("SUBMITTED");expect(f.transfers[0].proofs[0].bankReference).toBeNull();await expect(page.getByRole("button",{name:"Download receipt",exact:true})).toHaveCount(0);await expect.poll(()=>page.evaluate(()=>JSON.parse(window.SafeHouseNative.getDirectTransferState()).length)).toBe(0);await screenshot(page,"proof-pending-owner");
+ await go(page,"studentHome");await expect(page.getByRole("region",{name:"Current rent"})).toContainText("Payment submitted");
+ await expect(page.getByRole("region",{name:"Electricity"})).toContainText("Payment submitted");
+ await expect(page.getByRole("button",{name:"Pay rent",exact:true})).toHaveCount(0);await noOverflow(page);await screenshot(page,"resident-dashboard-submitted");
 });
 test("electricity remains payable after rent was already paid",async({page})=>{
  const f=createDirectPaymentFixtures();f.remainingPaise=0;await setup(page,"STUDENT",f);await go(page,"payment",{invoiceId:"invoice1"});await expect(page.getByText("No rent outstanding")).toBeVisible();await bill(page);
@@ -51,12 +55,45 @@ test("owner sees direct UPI setup without merchant onboarding and confirms only 
  const f=createDirectPaymentFixtures();f.bill={id:"bill-one",amountPaise:65025,meterEvidenceId:"meter-one",status:"DUE"};f.transfers=[{id:"transfer-one",invoiceId:"invoice1",rentPaise:850099,electricityPaise:65025,amountPaise:915124,payeeAddress:"owner-fixture@invalid",payeeName:"PG Owner",status:"SUBMITTED",proofs:[{id:"proof-one",bankReference:"123456789012",evidenceId:"proof-image",status:"PENDING"}]}];
  await setup(page,"OWNER",f);const photo=(await jpeg(page)).toString("base64");f.evidence={"meter-one":photo,"proof-image":photo};await go(page,"merchant");await expect(page.getByRole("heading",{name:"Rent collection",exact:true})).toBeVisible();await expect(page.getByRole("button",{name:/Connect payment|Continue verification/})).toHaveCount(0);
  await page.getByRole("button",{name:"Review payment",exact:true}).click();await expect(page.getByText("Resident-entered amount: ₹650.25")).toBeVisible();await noOverflow(page);await screenshot(page,"owner-proof-review");
- await page.getByRole("button",{name:"Confirm received payment",exact:true}).click();expect(f.transfers[0].status).toBe("SUBMITTED");await page.getByRole("checkbox").check();await page.getByRole("button",{name:"Confirm received payment",exact:true}).click();await page.getByRole("button",{name:"Confirm received",exact:true}).click();await expect(page.getByRole("button",{name:"Download receipt",exact:true})).toBeVisible();expect(f.transfers[0].status).toBe("CONFIRMED");await screenshot(page,"owner-confirmed");
+ await page.getByRole("button",{name:"Confirm received payment",exact:true}).click();expect(f.transfers[0].status).toBe("SUBMITTED");await page.getByRole("checkbox").check();await page.getByRole("button",{name:"Confirm received payment",exact:true}).click();await expect(page.getByRole("button",{name:"Download receipt",exact:true})).toBeVisible();expect(f.transfers[0].status).toBe("CONFIRMED");await screenshot(page,"owner-confirmed");
+});
+test("owner dashboard shows submitted proof and the electricity bill, then reconciles the matched credit",async({page})=>{
+ const f=createDirectPaymentFixtures();
+ f.bill={id:"bill-one",amountPaise:65025,meterEvidenceId:"meter-one",status:"DUE"};
+ f.transfers=[{id:"transfer-one",invoiceId:"invoice1",rentPaise:850099,electricityPaise:65025,amountPaise:915124,
+  payeeAddress:"owner-fixture@invalid",payeeName:"PG Owner",status:"SUBMITTED",
+  proofs:[{id:"proof-one",bankReference:null,evidenceId:"proof-image",status:"PENDING"}]}];
+ await setup(page,"OWNER",f);
+ const photo=(await jpeg(page)).toString("base64");f.evidence={"meter-one":photo,"proof-image":photo};
+ await expect(page.getByRole("button",{name:"1 to review",exact:true})).toBeInViewport();
+ await expect(page.getByRole("heading",{name:"Payment proofs (1)",exact:true})).toBeVisible();
+ await expect(page.getByRole("heading",{name:"Separate electricity",exact:true})).toBeVisible();
+ await expect(page.locator(".direct-collection-totals")).toContainText("Collected₹0");
+ await noOverflow(page);await screenshot(page,"owner-dashboard-collections");
+ await page.getByRole("button",{name:"View bills",exact:true}).click();
+ await expect(page.getByRole("heading",{name:"Electricity bills",exact:true})).toBeVisible();
+ await expect(page.locator(".direct-collection-row")).toContainText("Aarav Sharma");
+ await page.getByText("Meter photo",{exact:true}).click();
+ await expect(page.getByRole("img",{name:"Meter photo",exact:true})).toBeVisible();
+ await page.getByRole("button",{name:"Go back",exact:true}).click();await expect(page).toHaveURL(/#ownerHome$/);
+ await page.getByRole("button",{name:"Reconcile payments",exact:true}).click();
+ await page.getByRole("checkbox",{name:/Aarav Sharma/}).check();
+ await expect(page.locator("[data-reconcile-total]")).toHaveText("₹9,151.24");
+ await page.getByLabel("Bank transaction reference",{exact:true}).fill("123456789012");
+ await page.getByLabel("Matched bank total (₹)",{exact:true}).fill("9151.23");
+ await page.getByRole("checkbox",{name:/I matched each/}).check();
+ await page.getByRole("button",{name:"Confirm selected payments",exact:true}).click();
+ await expect(page.getByRole("alert")).toContainText("The bank total must match");
+ expect(f.transfers[0].status).toBe("SUBMITTED");
+ await page.getByLabel("Matched bank total (₹)",{exact:true}).fill("9151.24");
+ await page.getByRole("button",{name:"Confirm selected payments",exact:true}).click();
+ await expect(page.getByText("1 payment reconciled.",{exact:true})).toBeVisible();
+ expect(f.reconciliation.amountPaise).toBe(915124);
+ await go(page,"ownerHome");await expect(page.locator(".direct-collection-totals")).toContainText("Collected₹650.25");
 });
 test("invalid screenshot does not submit an empty proof",async({page})=>{
  const f=await setup(page);await go(page,"payment",{invoiceId:"invoice1"});await choose(page);
  await page.getByRole("button",{name:"Upload payment proof",exact:true}).click();
- await page.getByLabel("UTR / transaction reference").fill("123456789012");
  await page.getByLabel("Payment screenshot",{exact:true}).setInputFiles({name:"bad.svg",mimeType:"image/svg+xml",buffer:Buffer.from("<svg/>")});
  await page.getByRole("button",{name:"Submit payment proof",exact:true}).click();
  await expect(page.getByText("Choose a JPEG, PNG or WebP photo under 12 MB.",{exact:true})).toBeVisible();

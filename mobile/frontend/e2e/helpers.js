@@ -55,7 +55,10 @@ export async function login(page, role = "OWNER") {
   await expect(page).toHaveTitle(
     new RegExp(role === "OWNER" ? "^Home" : "^Home"),
   );
-  await expect(page.locator(".financial-summary")).toBeVisible();
+  await expect(page.getByRole("region", {
+    name: role === "OWNER" ? "Monthly collection" : "Current rent",
+    exact: true,
+  })).toBeVisible();
 }
 export async function go(page, name, params = {}) {
   await page.evaluate(

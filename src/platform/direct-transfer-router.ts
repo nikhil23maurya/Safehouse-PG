@@ -6,11 +6,17 @@ import {assert} from "../errors.js";
 import {prisma} from "../db.js";
 import {accountSession} from "./service.js";
 import {entitlement} from "./billing.js";
-import {storeEvidence,readEvidence} from "./rent-evidence.js";
-import {saveElectricity,prepareTransfer,submitProof,reviewTransfer,cancelTransfer,transferPage,transferDetail,ownerTransfers} from "./direct-transfers.js";
+import {storeEvidence,readEvidence,ownerContext} from "./rent-evidence.js";
+import {saveElectricity,prepareTransfer,submitProof,reviewTransfer,cancelTransfer,transferPage,transferDetail,ownerTransfers,reconcileTransfers} from "./direct-transfers.js";
+import {readOwnerDirectOverview} from "./owner-direct-overview.js";
 
 export const directTransferRouter=express.Router();
 const key=z.string().regex(/^[A-Za-z0-9_-]{16,100}$/),id=z.string().min(1).max(100);
+const period = {
+  year: z.coerce.number().int().min(2020).max(2100),
+  month: z.coerce.number().int().min(1).max(12),
+};
+const bankReference = z.string().min(6).max(40);
 const session=async(req:express.Request)=>{
  const s=await accountSession((req.header("authorization")||"").replace(/^Bearer /,""));
  assert(s.membership,403,"WORKSPACE_REQUIRED","Select your workspace.");return {...s,membership:s.membership!};
@@ -34,13 +40,39 @@ directTransferRouter.post("/invoices/:id/transfers",async(req,res)=>{
  const transfer=await prepareTransfer(account.id,membership.id,id.parse(req.params.id),input);res.json({transferId:transfer.id});
 });
 directTransferRouter.get("/owner",async(req,res)=>{const {account,membership}=await session(req);res.json(await ownerTransfers(account.id,membership.propertyId,req.query.cursor?id.parse(req.query.cursor):undefined));});
+directTransferRouter.get("/owner/overview", async (req, res) => {
+  const { account, membership } = await session(req);
+  const input = z.object({
+    ...period,
+    view: z.enum(["overview", "proofs", "electricity"]).default("overview"),
+    cursor: id.optional(),
+    due: z.string().max(505).optional(),
+  }).parse(req.query);
+  const dueInvoiceIds = z.array(id).max(5).parse(input.due ? input.due.split(",") : []);
+  assert(membership.role === "OWNER", 403, "FORBIDDEN", "Select your owner workspace.");
+  await ownerContext(prisma, account.id, membership.propertyId);
+  assert(await entitlement(membership.organisationId), 402, "SUBSCRIPTION_REQUIRED", "Renew PGOne before managing payments.");
+  res.json(await readOwnerDirectOverview(membership.propertyId, input, input.view, input.cursor, dueInvoiceIds));
+});
+directTransferRouter.post("/owner/reconcile", async (req, res) => {
+  const { account, membership } = await session(req);
+  assert(membership.role === "OWNER", 403, "FORBIDDEN", "Select your owner workspace.");
+  assert(await entitlement(membership.organisationId), 402, "SUBSCRIPTION_REQUIRED", "Renew PGOne before managing payments.");
+  const input = z.object({
+    ...period,
+    amountPaise: z.number().int().positive(),
+    bankChecked: z.literal(true),
+    payments: z.array(z.object({ transferId: id, proofId: id, bankReference }).strict()).min(1).max(10),
+  }).strict().parse(req.body);
+  res.json(await reconcileTransfers(account.id, membership.propertyId, input));
+});
 directTransferRouter.get("/history",async(req,res)=>{
  const {account,membership}=await session(req);assert(membership.role==="RESIDENT",403,"RESIDENT_REQUIRED","Select your residency.");
  const rows=await prisma.pgDirectTransfer.findMany({where:{accountId:account.id,propertyId:membership.propertyId,status:"CONFIRMED"},orderBy:{confirmedAt:"desc"},take:100,select:{id:true,invoiceId:true,status:true,rentPaise:true,electricityPaise:true,amountPaise:true,receiptNumber:true,rentPaymentId:true,confirmedAt:true}});res.json({transfers:rows});
 });
 directTransferRouter.get("/transfers/:id",async(req,res)=>{const {account,membership}=await session(req);res.json(await transferDetail(account.id,membership.id,id.parse(req.params.id)));});
 directTransferRouter.post("/transfers/:id/proof",async(req,res)=>{
- const {account,membership}=await session(req);const input=z.object({bankReference:z.string().min(6).max(40),evidenceId:id,key}).strict().parse(req.body);
+ const {account,membership}=await session(req);const input=z.object({bankReference:bankReference.optional(),evidenceId:id,key}).strict().parse(req.body);
  res.json({proof:await submitProof(account.id,membership.id,id.parse(req.params.id),input)});
 });
 directTransferRouter.post("/transfers/:id/cancel",async(req,res)=>{
@@ -49,7 +81,7 @@ directTransferRouter.post("/transfers/:id/cancel",async(req,res)=>{
 directTransferRouter.post("/transfers/:id/review",async(req,res)=>{
  const {account,membership}=await session(req);assert(membership.role==="OWNER",403,"FORBIDDEN","Select your owner workspace.");
  assert(await entitlement(membership.organisationId),402,"SUBSCRIPTION_REQUIRED","Renew PGOne before managing payments.");
- const input=z.object({proofId:id,approve:z.boolean(),bankChecked:z.boolean().optional(),reason:z.string().max(500).optional(),existingRentReceipt:z.string().max(100).optional()}).strict().parse(req.body);
+ const input=z.object({proofId:id,approve:z.boolean(),bankChecked:z.boolean().optional(),bankReference:bankReference.optional(),reason:z.string().max(500).optional(),existingRentReceipt:z.string().max(100).optional()}).strict().parse(req.body);
  res.json({transfer:await reviewTransfer(account.id,membership.propertyId,id.parse(req.params.id),input)});
 });
 directTransferRouter.get("/transfers/:id/receipt.pdf",async(req,res)=>{

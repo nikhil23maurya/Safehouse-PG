@@ -874,7 +874,7 @@ model PgTransferProof {
   transfer PgDirectTransfer @relation(fields:[transferId],references:[id],onDelete:Restrict)
   requestKey String
   evidenceId String
-  bankReference String
+  bankReference String?
   status String @default("PENDING")
   reason String?
   reviewerAccountId String?
